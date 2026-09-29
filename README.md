@@ -118,6 +118,33 @@ Getting the last bit right meant copying how R adds things up. Rfast keeps two r
 
 Parity is against R 4.6.1 on x86-64 Windows with `datanugget` 1.5.0, Rfast 2.1.5.2 and R's reference BLAS. OpenBLAS, MKL and Accelerate can round the last bits differently. So can arm64 macOS, where `long double` is plain double. On tied data, those differences can change assignments. The fixture manifests record the BLAS and `long double` width.
 
+## Covertype benchmark
+
+The fixtures are small, so I also ran both packages on a real large dataset: UCI Covertype, 581,012 rows. I used its first 10 columns, the continuous ones. They're all whole numbers, so there are plenty of ties. The 10,000 and 100,000 row sizes are random subsets drawn once in R with a fixed seed.
+
+Each size runs `create.DN` with R's defaults, then `refine.DN` on its result with shape splits off and on. The only change from R's defaults is `no.cores = 1`, and `n_jobs=1` in Python, so R's random draws can be recorded in order. Python replays them the way the tests do. Assignments, weights, centers, scales, progress messages and warnings matched exactly in every run. At 100,000 rows the shape-split run replayed 383,475 draws.
+
+Wall time in seconds, around the function call only, one run each:
+
+| Rows | Step | R | Python |
+| --- | --- | --- | --- |
+| 10,000 | create | 5.7 | 6.7 |
+| 10,000 | refine | 0.2 | 0.9 |
+| 10,000 | refine, shape splits | 5.2 | 3.3 |
+| 100,000 | create | 36.2 | 48.1 |
+| 100,000 | refine | 0.5 | 8.9 |
+| 100,000 | refine, shape splits | 1801 | 110 |
+| 581,012 | create | 202.1 | 239.6 |
+| 581,012 | refine | 0.9 | 50.0 |
+
+R's shape-split run took 30 minutes at 100,000 rows, so the full-size run skips shape splits. Python's 50 seconds for `refine_dn` at full size go into its first pass. That pass computes every nugget's covariance with R's long-double sums, replayed in pure Python one nugget at a time. Speeding it up is future work.
+
+Peak memory was 2072, 2092 and 2183 MiB in R at the three sizes and 1444, 1454 and 1501 MiB in Python. That's the peak working set of the whole process, data load included. It hardly grows with the row count. The biggest object is the 10,000 by 10,000 distance matrix between the first-stage centers, which is the same size every time.
+
+They ran on my laptop (i7-13650HX, 16 GB, Windows 11). R was 4.6.1 with `datanugget` 1.5.0 and its reference BLAS. Python was 3.14.3 with numpy 2.5.3 and scipy 1.18.1.
+
+Covertype data: Blackard, J. (1998). [Covertype](https://doi.org/10.24432/C50K5N) [Dataset]. UCI Machine Learning Repository. It's licensed under CC BY 4.0.
+
 ## Development
 
 ```sh
@@ -132,6 +159,17 @@ Rebuild the parity tables with:
 ```sh
 uv run python scripts/parity_report.py
 ```
+
+To rerun the Covertype benchmark, save the [data file](https://archive.ics.uci.edu/ml/machine-learning-databases/covtype/covtype.data.gz) as `tmp/covertype/covtype.data.gz`. The script checks its `sha256`. Set up the private R library described in [r/README.md](r/README.md), then run from the repo root:
+
+```sh
+Rscript benchmarks/covertype.R 10000
+uv run python benchmarks/covertype.py 10000
+```
+
+Use `10000`, `100000` or `all` for the size. Add `noshape` to the `Rscript` line to skip shape splits. The R script writes to `tmp/covertype/out/`. The Python script reads those outputs and prints a JSON report.
+
+To report wall time and peak memory, prefix either command with `uv run --with psutil python benchmarks/measure.py`. It reads the peak working set, so it only works on Windows.
 
 ## Citing the method
 
