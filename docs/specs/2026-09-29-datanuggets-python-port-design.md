@@ -30,8 +30,8 @@ Ship a pip-installable Python package, `datanuggets`, that reimplements the R pa
 
 | R function | Python | Module | Phase | Parity tier |
 |---|---|---|---|---|
-| `create.DNcenters` | `create_dn_centers` | `centers.py` | 1 | Exact (kept indices) + Numeric |
-| **`create.DN`** | **`create_dn`** | `create.py` | 1 | Exact (assignments, weights) + Numeric |
+| `create.DNcenters` | `create_dn_centers` | `centers.py` | 1 | Exact (kept indices, centers) |
+| **`create.DN`** | **`create_dn`** | `create.py` | 1 | Exact (assignments, weights, centers, scales) |
 | **`refine.DN`** | **`refine_dn`** | `refine.py` | 1 | Exact (assignments, weights) + Numeric |
 | (internal) `stats::kmeans` Hartigan-Wong, k=2 | `_hartigan_wong.py` | | 1 | Exact labels + Numeric |
 | `getDN.means` | `get_dn_means` | `means.py` | 2 | Numeric |
@@ -143,8 +143,8 @@ class Draws(Protocol):
 
 | Tier | Applies to | Assertion |
 |---|---|---|
-| Exact | assignments, weights, kept indices, cluster labels, merge matrix, order | `np.array_equal` |
-| Numeric | centers, scales, WWCSS, eigenvalues, heights, PSI math | `assert_allclose(rtol=1e-8, atol=1e-10)` |
+| Exact | assignments, weights, kept indices, cluster labels, merge matrix, order; `create_dn` centers and scales | `np.array_equal` |
+| Numeric | other centers and scales, WWCSS, eigenvalues, heights, PSI math | `assert_allclose(rtol=1e-8, atol=1e-10)` |
 | Up-to-sign | PCA rotation and scores | flip each column to match R's sign, then Numeric |
 | Distributional | `optimal_dn` propensity fits only | section 7 |
 
@@ -178,7 +178,7 @@ These notes come from reading the R 1.5.0 source. Each item is a parity requirem
 6. `create_dn_centers`: full pairwise distance matrix (Rfast `Dist`, whose per-feature sums use Armadillo's even/odd two-accumulator order; `_rfast.dist_matrix` reproduces it bit for bit), diagonal set to `max + 1`. Loop while more than `DN.num` rows remain: `delete.num = min(max(1, floor(tmp.num * delete_percent)), tmp.num - DN.num)`; row minimum value and index (Rfast `rowMins`, first index on ties, pinned by the `rcompat_rowmins` fixture); visit rows in `order(nn.dist)` (stable sort, so `np.argsort(kind="stable")`); mark a row if neither it nor its nearest neighbor is marked; if not enough are marked, a second pass marks any unmarked rows in the same order; drop marked rows and columns. If `n <= DN.num` at the start, warn and return the input unchanged.
 7. Assignment: nearest final center for every observation via `Rfast::dista(k = 1, index = TRUE)`. dista's per-feature sums round differently from `Dist`'s at more than 32 features: its Euclidean kernel is a sum of squares that Armadillo's `op_dot::direct_dot` sums with its own even/odd loop up to 32 terms and hands to BLAS `ddot` above that, and R's reference BLAS adds left to right. Manhattan uses even/odd at every `p`. `_rfast.cross_distances(kernel="dista")` reproduces both, pinned by the `perm32`/`perm33`/`perm40` fixtures (coordinate permutations of one vector, which are mathematically equidistant from constant rows, so only the summation order decides the winner). An R linked to an optimized BLAS (OpenBLAS, MKL, Accelerate) sums in its own order, so exact parity above 32 features holds against the reference BLAS that every fixture manifest records. Rfast sorts the whole distance row with libstdc++ `std::sort` (not stable), so among exactly tied distances the winner is whichever index `std::sort` leaves first: the first index when there are at most 16 centers, otherwise an index decided by introsort's partitions. `_rfast.nearest_index` uses argmin when the minimum is unique and replays `std::sort` (`gnu_sort_first`, O(k)) only for tied rows. Verified against R's complete sort order in `rcompat_dista`.
 8. Weights: counts per nugget. Empty nuggets are kept with weight 0.
-9. Scales: computed on data centered by the global column mean, with R's one-pass formula (`ss = S2 - n * mean^2`, negatives clamped to 0, divided by `max(n - 1, 1)`, averaged over columns). The port uses the same formula, not `np.var`, so round-off matches. Nuggets with weight < 2 get the floor `min(scale of multi-obs nuggets) / 100`, or machine epsilon if there are none.
+9. Scales: computed on data centered by the global column mean (`colMeans`), with R's one-pass formula (`ss = S2 - n * mean^2`, negatives clamped to 0, divided by `max(n - 1, 1)`, averaged over columns with `rowMeans`). The port uses the same formula, not `np.var`, but the formula alone does not make round-off match: `colMeans` and `rowMeans` sum in long double (x87 extended precision, 64-bit significand, on x86-64) and divide before rounding to double. `_rcompat.r_mean` replays that arithmetic exactly with Python integers. A correctly rounded mean is not enough, because on columns that cancel to nearly zero (standardized data) R's own running sum rounds. `rowsum` is a sequential double sum in row order (`np.add.at`). Pinned by `rcompat_means`, which includes `scale(volcano)`. With all three, centers and scales match R bit for bit on every fixture. Nuggets with weight < 2 get the floor `min(scale of multi-obs nuggets) / 100`, or machine epsilon if there are none.
 10. Centers: `mean` gives the per-nugget mean (empty nuggets fall back to the stage-2 center); `original` gives the stage-2 centers; `random` draws one member per non-empty nugget in nugget order (`sample.int(len, 1)`), falling back to the stage-2 center for empty nuggets.
 
 ### refine_dn
@@ -226,6 +226,7 @@ Implementation plans are written per milestone so each stays reviewable: plan 1 
 The first version copies R's algorithms, including their memory cost. Optimizations land only after parity is green, and each one must keep every fixture passing.
 
 - `create_dn_centers`: stage 2 builds a `dn_num1` x `dn_num1` float64 matrix (800 MB at 1e4), as R does. Later optimization: track remaining rows with a mask instead of copying the submatrix every pass, and vectorize the row minimum over the active set. The greedy marking loop is inherently sequential and is fine in Python at these sizes; numba is an option only if profiling shows it matters.
+- `create_dn`'s global column mean replays R's long-double `colMeans` in pure Python, about 0.4 s per million values (about 4 s at n = 1e6, p = 10). A later fast path can use `np.add.accumulate` over `np.longdouble` where numpy's long double is x87 extended (Linux x86-64), keeping the integer replay as the reference everywhere else.
 - `create_dn` stage 1 chunks run under joblib (loky) when `n_jobs > 1`. Chunk results are stacked in chunk order, so output does not depend on `n_jobs`.
 - `refine_dn` splits within a round run under joblib; per-split reseeding keeps results identical for any `n_jobs`.
 - `whclust`: R recomputes WSS from raw rows for every pair, O(n^3) with a large constant. The closed-form weighted Ward cost `W_A W_B / (W_A + W_B) * ||mu_A - mu_B||^2` is algebraically equal to R's `wss(A+B) - wss(A) - wss(B)` and ships only if merge order matches R on every fixture. Ties are broken column-major, like R's `which.min` on a matrix.

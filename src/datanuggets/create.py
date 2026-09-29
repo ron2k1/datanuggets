@@ -21,7 +21,7 @@ from datanuggets._defaults import (
     SEED,
 )
 from datanuggets._draws import Draws, as_draws
-from datanuggets._rcompat import split_indices
+from datanuggets._rcompat import r_mean, split_indices
 from datanuggets._rfast import nearest_index
 from datanuggets._validate import (
     as_count,
@@ -135,7 +135,7 @@ def _summarize(
     k, p = stage2.shape
     weights = np.bincount(assignments, minlength=k)
 
-    g_mean = x.mean(axis=0)
+    g_mean = r_mean(x, axis=0)  # colMeans: long-double sum, as R
     xc = x - g_mean
     s1 = np.zeros((k, p))
     s2 = np.zeros((k, p))
@@ -146,7 +146,7 @@ def _summarize(
     ss = s2 - n_safe * (mean_c * mean_c)
     ss[ss < 0] = 0.0
     var = ss / np.maximum(weights - 1, 1)[:, None]
-    scales = var.mean(axis=1)
+    scales = r_mean(var, axis=1)  # rowMeans
     scales[weights < 2] = np.nan
 
     if center_method == "mean":

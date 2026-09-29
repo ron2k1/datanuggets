@@ -72,4 +72,17 @@ diag(m) <- max(m) + 1
 write_case("rcompat_rowmins", "grid_manhattan", no_args,
            list(m = m, index = as.integer(Rfast::rowMins(m, value = FALSE))))
 
+# colMeans / rowMeans accumulate in long double; create.DN uses both for centers and scales
+mean_sets <- list(
+  iris = as_dbl(iris[, 1:4]),
+  petal = as_dbl(iris[, 3:4]),
+  quakes = as_dbl(quakes),
+  faithful = as_dbl(faithful),
+  mtcars = as_dbl(mtcars),
+  volcano_scaled = as_dbl(scale(volcano))
+)
+for (nm in names(mean_sets)) {
+  x <- mean_sets[[nm]]
+  write_case("rcompat_means", nm, no_args, list(x = x, col_means = colMeans(x), row_means = rowMeans(x)))
+}
 cat("rcompat fixtures written\n")

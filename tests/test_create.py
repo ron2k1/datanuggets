@@ -6,7 +6,7 @@ import pytest
 
 from datanuggets import DataNuggetWarning, create_dn
 from datanuggets._draws import ReplayDraws
-from rfixtures import ATOL, RTOL, load_group
+from rfixtures import load_group
 
 CASES = load_group("create_dn")
 
@@ -31,8 +31,8 @@ def test_create_dn_matches_r(case):
     draws.assert_exhausted()
     np.testing.assert_array_equal(dn.assignments + 1, case.array("assignments"))
     np.testing.assert_array_equal(dn.weights, case.array("weights"))
-    np.testing.assert_allclose(dn.centers, case.array("centers"), rtol=RTOL, atol=ATOL)
-    np.testing.assert_allclose(dn.scales, case.array("scales"), rtol=RTOL, atol=ATOL)
+    np.testing.assert_array_equal(dn.centers, case.array("centers"))
+    np.testing.assert_array_equal(dn.scales, case.array("scales"))
     ours = [w for w in caught if issubclass(w.category, DataNuggetWarning)]
     assert len(ours) == len(case.manifest["warnings"])
 
