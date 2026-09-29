@@ -10,11 +10,24 @@ suppressPackageStartupMessages({
 })
 stopifnot(packageVersion("datanugget") == "1.5.0")
 
+# R's arithmetic order depends on the build: Rfast::dista's Euclidean sums go through BLAS ddot
+# for more than 32 features, and colMeans/rowMeans accumulate in long double. Record both, so a
+# fixture regenerated on another BLAS or on a platform without 80-bit long double shows it.
+blas_id <- function() {
+  lib <- sessionInfo()$BLAS
+  if (nzchar(lib)) return(lib)
+  dll <- file.path(R.home("bin"), "Rblas.dll")  # Windows ships R's reference BLAS as Rblas.dll
+  if (file.exists(dll)) paste("Rblas.dll md5", unname(tools::md5sum(dll))) else "unknown"
+}
+
 versions <- function() list(
   R = R.version.string,
+  platform = R.version$platform,
   datanugget = as.character(packageVersion("datanugget")),
   Rfast = as.character(packageVersion("Rfast")),
-  lapack = La_version()
+  lapack = La_version(),
+  blas = blas_id(),
+  longdouble_digits = .Machine$longdouble.digits
 )
 
 as_dbl <- function(m) {
