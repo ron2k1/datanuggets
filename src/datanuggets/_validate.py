@@ -45,3 +45,10 @@ def check_delete_percent(value) -> float:
     if not 0 < v < 1:
         raise ValueError(f"delete_percent must be within (0, 1), got {value!r}")
     return v
+
+
+def check_n_jobs(n_jobs) -> int:
+    """joblib's n_jobs: a positive int, or -1 for every core."""
+    if isinstance(n_jobs, bool) or not isinstance(n_jobs, int) or n_jobs == 0 or n_jobs < -1:
+        raise ValueError(f"n_jobs must be a positive int or -1, got {n_jobs!r}")
+    return n_jobs
