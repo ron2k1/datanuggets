@@ -2,13 +2,22 @@
 source("r/fixture_io.R")
 
 grid <- as_dbl(expand.grid(a = 0:5, b = 0:5))
+set.seed(40)
+v40 <- rnorm(40)
 datasets <- list(
   iris = as_dbl(iris[, 1:4]),
   faithful = as_dbl(faithful),
   quakes = as_dbl(quakes),
   faithful_1d = as_dbl(faithful[, "eruptions", drop = FALSE]),
-  grid_ties = grid[rep(seq_len(nrow(grid)), 4), , drop = FALSE]  # every point 4 times
+  grid_ties = grid[rep(seq_len(nrow(grid)), 4), , drop = FALSE],  # every point 4 times
+  # 6 constant rows, mathematically equidistant from 4 coordinate permutations of one vector:
+  # p = 40 > 32, so R's assignment sums go through BLAS ddot and round-off decides every constant row
+  perm40 = rbind(outer(seq(-0.25, 0.25, by = 0.1), rep(1, 40)), t(replicate(4, sample(v40))))
 )
+# The thinning breaks the last constant-versus-permutation tie toward the lower index, so the
+# constants are deleted (leaving the permutations as the only centers) only when create.DN's
+# shuffle keeps all 6 constants ahead of the permutations. Pick the first seed that does.
+perm40_seed <- Find(function(s) { set.seed(s); all(sample(10, 10)[1:6] <= 6) }, seq_len(10000))
 
 cases <- list()
 add_case <- function(id, data, center.method, R, DN.num1, DN.num2,
@@ -32,6 +41,9 @@ add_case("grid_ties_euclidean_mean", "grid_ties", "mean", 100, 40, 12)
 add_case("grid_ties_manhattan_random", "grid_ties", "random", 100, 40, 12,
          delete.percent = 0.3, dist.metric = "manhattan")
 add_case("quakes_seed7_random", "quakes", "random", 300, 400, 100, seed = 7)
+add_case("perm40_euclidean_mean", "perm40", "mean", 100, 4, 4, seed = perm40_seed)
+add_case("perm40_manhattan_mean", "perm40", "mean", 100, 4, 4, dist.metric = "manhattan",
+         seed = perm40_seed)
 
 for (id in names(cases)) {
   cs <- cases[[id]]
@@ -55,6 +67,15 @@ for (id in names(cases)) {
 
   tab <- dn[["Data Nuggets"]]
   p <- ncol(x)
+  if (id == "perm40_euclidean_mean") {
+    # Fail closed unless the case separates the two summation orders: the final centers must be
+    # the permutations, and Rfast::Dist (even/odd sums) must pick a different nearest center than
+    # create.DN's dista (BLAS ddot) for at least one constant row
+    fin <- calls[[2]]$RS[calls[[2]]$kept, , drop = FALSE]
+    stopifnot(all(apply(fin, 1, function(r) diff(range(r)) > 0)))
+    d <- unname(Rfast::Dist(rbind(x[1:6, ], fin)))[1:6, 6 + seq_len(nrow(fin))]
+    stopifnot(any(apply(d, 1, which.min) != dn[["Data Nugget Assignments"]][1:6]))
+  }
   arrays <- list(
     x = x,
     draw_n = as.integer(vapply(draws, function(d) as.numeric(d$n), numeric(1))),

@@ -2,9 +2,13 @@
 
 Rfast::Dist and Rfast::dista sum per-feature terms with Armadillo's accumulate (two
 accumulators over even and odd positions, then added), so a plain left-to-right or
-numpy pairwise sum rounds differently. Rfast::dista(k = 1, index = TRUE) picks the
-nearest center with libstdc++ std::sort, which is not stable: among exactly tied
-distances the winner is whatever std::sort leaves first, not the lowest index.
+numpy pairwise sum rounds differently. The exception is dista's Euclidean kernel over
+more than 32 features: Armadillo hands that sum of squares to BLAS ddot, which R's
+reference BLAS adds left to right. An optimized BLAS (OpenBLAS, MKL, Accelerate) adds
+in its own order, so fixtures record the BLAS they were made with. Rfast::dista(k = 1,
+index = TRUE) picks the nearest center with libstdc++ std::sort, which is not stable:
+among exactly tied distances the winner is whatever std::sort leaves first, not the
+lowest index.
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ import numpy as np
 from datanuggets._defaults import ASSIGN_BLOCK_ROWS, DIST_BLOCK_ROWS
 
 _S_THRESHOLD = 16  # libstdc++ _S_threshold
+_ARMA_DOT_MAX = 32  # Armadillo op_dot::direct_dot: its own loop up to 32 terms, BLAS ddot above
 
 
 def _arma_accumulate(term: Callable[[int], np.ndarray], p: int) -> np.ndarray:
@@ -41,8 +46,18 @@ def arma_sum_last(terms: np.ndarray) -> np.ndarray:
     return _arma_accumulate(lambda j: terms[..., j].copy(), terms.shape[-1])
 
 
-def cross_distances(a: np.ndarray, b: np.ndarray, metric: str) -> np.ndarray:
-    """Distances between the rows of a (m x p) and b (k x p), as Rfast computes them."""
+def _sequential_accumulate(term: Callable[[int], np.ndarray], p: int) -> np.ndarray:
+    acc = term(0)
+    for j in range(1, p):
+        np.add(acc, term(j), out=acc)
+    return acc
+
+
+def cross_distances(
+    a: np.ndarray, b: np.ndarray, metric: str, *, kernel: str = "dist"
+) -> np.ndarray:
+    """Distances between the rows of a (m x p) and b (k x p), rounded as Rfast::Dist
+    (kernel="dist") or Rfast::dista (kernel="dista") rounds them."""
     if metric == "euclidean":
 
         def term(j: int) -> np.ndarray:
@@ -54,7 +69,11 @@ def cross_distances(a: np.ndarray, b: np.ndarray, metric: str) -> np.ndarray:
         def term(j: int) -> np.ndarray:
             return np.abs(b[None, :, j] - a[:, None, j])
 
-    total = _arma_accumulate(term, a.shape[1])
+    p = a.shape[1]
+    if kernel == "dista" and metric == "euclidean" and p > _ARMA_DOT_MAX:
+        total = _sequential_accumulate(term, p)
+    else:
+        total = _arma_accumulate(term, p)
     if metric == "euclidean":
         np.sqrt(total, out=total)
     return total
@@ -76,7 +95,7 @@ def nearest_index(
     n = points.shape[0]
     out = np.empty(n, dtype=np.intp)
     for start in range(0, n, block_rows):
-        d = cross_distances(points[start : start + block_rows], centers, metric)
+        d = cross_distances(points[start : start + block_rows], centers, metric, kernel="dista")
         best = d.argmin(axis=1)
         mins = d[np.arange(d.shape[0]), best]
         tied = np.count_nonzero(d == mins[:, None], axis=1) > 1
