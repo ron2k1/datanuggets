@@ -68,7 +68,7 @@ Those weight-1 nuggets are expected. Closest-pair deletion keeps points far out 
 
 ## Differences from R
 
-Defaults match R. The argument names map as follows:
+Defaults match R except for `n_jobs`. `create_dn` and `refine_dn` default to `n_jobs=1`, while R's `create.DN` and `refine.DN` default to `no.cores = detectCores() - 1`. The argument names map as follows:
 
 | R | Python |
 | --- | --- |
