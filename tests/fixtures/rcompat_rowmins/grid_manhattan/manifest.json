@@ -1,0 +1,28 @@
+{
+  "group": "rcompat_rowmins",
+  "case": "grid_manhattan",
+  "args": {},
+  "arrays": {
+    "m": {
+      "file": "m.bin",
+      "dtype": "<f8",
+      "shape": [
+        36,
+        36
+      ]
+    },
+    "index": {
+      "file": "index.bin",
+      "dtype": "<i4",
+      "shape": [
+        36
+      ]
+    }
+  },
+  "versions": {
+    "R": "R version 4.6.1 (2026-06-24 ucrt)",
+    "datanugget": "1.5.0",
+    "Rfast": "2.1.5.2",
+    "lapack": "3.12.1"
+  }
+}

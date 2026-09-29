@@ -1,0 +1,127 @@
+{
+  "group": "create_dn",
+  "case": "grid_ties_manhattan_random",
+  "args": {
+    "center.method": "random",
+    "R": 100,
+    "delete.percent": 0.3,
+    "DN.num1": 40,
+    "DN.num2": 12,
+    "dist.metric": "manhattan",
+    "seed": 291102
+  },
+  "arrays": {
+    "x": {
+      "file": "x.bin",
+      "dtype": "<f8",
+      "shape": [
+        144,
+        2
+      ]
+    },
+    "draw_n": {
+      "file": "draw_n.bin",
+      "dtype": "<i4",
+      "shape": [
+        13
+      ]
+    },
+    "draw_size": {
+      "file": "draw_size.bin",
+      "dtype": "<i4",
+      "shape": [
+        13
+      ]
+    },
+    "draw_values": {
+      "file": "draw_values.bin",
+      "dtype": "<i4",
+      "shape": [
+        156
+      ]
+    },
+    "centers": {
+      "file": "centers.bin",
+      "dtype": "<f8",
+      "shape": [
+        12,
+        2
+      ]
+    },
+    "weights": {
+      "file": "weights.bin",
+      "dtype": "<i4",
+      "shape": [
+        12
+      ]
+    },
+    "scales": {
+      "file": "scales.bin",
+      "dtype": "<f8",
+      "shape": [
+        12
+      ]
+    },
+    "assignments": {
+      "file": "assignments.bin",
+      "dtype": "<i4",
+      "shape": [
+        144
+      ]
+    },
+    "call01_rs": {
+      "file": "call01_rs.bin",
+      "dtype": "<f8",
+      "shape": [
+        72,
+        2
+      ]
+    },
+    "call01_kept": {
+      "file": "call01_kept.bin",
+      "dtype": "<i4",
+      "shape": [
+        20
+      ]
+    },
+    "call02_rs": {
+      "file": "call02_rs.bin",
+      "dtype": "<f8",
+      "shape": [
+        72,
+        2
+      ]
+    },
+    "call02_kept": {
+      "file": "call02_kept.bin",
+      "dtype": "<i4",
+      "shape": [
+        20
+      ]
+    },
+    "call03_rs": {
+      "file": "call03_rs.bin",
+      "dtype": "<f8",
+      "shape": [
+        40,
+        2
+      ]
+    },
+    "call03_kept": {
+      "file": "call03_kept.bin",
+      "dtype": "<i4",
+      "shape": [
+        12
+      ]
+    }
+  },
+  "versions": {
+    "R": "R version 4.6.1 (2026-06-24 ucrt)",
+    "datanugget": "1.5.0",
+    "Rfast": "2.1.5.2",
+    "lapack": "3.12.1"
+  },
+  "n_calls": 3,
+  "call_dn_num": [20, 20, 12],
+  "warnings": []
+}

@@ -1,0 +1,46 @@
+{
+  "group": "rcompat_dista",
+  "case": "grid_manhattan",
+  "args": {
+    "metric": "manhattan"
+  },
+  "arrays": {
+    "xnew": {
+      "file": "xnew.bin",
+      "dtype": "<f8",
+      "shape": [
+        36,
+        2
+      ]
+    },
+    "x": {
+      "file": "x.bin",
+      "dtype": "<f8",
+      "shape": [
+        12,
+        2
+      ]
+    },
+    "order_full": {
+      "file": "order_full.bin",
+      "dtype": "<i4",
+      "shape": [
+        36,
+        12
+      ]
+    },
+    "nearest": {
+      "file": "nearest.bin",
+      "dtype": "<i4",
+      "shape": [
+        36
+      ]
+    }
+  },
+  "versions": {
+    "R": "R version 4.6.1 (2026-06-24 ucrt)",
+    "datanugget": "1.5.0",
+    "Rfast": "2.1.5.2",
+    "lapack": "3.12.1"
+  }
+}

@@ -1,0 +1,142 @@
+{
+  "group": "create_dn",
+  "case": "faithful_euclidean_original",
+  "args": {
+    "center.method": "original",
+    "R": 100,
+    "delete.percent": 0.1,
+    "DN.num1": 90,
+    "DN.num2": 30,
+    "dist.metric": "euclidean",
+    "seed": 291102
+  },
+  "arrays": {
+    "x": {
+      "file": "x.bin",
+      "dtype": "<f8",
+      "shape": [
+        272,
+        2
+      ]
+    },
+    "draw_n": {
+      "file": "draw_n.bin",
+      "dtype": "<i4",
+      "shape": [
+        1
+      ]
+    },
+    "draw_size": {
+      "file": "draw_size.bin",
+      "dtype": "<i4",
+      "shape": [
+        1
+      ]
+    },
+    "draw_values": {
+      "file": "draw_values.bin",
+      "dtype": "<i4",
+      "shape": [
+        272
+      ]
+    },
+    "centers": {
+      "file": "centers.bin",
+      "dtype": "<f8",
+      "shape": [
+        30,
+        2
+      ]
+    },
+    "weights": {
+      "file": "weights.bin",
+      "dtype": "<i4",
+      "shape": [
+        30
+      ]
+    },
+    "scales": {
+      "file": "scales.bin",
+      "dtype": "<f8",
+      "shape": [
+        30
+      ]
+    },
+    "assignments": {
+      "file": "assignments.bin",
+      "dtype": "<i4",
+      "shape": [
+        272
+      ]
+    },
+    "call01_rs": {
+      "file": "call01_rs.bin",
+      "dtype": "<f8",
+      "shape": [
+        91,
+        2
+      ]
+    },
+    "call01_kept": {
+      "file": "call01_kept.bin",
+      "dtype": "<i4",
+      "shape": [
+        30
+      ]
+    },
+    "call02_rs": {
+      "file": "call02_rs.bin",
+      "dtype": "<f8",
+      "shape": [
+        90,
+        2
+      ]
+    },
+    "call02_kept": {
+      "file": "call02_kept.bin",
+      "dtype": "<i4",
+      "shape": [
+        30
+      ]
+    },
+    "call03_rs": {
+      "file": "call03_rs.bin",
+      "dtype": "<f8",
+      "shape": [
+        91,
+        2
+      ]
+    },
+    "call03_kept": {
+      "file": "call03_kept.bin",
+      "dtype": "<i4",
+      "shape": [
+        30
+      ]
+    },
+    "call04_rs": {
+      "file": "call04_rs.bin",
+      "dtype": "<f8",
+      "shape": [
+        90,
+        2
+      ]
+    },
+    "call04_kept": {
+      "file": "call04_kept.bin",
+      "dtype": "<i4",
+      "shape": [
+        30
+      ]
+    }
+  },
+  "versions": {
+    "R": "R version 4.6.1 (2026-06-24 ucrt)",
+    "datanugget": "1.5.0",
+    "Rfast": "2.1.5.2",
+    "lapack": "3.12.1"
+  },
+  "n_calls": 4,
+  "call_dn_num": [30, 30, 30, 30],
+  "warnings": []
+}

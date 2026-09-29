@@ -1,0 +1,112 @@
+{
+  "group": "create_dn",
+  "case": "iris_default_num1_warnpath",
+  "args": {
+    "center.method": "mean",
+    "R": 5000,
+    "delete.percent": 0.1,
+    "DN.num1": 10000,
+    "DN.num2": 50,
+    "dist.metric": "euclidean",
+    "seed": 291102
+  },
+  "arrays": {
+    "x": {
+      "file": "x.bin",
+      "dtype": "<f8",
+      "shape": [
+        150,
+        4
+      ]
+    },
+    "draw_n": {
+      "file": "draw_n.bin",
+      "dtype": "<i4",
+      "shape": [
+        1
+      ]
+    },
+    "draw_size": {
+      "file": "draw_size.bin",
+      "dtype": "<i4",
+      "shape": [
+        1
+      ]
+    },
+    "draw_values": {
+      "file": "draw_values.bin",
+      "dtype": "<i4",
+      "shape": [
+        150
+      ]
+    },
+    "centers": {
+      "file": "centers.bin",
+      "dtype": "<f8",
+      "shape": [
+        50,
+        4
+      ]
+    },
+    "weights": {
+      "file": "weights.bin",
+      "dtype": "<i4",
+      "shape": [
+        50
+      ]
+    },
+    "scales": {
+      "file": "scales.bin",
+      "dtype": "<f8",
+      "shape": [
+        50
+      ]
+    },
+    "assignments": {
+      "file": "assignments.bin",
+      "dtype": "<i4",
+      "shape": [
+        150
+      ]
+    },
+    "call01_rs": {
+      "file": "call01_rs.bin",
+      "dtype": "<f8",
+      "shape": [
+        150,
+        4
+      ]
+    },
+    "call01_kept": {
+      "file": "call01_kept.bin",
+      "dtype": "<i4",
+      "shape": [
+        150
+      ]
+    },
+    "call02_rs": {
+      "file": "call02_rs.bin",
+      "dtype": "<f8",
+      "shape": [
+        150,
+        4
+      ]
+    },
+    "call02_kept": {
+      "file": "call02_kept.bin",
+      "dtype": "<i4",
+      "shape": [
+        50
+      ]
+    }
+  },
+  "versions": {
+    "R": "R version 4.6.1 (2026-06-24 ucrt)",
+    "datanugget": "1.5.0",
+    "Rfast": "2.1.5.2",
+    "lapack": "3.12.1"
+  },
+  "n_calls": 2,
+  "call_dn_num": [150, 50],
+  "warnings": ["DN.num is greater than or equal to the number of rows. Returning original data"]
+}
