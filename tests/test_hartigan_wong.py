@@ -51,6 +51,16 @@ def test_kmns_is_symmetric_under_negation():
     np.testing.assert_array_equal(neg.withinss, z.withinss)
 
 
+def test_kmeans_fixtures_surface_every_reachable_fault():
+    """What kmeans() makes of kmns's fault codes, end to end. ifault 1 (an empty cluster) needs
+    repeated starts, which kmeans() never passes kmns."""
+    errors = {c.manifest["error"] for c in KMEANS}
+    assert "number of cluster centres must lie between 1 and nrow(x)" in errors  # ifault 3
+    warned = [w for c in KMEANS for w in c.manifest["warnings"]]
+    assert any(w.startswith("did not converge in") for w in warned)  # ifault 2
+    assert any(w.startswith("Quick-TRANSfer stage steps exceeded maximum") for w in warned)  # 4
+
+
 def _run(case, draws):
     a = case.args
     return kmeans(case.array("x"), a["k"], draws, nstart=a["nstart"], iter_max=a["iter.max"])
@@ -77,3 +87,4 @@ def test_kmeans_stops_where_r_stops(case):
         _run(case, draws)
     draws.assert_exhausted()
     assert str(err.value) == case.manifest["error"]
+    assert list(err.value.warnings) == case.manifest["warnings"]

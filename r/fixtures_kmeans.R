@@ -93,3 +93,11 @@ r <- add_kmeans("faithful_k2_n0", faithful, 2, 0)  # refine.DN with nstart = 0 h
 stopifnot(nzchar(r$error), length(r$draws) == 0L)
 r <- add_kmeans("petal_k149", petal, 149, 1)
 stopifnot(r$error == "more cluster centers than distinct data points.", length(r$draws) == 1L)
+r <- add_kmeans("faithful5_k5", faithful[1:5, ], 5, 1)  # k == nrow(x): kmns ifault 3
+stopifnot(r$error == "number of cluster centres must lie between 1 and nrow(x)",
+          length(r$draws) == 1L)
+# Rounded normals tie often enough to cycle the quick-transfer stage past its 50 * m step cap
+set.seed(4000040)
+tied <- matrix(round(rnorm(12000) * 3, 1), ncol = 3)
+r <- add_kmeans("tied3d_k4_qtran", tied, 4, 1, seed = 2, iter.max = 30L)
+stopifnot(identical(r$warnings, "Quick-TRANSfer stage steps exceeded maximum (= 200000)"))
