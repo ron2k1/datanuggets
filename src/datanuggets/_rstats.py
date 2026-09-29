@@ -3,7 +3,8 @@
 sum, mean, median, mad, type-7 quantile, cov and %*% are replayed bit for bit. R accumulates
 sums in long double (x87 extended precision on x86-64), which _ldouble reproduces with Python
 integers. eigen() calls LAPACK's dsyevr with R's arguments, so eigenvalues agree with R's to
-rounding (about 1e-12 relative) but not bit for bit: LAPACK builds differ in their kernels.
+rounding on the scale of the largest one, not bit for bit: LAPACK builds differ in their kernels.
+A second eigenvalue near zero can be far off relative to itself.
 """
 
 from __future__ import annotations

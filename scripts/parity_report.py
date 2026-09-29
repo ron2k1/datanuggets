@@ -94,7 +94,9 @@ def refine_report() -> str:
         " R's random draws are replayed, so any difference would be arithmetic, not randomness."
         ' "yes" means bit-identical (`np.array_equal`). Eigenvalues only steer which nuggets'
         " split. They come from LAPACK's dsyevr through SciPy, the routine R's eigen() calls,"
-        " and the tests hold them to R's within a relative 1e-8.\n\n"
+        " and the tests hold them to R's within 1e-8 relative plus 1e-10 absolute. Their error"
+        " is rounding on the scale of the largest eigenvalue, so a second eigenvalue near zero"
+        " can be far off relative to itself.\n\n"
         "| case | data | nuggets in | nuggets out | assignments | weights | centers | scales |\n"
         "|---|---|---|---|---|---|---|---|\n"
     )
