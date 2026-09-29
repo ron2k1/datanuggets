@@ -10,6 +10,9 @@ datasets <- list(
   quakes = as_dbl(quakes),
   faithful_1d = as_dbl(faithful[, "eruptions", drop = FALSE]),
   grid_ties = grid[rep(seq_len(nrow(grid)), 4), , drop = FALSE],  # every point 4 times
+  petal = as_dbl(iris[, 3:4]),                                     # heavy duplicates
+  volcano_scaled = as_dbl(scale(volcano)),                         # p = 61
+  volcano_integer = as_dbl(volcano),
   # 6 constant rows, mathematically equidistant from 4 coordinate permutations of one vector:
   # p = 40 > 32, so R's assignment sums go through BLAS ddot and round-off decides every constant row
   perm40 = rbind(outer(seq(-0.25, 0.25, by = 0.1), rep(1, 40)), t(replicate(4, sample(v40))))
@@ -41,9 +44,23 @@ add_case("grid_ties_euclidean_mean", "grid_ties", "mean", 100, 40, 12)
 add_case("grid_ties_manhattan_random", "grid_ties", "random", 100, 40, 12,
          delete.percent = 0.3, dist.metric = "manhattan")
 add_case("quakes_seed7_random", "quakes", "random", 300, 400, 100, seed = 7)
+# Allocation edges: 401 over 4 chunks leaves a remainder of 1; 7 over 10 chunks clamps to 1 each
+add_case("quakes_remainder", "quakes", "mean", 300, 401, 100)
+add_case("quakes_clamp", "quakes", "mean", 100, 7, 5)
+add_case("faithful_manhattan_dp30_uneven", "faithful", "mean", 100, 100, 30,
+         delete.percent = 0.3, dist.metric = "manhattan")
+add_case("iris_one_nugget", "iris", "mean", 100, 60, 1)
+add_case("iris_all_passthrough", "iris", "mean", 5000, 150, 150)
+add_case("petal_duplicates", "petal", "mean", 100, 100, 80)
+add_case("volcano_scaled_mean", "volcano_scaled", "mean", 100, 40, 25)
+add_case("volcano_integer_original", "volcano_integer", "original", 100, 40, 25)
 add_case("perm40_euclidean_mean", "perm40", "mean", 100, 4, 4, seed = perm40_seed)
 add_case("perm40_manhattan_mean", "perm40", "mean", 100, 4, 4, dist.metric = "manhattan",
          seed = perm40_seed)
+# More than 16 final centers: introsort, not insertion sort, breaks the assignment ties
+add_case("grid_ties_euclidean_k30", "grid_ties", "mean", 100, 60, 30)
+add_case("grid_ties_manhattan_k30_random", "grid_ties", "random", 100, 60, 30,
+         dist.metric = "manhattan")
 
 for (id in names(cases)) {
   cs <- cases[[id]]

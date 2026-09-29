@@ -4,8 +4,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import datanuggets.create as create_mod
 from datanuggets import DataNuggetWarning, create_dn
 from datanuggets._draws import ReplayDraws
+from datanuggets.create import _allocate
 from rfixtures import load_group
 
 CASES = load_group("create_dn")
@@ -35,6 +37,38 @@ def test_create_dn_matches_r(case):
     np.testing.assert_array_equal(dn.scales, case.array("scales"))
     ours = [w for w in caught if issubclass(w.category, DataNuggetWarning)]
     assert len(ours) == len(case.manifest["warnings"])
+
+
+@pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
+def test_create_dn_hands_select_centers_what_r_hands_create_dncenters(case, monkeypatch):
+    calls = []
+    real = create_mod.select_centers
+
+    def spy(rs, dn_num, delete_percent, dist_metric):
+        calls.append((rs.copy(), dn_num))
+        return real(rs, dn_num, delete_percent, dist_metric)
+
+    monkeypatch.setattr(create_mod, "select_centers", spy)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DataNuggetWarning)
+        create_dn(case.array("x"), **py_args(case.args), seed=ReplayDraws(case.draws()))
+    assert len(calls) == case.manifest["n_calls"]
+    for i, (rs, dn_num) in enumerate(calls, start=1):
+        np.testing.assert_array_equal(rs, case.array(f"call{i:02d}_rs"), err_msg=f"call {i}")
+        assert dn_num == case.manifest["call_dn_num"][i - 1], f"call {i}"
+
+
+@pytest.mark.parametrize(
+    ("dn_num1", "sizes", "expected"),
+    [
+        (401, [250, 250, 250, 250], [101, 100, 100, 100]),  # remainder goes to the first chunks
+        (7, [100] * 10, [1] * 10),  # fewer centers than chunks: every chunk still keeps one
+        (10, [3, 100], [3, 5]),  # never more than the chunk holds
+        (5, [2, 2, 2], [2, 2, 1]),
+    ],
+)
+def test_allocate_splits_dn_num1_like_r(dn_num1, sizes, expected):
+    assert _allocate(dn_num1, np.array(sizes)).tolist() == expected
 
 
 QUAKES = next(c for c in CASES if c.id == "quakes_euclidean_mean")
