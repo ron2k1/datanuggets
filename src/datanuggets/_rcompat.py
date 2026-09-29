@@ -91,3 +91,13 @@ def r_mean(a: np.ndarray, axis: int) -> np.ndarray:
             with np.errstate(invalid="ignore"):
                 out[idx] = np.mean(v)
     return out
+
+
+def unique_first(x: np.ndarray) -> np.ndarray:
+    """0-based positions of the rows R's unique(x) keeps from a numeric matrix: the first
+    occurrence of each distinct row, in row order. R 4.x compares the rows exactly, with
+    0 equal to -0, and so do Python float tuples. Finite data only."""
+    first: dict[tuple[float, ...], int] = {}
+    for i, row in enumerate(np.asarray(x, dtype=np.float64).tolist()):
+        first.setdefault(tuple(row), i)
+    return np.fromiter(first.values(), dtype=np.intp, count=len(first))
