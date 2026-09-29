@@ -3,6 +3,7 @@ import pytest
 
 from datanuggets._draws import (
     DrawRecord,
+    Draws,
     NumpyDraws,
     ReplayDraws,
     ReplayMismatch,
@@ -63,3 +64,43 @@ def test_fixture_draws_round_trip():
     assert records[0].n == 150 and records[0].size == 150
     assert sorted(records[0].value.tolist()) == list(range(1, 151))
     assert all(r.size == 1 for r in records[1:])
+
+
+def test_numpy_sample_draws_distinct_values_in_range():
+    got = NumpyDraws(1).sample(10, 4)
+    assert got.shape == (4,)
+    assert len(set(got.tolist())) == 4
+    assert got.min() >= 0 and got.max() < 10
+
+
+def test_numpy_fork_with_int_seed_restarts_the_stream():
+    draws = NumpyDraws(5)
+    first = draws.fork().sample(1000, 5)
+    np.testing.assert_array_equal(draws.fork().sample(1000, 5), first)
+    np.testing.assert_array_equal(NumpyDraws(5).sample(1000, 5), first)
+
+
+def test_numpy_fork_with_generator_spawns_reproducible_children():
+    a = NumpyDraws(np.random.default_rng(3))
+    b = NumpyDraws(np.random.default_rng(3))
+    a1, a2 = a.fork().sample(10**6, 3), a.fork().sample(10**6, 3)
+    assert not np.array_equal(a1, a2)
+    np.testing.assert_array_equal(b.fork().sample(10**6, 3), a1)
+
+
+def test_replay_sample_returns_zero_based_values_and_checks_the_call():
+    draws = ReplayDraws([DrawRecord(10, 2, np.array([3, 7]))])
+    np.testing.assert_array_equal(draws.sample(10, 2), [2, 6])
+    draws.assert_exhausted()
+    with pytest.raises(ReplayMismatch):
+        ReplayDraws([DrawRecord(10, 2, np.array([3, 7]))]).sample(9, 2)
+
+
+def test_replay_fork_shares_the_recorded_stream():
+    draws = ReplayDraws([])
+    assert draws.fork() is draws
+
+
+def test_both_implementations_satisfy_the_protocol():
+    assert isinstance(NumpyDraws(1), Draws)
+    assert isinstance(ReplayDraws([]), Draws)

@@ -10,7 +10,11 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = "GPL-2.0-only"
 authors = [{ name = "Ronil Basu" }]
-dependencies = ["numpy>=2.0", "joblib>=1.4"]
+dependencies = [
+    "numpy>=2.0",
+    "joblib>=1.4",
+    "scipy>=1.13",
+]
 
 [project.optional-dependencies]
 frame = ["pandas>=2.2"]
@@ -28,5 +32,5 @@ addopts = "-ra"
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests", "scripts"]
+src = ["src", "tests", "scripts", "benchmarks"]
 extend-exclude = ["docs"]  # prose with illustrative snippets, not sources

@@ -99,3 +99,11 @@ local({
   chk <- capture_draws({ set.seed(1); sample(10, 10) })
   stopifnot(length(chk$draws) == 1L, identical(as.integer(chk$draws[[1]]$value), as.integer(chk$value)))
 })
+
+
+# The draws capture_draws recorded, as the three arrays tests/rfixtures.py reads back.
+draw_arrays <- function(draws) list(
+  draw_n = as.integer(vapply(draws, function(d) as.numeric(d$n), numeric(1))),
+  draw_size = as.integer(vapply(draws, function(d) as.numeric(d$size), numeric(1))),
+  draw_values = as.integer(unlist(lapply(draws, function(d) d$value)))
+)

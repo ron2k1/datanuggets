@@ -2,41 +2,55 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 import numpy as np
 
 
-def _freeze(arr: np.ndarray) -> np.ndarray:
-    arr = np.asarray(arr)
+def _freeze(value) -> np.ndarray:
+    """A read-only copy: a result never shares memory with, or locks, the caller's array."""
+    arr = np.array(value, copy=True)
     arr.setflags(write=False)
     return arr
 
 
-@dataclass(frozen=True)
-class CentersResult:
+class _ArrayFields:
+    """Base for the frozen result dataclasses: every field is stored as a read-only copy, and ==
+    compares the arrays by value. Dataclass equality would compare them with ==, whose truth
+    value is ambiguous. NaN equals NaN, since empty nuggets have NaN centers. Like numpy arrays,
+    results are unhashable."""
+
+    __hash__ = None
+
+    def __post_init__(self):
+        for f in fields(self):
+            object.__setattr__(self, f.name, _freeze(getattr(self, f.name)))
+
+    def __eq__(self, other):
+        if type(other) is not type(self):
+            return NotImplemented
+        return all(
+            np.array_equal(getattr(self, f.name), getattr(other, f.name), equal_nan=True)
+            for f in fields(self)
+        )
+
+
+@dataclass(frozen=True, eq=False)
+class CentersResult(_ArrayFields):
     """create_dn_centers output: the kept rows and their 0-based positions in the input."""
 
     centers: np.ndarray
     kept: np.ndarray
 
-    def __post_init__(self):
-        _freeze(self.centers)
-        _freeze(self.kept)
 
-
-@dataclass(frozen=True)
-class DataNuggets:
+@dataclass(frozen=True, eq=False)
+class DataNuggets(_ArrayFields):
     """Data nuggets: one center, weight and scale per nugget, plus each row's nugget (0-based)."""
 
     centers: np.ndarray
     weights: np.ndarray
     scales: np.ndarray
     assignments: np.ndarray
-
-    def __post_init__(self):
-        for arr in (self.centers, self.weights, self.scales, self.assignments):
-            _freeze(arr)
 
     @property
     def n_nuggets(self) -> int:

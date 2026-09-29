@@ -22,16 +22,39 @@ class Draws(Protocol):
         """R's sample.int(m, 1), 0-based."""
         ...
 
+    def sample(self, n: int, size: int) -> np.ndarray:
+        """R's sample.int(n, size): size distinct values from range(n), 0-based."""
+        ...
+
+    def fork(self) -> Draws:
+        """The stream for one refine_dn split, where R calls set.seed(seed) again."""
+        ...
+
 
 class NumpyDraws:
     def __init__(self, seed: int | np.integer | np.random.Generator):
-        self._rng = seed if isinstance(seed, np.random.Generator) else np.random.default_rng(seed)
+        if isinstance(seed, np.random.Generator):
+            self._seed, self._rng = None, seed
+        else:
+            self._seed = int(seed)
+            self._rng = np.random.default_rng(self._seed)
 
     def permutation(self, n: int) -> np.ndarray:
         return self._rng.permutation(n)
 
     def index(self, m: int) -> int:
         return int(self._rng.integers(m))
+
+    def sample(self, n: int, size: int) -> np.ndarray:
+        return self._rng.choice(n, size, replace=False)
+
+    def fork(self) -> NumpyDraws:
+        """An int seed restarts the same stream on every call, like R's set.seed(seed). A
+        Generator hands out a new child stream per call (Generator.spawn), so forks made in the
+        same order give the same streams."""
+        if self._seed is not None:
+            return NumpyDraws(self._seed)
+        return NumpyDraws(self._rng.spawn(1)[0])
 
 
 @dataclass(frozen=True)
@@ -66,6 +89,13 @@ class ReplayDraws:
 
     def index(self, m: int) -> int:
         return int(self._next(m, 1)[0])
+
+    def sample(self, n: int, size: int) -> np.ndarray:
+        return self._next(n, size).astype(np.intp)
+
+    def fork(self) -> ReplayDraws:
+        """R's re-seeding is already in the recording, so forks share the one stream."""
+        return self
 
     def assert_exhausted(self) -> None:
         if self._pos != len(self._records):

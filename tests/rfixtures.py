@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from datanuggets._draws import DrawRecord
+from datanuggets.result import DataNuggets
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures"
 RTOL = 1e-8
@@ -57,3 +58,26 @@ def load_group(group: str) -> list[Case]:
     if not dirs:
         raise FileNotFoundError(f"no fixtures under {root}; regenerate them with the scripts in r/")
     return [Case(p, json.loads((p / "manifest.json").read_text(encoding="utf-8"))) for p in dirs]
+
+
+# refine.DN's argument names in the fixture manifests, and refine_dn's
+REFINE_ARGS = {
+    "EV.tol": "ev_tol",
+    "max.splits": "max_splits",
+    "min.nugget.size": "min_nugget_size",
+    "shape.split": "shape_split",
+    "min.shape.size": "min_shape_size",
+    "delta": "delta",
+    "nstart": "nstart",
+}
+
+
+def refine_inputs(case: Case) -> tuple[np.ndarray, DataNuggets, dict]:
+    """x, the input nuggets (assignments made 0-based) and refine_dn's keyword arguments."""
+    dn = DataNuggets(
+        centers=case.array("in_centers"),
+        weights=case.array("in_weights"),
+        scales=case.array("in_scales"),
+        assignments=case.array("in_assignments") - 1,
+    )
+    return case.array("x"), dn, {py: case.args[r] for r, py in REFINE_ARGS.items()}

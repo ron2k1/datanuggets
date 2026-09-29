@@ -29,6 +29,7 @@ from datanuggets._validate import (
     as_real,
     check_choice,
     check_delete_percent,
+    check_n_jobs,
 )
 from datanuggets.centers import PASSTHROUGH_WARNING, select_centers
 from datanuggets.exceptions import DataNuggetWarning
@@ -66,8 +67,7 @@ def create_dn(
     if dn_num2 > dn_num1:
         raise ValueError("dn_num2 must be less than dn_num1")
     check_choice("dist_metric", dist_metric, DIST_METRICS)
-    if isinstance(n_jobs, bool) or not isinstance(n_jobs, int) or n_jobs == 0 or n_jobs < -1:
-        raise ValueError(f"n_jobs must be a positive int or -1, got {n_jobs!r}")
+    check_n_jobs(n_jobs)
     bar = _progress_bar() if progress else None
     draws = as_draws(seed)
     x = as_matrix(x)
