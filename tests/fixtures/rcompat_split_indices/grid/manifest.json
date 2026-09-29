@@ -1,0 +1,44 @@
+{
+  "group": "rcompat_split_indices",
+  "case": "grid",
+  "args": {},
+  "arrays": {
+    "nx": {
+      "file": "nx.bin",
+      "dtype": "<i4",
+      "shape": [
+        67
+      ]
+    },
+    "ncl": {
+      "file": "ncl.bin",
+      "dtype": "<i4",
+      "shape": [
+        67
+      ]
+    },
+    "nchunks": {
+      "file": "nchunks.bin",
+      "dtype": "<i4",
+      "shape": [
+        67
+      ]
+    },
+    "chunk_len": {
+      "file": "chunk_len.bin",
+      "dtype": "<i4",
+      "shape": [
+        443
+      ]
+    }
+  },
+  "versions": {
+    "R": "R version 4.6.1 (2026-06-24 ucrt)",
+    "platform": "x86_64-w64-mingw32",
+    "datanugget": "1.5.0",
+    "Rfast": "2.1.5.2",
+    "lapack": "3.12.1",
+    "blas": "Rblas.dll md5 5fe8258e86d8a1a52a6c3db05faa0225",
+    "longdouble_digits": 64
+  }
+}
