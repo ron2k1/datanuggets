@@ -1,0 +1,79 @@
+{
+  "group": "kmns",
+  "case": "iris_k5",
+  "args": {
+    "iter.max": 1000,
+    "isteps": 7500,
+    "ifault": 0
+  },
+  "arrays": {
+    "x": {
+      "file": "x.bin",
+      "dtype": "<f8",
+      "shape": [
+        150,
+        4
+      ]
+    },
+    "c0": {
+      "file": "c0.bin",
+      "dtype": "<f8",
+      "shape": [
+        5,
+        4
+      ]
+    },
+    "c1": {
+      "file": "c1.bin",
+      "dtype": "<i4",
+      "shape": [
+        150
+      ]
+    },
+    "centers": {
+      "file": "centers.bin",
+      "dtype": "<f8",
+      "shape": [
+        5,
+        4
+      ]
+    },
+    "nc": {
+      "file": "nc.bin",
+      "dtype": "<i4",
+      "shape": [
+        5
+      ]
+    },
+    "wss": {
+      "file": "wss.bin",
+      "dtype": "<f8",
+      "shape": [
+        5
+      ]
+    },
+    "iter": {
+      "file": "iter.bin",
+      "dtype": "<i4",
+      "shape": [
+        1
+      ]
+    },
+    "ifault": {
+      "file": "ifault.bin",
+      "dtype": "<i4",
+      "shape": [
+        1
+      ]
+    }
+  },
+  "versions": {
+    "R": "R version 4.6.1 (2026-06-24 ucrt)",
+    "platform": "x86_64-w64-mingw32",
+    "datanugget": "1.5.0",
+    "Rfast": "2.1.5.2",
+    "lapack": "3.12.1",
+    "blas": "Rblas.dll md5 5fe8258e86d8a1a52a6c3db05faa0225",
+    "longdouble_digits": 64
+  }
+}
