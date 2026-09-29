@@ -9,8 +9,9 @@ import pytest
 
 import datanuggets.refine as refine_module
 from datanuggets import DataNuggets, DataNuggetWarning, refine_dn
-from datanuggets._draws import ReplayDraws
-from datanuggets.refine import nugget_features
+from datanuggets._draws import NumpyDraws, ReplayDraws
+from datanuggets._hartigan_wong import KMeansError, KMeansResult
+from datanuggets.refine import _split_nugget, nugget_features
 from rfixtures import ATOL, RTOL, load_group, refine_inputs
 
 CASES = load_group("refine_dn")
@@ -154,6 +155,81 @@ def test_n_jobs_does_not_change_the_result(make_seed):
         two = refine_dn(x, dn, seed=make_seed(), n_jobs=2, **kwargs)
     assert one.n_nuggets > np.count_nonzero(dn.weights)  # something was split
     assert one == two
+
+
+def test_split_warnings_reach_the_caller_in_candidate_order(monkeypatch, caplog):
+    """No R fixture warns (refine.DN runs kmeans with iter.max = 1000), so a stub supplies the
+    warnings: two from a split that goes ahead, one carried by a kmeans error. refine_dn re-emits
+    each as a DataNuggetWarning, in candidate order, pointing at the caller's line."""
+    real = refine_module.kmeans
+    calls = []
+
+    def stub(x, k, draws, **kwargs):
+        calls.append(x.shape[0])
+        result = real(x, k, draws, **kwargs)
+        if len(calls) == 1:
+            return replace(result, warnings=("w1a", "w1b"))
+        if len(calls) == 2:
+            raise KMeansError("boom", ("w2",))
+        return result
+
+    monkeypatch.setattr(refine_module, "kmeans", stub)
+    x, dn, kwargs = refine_inputs(_case("faithful_ev0.5_ms1_mns2_noshape_d2_ns1"))
+    caplog.set_level(logging.DEBUG, logger="datanuggets")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        refine_dn(x, dn, seed=7, n_jobs=1, **kwargs)
+    ours = [w for w in caught if w.category is DataNuggetWarning]
+    assert len(calls) > 2
+    assert [str(w.message) for w in ours] == ["w1a", "w1b", "w2"]
+    assert [w.filename for w in ours] == [__file__] * 3
+    debug = [r.getMessage() for r in caplog.records if r.levelno == logging.DEBUG]
+    assert sum("not split: kmeans error: boom" in m for m in debug) == 1
+
+
+def _stub_kmeans(monkeypatch, cluster=None, warned=("w",)):
+    """refine's kmeans returning cluster with warned, or raising KMeansError when cluster is None."""
+
+    def stub(x, k, draws, **kwargs):
+        if cluster is None:
+            raise KMeansError("boom", warned)
+        labels = np.array(cluster, dtype=np.intp)
+        return KMeansResult(
+            cluster=labels,
+            centers=np.zeros((2, x.shape[1])),
+            withinss=np.zeros(2),
+            size=np.bincount(labels, minlength=2),
+            tot_withinss=0.0,
+            iter=1,
+            ifault=0,
+            warnings=warned,
+        )
+
+    monkeypatch.setattr(refine_module, "kmeans", stub)
+
+
+# Two elongated children: EV1/EV2 is far above delta, so a shape split is rejected
+_LINES = np.array([[t, 0.01 * (-1) ** t + 10 * g] for g in (0, 1) for t in range(6)], dtype=float)
+SPLIT_PATHS = [
+    ("kmeans error", None, False, "kmeans error: boom"),
+    ("child too small", [0] * 11 + [1], False, "a child is smaller than min_nugget_size"),
+    ("shape rejected", [0] * 6 + [1] * 6, True, SHAPE_REJECTED),
+    ("split", [0] * 6 + [1] * 6, False, None),
+]
+
+
+@pytest.mark.parametrize(
+    "cluster, project, reason", [p[1:] for p in SPLIT_PATHS], ids=[p[0] for p in SPLIT_PATHS]
+)
+def test_split_nugget_carries_the_kmeans_warnings(monkeypatch, cluster, project, reason):
+    _stub_kmeans(monkeypatch, cluster, warned=("first", "second"))
+    out = _split_nugget(_LINES, NumpyDraws(1), 2, 1, project, 2)
+    assert out.reason == reason
+    assert out.warned == ("first", "second")
+    if reason is None:
+        np.testing.assert_array_equal(out.labels, cluster)
+    else:
+        assert out.labels is None
 
 
 def _tiny():
