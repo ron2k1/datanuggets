@@ -32,5 +32,5 @@ addopts = "-ra"
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests", "scripts"]
+src = ["src", "tests", "scripts", "benchmarks"]
 extend-exclude = ["docs"]  # prose with illustrative snippets, not sources
