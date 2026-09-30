@@ -33,14 +33,16 @@ def cluster_predict(x, cl, newx, *, w=None) -> np.ndarray:
     A position is 0-based in sorted label order: labels 4, 6 and 8 come back as 0, 1 and 2, and
     a position equals the label only when the labels are 0 to k-1. R returns the 1-based
     position. A tie goes to the first cluster, as R's which.min does. A cluster whose weights
-    sum to zero has a NaN center and is never returned. A row can be left with no usable
-    distance, because every center is NaN or because another row of newx overflows and R's
-    identity multiply spreads NaN down every column it touches. R then returns a list with an
-    empty entry for that row, or integer(0) when no row has an answer, and this raises
-    ValueError instead. w is one weight per row of x and is keyword-only, because R's order is
-    (x, w, cl, newx) and a call written that way has to fail. None means ones, which is R's
-    default too. newx must have the columns of x, and None raises TypeError where R stops with
-    "newdata should be a data frame."
+    sum to zero has a center of NaN, or of infinities when weights of both signs cancel, and
+    it's never returned while another cluster is at a finite distance. A row can be left with
+    every distance NaN. A NaN center gives NaN in its column. R's identity multiply also turns an
+    entry NaN when another row of its column is NaN or infinite, which a row of newx that
+    overflows causes, and so does a center of infinities once newx has two rows. R then returns
+    a list with an empty entry for that row, or integer(0) when no row has an answer, and this
+    raises ValueError instead. w is one weight per row of x and is keyword-only, because R's
+    order is (x, w, cl, newx) and a call written that way has to fail. None means ones, which is
+    R's default too. newx must have the columns of x, and None raises TypeError where R stops
+    with "newdata should be a data frame."
     """
     x = as_matrix(x)
     w = as_weights(w, x.shape[0])

@@ -28,10 +28,12 @@ def wmean(x, cl, w=None) -> np.ndarray:
 
     Row i is the center of the i-th distinct label in sorted order, so labels 4, 6 and 8 give
     rows 0, 1 and 2. Each coordinate is R's weighted.mean of that cluster's rows, summed in
-    long double, so it matches R bit for bit. A cluster whose weights sum to zero gets a row of
-    NaN, as in R. R returns the transpose, p by k, with one column per cluster. w is one weight
-    per row of x, and None means ones. R's own default, rep(1, length(x)), comes after x turns
-    into a data frame, so it has one weight per column of x and stops unless x is square.
+    long double, so it matches R bit for bit. A cluster whose weights are all zero gets a row of
+    NaN. Weights of both signs that cancel to a zero sum give infinities instead, and NaN in a
+    column whose weighted sum is zero too. Both are what R gives. R returns the transpose, p by
+    k, with one column per cluster. w is one weight per row of x, and None means ones. R's own
+    default, rep(1, length(x)), comes after x turns into a data frame, so it has one weight per
+    column of x and stops unless x is square.
     """
     x, w, k, codes = _inputs(x, cl, w)
     out = np.empty((k, x.shape[1]))

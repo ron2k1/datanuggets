@@ -6,7 +6,8 @@ import numpy as np
 import pytest
 
 from datanuggets.wcluster.predict import _wdist_mat, cluster_predict
-from rfixtures import assert_same_values, load_group
+from datanuggets.wcluster.wstats import wmean
+from rfixtures import assert_same_values, from_hex, load_group
 
 CASES = load_group("wstats") + load_group("wstats_constructed")
 BY_ID = {c.id: c for c in CASES}
@@ -139,6 +140,36 @@ def test_overflow_rows_match_r(cid):
                 cluster_predict(x, cl, newx, w=w)
         return
     np.testing.assert_array_equal(_predict(case), case.array("pred") - 1)
+
+
+# Recorded by hand on R 4.6.1 with WCluster 1.3.0, 2026-09-30: iris rows 3 and 1 with weights 1
+# and -1 put the first center at -Inf in every column (test_wstats pins it). One new row, iris row
+# 7, is at +Inf from it and which.min passes over it. With rows 7, 60 and 120, R's identity
+# multiply turns that column NaN. R predicts cluster 2 for every row both times.
+INF_CENTER = {
+    "one_row": ([6], ["7ff0000000000000", "3fc347ae147ae200"]),
+    "three_rows": (
+        [6, 59, 119],
+        ["fff8000000000000", "3fc347ae147ae200", "fff8000000000000", "401933d70a3d70b0"]
+        + ["fff8000000000000", "402d7b3333333330"],
+    ),
+}
+
+
+@pytest.mark.parametrize("name", list(INF_CENTER))
+def test_infinite_center_is_passed_over_as_in_r(name):
+    rows, z = INF_CENTER[name]
+    iris = BY_ID["iris_species_petalwidth"].array("x")[:, :3]
+    x, newx = iris[[2, 0, 1, 3, 4, 5]], iris[rows]
+    cl, w = np.array([1, 1, 2, 2, 2, 2]), np.array([1.0, -1.0, 1.0, 1.0, 1.0, 1.0])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        centers = wmean(x, cl, w)
+        got = cluster_predict(x, cl, newx, w=w)
+        got_z = _wdist_mat(newx, centers)
+    assert np.isneginf(centers[0]).all()
+    assert_same_values(got_z, from_hex(z).reshape(len(rows), 2))
+    np.testing.assert_array_equal(got, np.ones(len(rows)))  # R's 2 is position 1
 
 
 def test_nan_then_inf_row_takes_the_first_live_column():

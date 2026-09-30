@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from datanuggets.wcluster.wstats import distw, wmean, wss, wwcss
-from rfixtures import FIXTURE_ROOT, assert_same_values, load_group
+from rfixtures import FIXTURE_ROOT, assert_same_values, from_hex, load_group
 
 CASES = load_group("wstats") + load_group("wstats_constructed")
 REAL = {c.id: c for c in load_group("wstats")}
@@ -167,6 +167,42 @@ def test_zero_weight_cluster_is_nan_and_quiet(cid, pos):
     assert_same_values(mean, want_mean)
     assert_same_values(res.per_cluster, want_groups)
     assert_same_values(pairs, case.array("distw"))
+
+
+# Recorded by hand on R 4.6.1 with WCluster 1.3.0, 2026-09-30. x is three columns of six iris rows,
+# the first cluster two of them with weights 1 and -1, so its weights sum to zero but its weighted
+# sum needn't. Iris rows 3 and 1 differ in every column. Rows 1 and 2 share a petal length, a 0 / 0.
+CANCELLING = {
+    "rows_3_1": (
+        [2, 0, 1, 3, 4, 5],
+        [["fff0000000000000"] * 3, ["4013e66666666666", "400b333333333333", "3ff8000000000000"]],
+        "3fedae147ae147b2",
+    ),
+    "rows_1_2": (
+        [0, 1, 2, 3, 4, 5],
+        [
+            ["7ff0000000000000", "7ff0000000000000", "fff8000000000000"],
+            ["4013b33333333333", "400b99999999999a", "3ff799999999999a"],
+        ],
+        "3fec51eb851eb854",
+    ),
+}
+
+
+@pytest.mark.parametrize("name", list(CANCELLING))
+def test_cancelling_weights_give_infinities_as_in_r(name):
+    order, center, second = CANCELLING[name]
+    x = REAL["iris_species_petalwidth"].array("x")[order, :3]
+    cl, w = np.array([1, 1, 2, 2, 2, 2]), np.array([1.0, -1.0, 1.0, 1.0, 1.0, 1.0])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        mean = wmean(x, cl, w)
+        res = wwcss(x, cl, w, group_sum=True)
+        pairs = distw(x, cl, w)
+    assert_same_values(mean, from_hex(center[0] + center[1]).reshape(2, 3))
+    # R: the first cluster's wwcss, the total and the one distw entry are NaN
+    assert_same_values(res.per_cluster, from_hex(["fff8000000000000", second]))
+    assert np.isnan(res.total) and np.isnan(pairs[1, 0])
 
 
 def test_labels_need_not_start_at_zero():

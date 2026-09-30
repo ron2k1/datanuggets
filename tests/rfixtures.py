@@ -186,6 +186,11 @@ def hex_bits(a) -> list[str]:
     return [f"{b:016x}" for b in np.asarray(a, dtype=np.float64).reshape(-1).view(np.uint64)]
 
 
+def from_hex(bits) -> np.ndarray:
+    """The float64 values whose bit patterns hex_bits prints, for values recorded from R by hand."""
+    return np.array([int(b, 16) for b in bits], dtype=np.uint64).view(np.float64)
+
+
 def _same_entries(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     a = np.ascontiguousarray(a, dtype=np.float64).reshape(-1)
     b = np.ascontiguousarray(b, dtype=np.float64).reshape(-1)
