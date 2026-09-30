@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from datanuggets import DataNuggets, get_dn_means
-from rfixtures import load_group, means_inputs
+from rfixtures import hex_bits, load_group, means_inputs, same_bits
 
 (ORDER,) = [m for m in load_group("get_dn_means") if m.id == "row_order"]
 MEANS = [m for m in load_group("get_dn_means") if m.id != "row_order"]
@@ -24,7 +24,25 @@ def test_get_dn_means_matches_r(means, name):
         # R's t(sapply(...)) turns one column's means into a single row
         assert want.shape == (1, k)
         want = want.T
-    np.testing.assert_array_equal(get_dn_means(x, dn), want)
+    got = get_dn_means(x, dn)
+    # bits, not ==: an empty nugget's row is R's 0 / 0 in long double, the x87 default -NaN
+    assert got.shape == want.shape
+    if not same_bits(got, want):
+        i = next(i for i, (g, w) in enumerate(zip(hex_bits(got), hex_bits(want))) if g != w)
+        raise AssertionError(f"entry {i}: {hex_bits(got)[i]}, R has {hex_bits(want)[i]}")
+
+
+def test_empty_nugget_is_rs_negative_nan():
+    empty = [(m, n) for m, n in PAIRS if (means_inputs(m, n)[1].weights == 0).any()]
+    assert empty
+    for means, name in empty:
+        x, dn = means_inputs(means, name)
+        want = means.array(name)
+        if want.shape[0] == 1 and dn.centers.shape[1] == 1 and dn.n_nuggets > 1:
+            want = want.T
+        rows = np.flatnonzero(dn.weights == 0)
+        assert set(hex_bits(want[rows])) == {"fff8000000000000"}
+        assert set(hex_bits(get_dn_means(x, dn)[rows])) == {"fff8000000000000"}
 
 
 def test_sums_each_nugget_in_row_order_like_r():

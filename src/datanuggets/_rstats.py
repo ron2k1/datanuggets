@@ -24,7 +24,7 @@ from scipy.linalg import LinAlgError, lapack
 from datanuggets import _ldjit
 from datanuggets import _ldouble as ld
 from datanuggets._defaults import MAD_CONSTANT, MOMENTS_CHUNK
-from datanuggets._rcompat import _INDEFINITE, _non_finite_sum, r_mean
+from datanuggets._rcompat import _R_NAN, _non_finite_sum, r_mean
 
 
 def _ld_sum(v: list[float]) -> tuple[int, int]:
@@ -153,7 +153,7 @@ def group_moments(
     x: np.ndarray, groups: list[np.ndarray], n_jobs: int = 1
 ) -> Iterator[tuple[np.ndarray, np.ndarray | None]]:
     """(colMeans, cov) of x[g] for each g in groups, in order, bit for bit r_mean(x[g], 0) and
-    r_cov(x[g]), with cov None below 2 rows. A group with no rows has a NaN center. Groups run
+    r_cov(x[g]), with cov None below 2 rows. A group with no rows has R's NaN center. Groups run
     compiled, a chunk at a time, and n_jobs other than 1 spreads each chunk over numba threads
     (all of them for -1). A group with Inf or NaN is redone through r_mean and r_cov. Each g
     indexes rows as x[g] would, so a mask or negative index works and a row past the end raises
@@ -232,9 +232,6 @@ def r_matvec(a: np.ndarray, v: np.ndarray) -> np.ndarray:
     for j in range(a.shape[1]):
         y += a[:, j] * v[j]
     return y
-
-
-_R_NAN = float(np.array([_INDEFINITE], dtype=np.uint64).view(np.float64)[0])
 
 
 def r_matmul(a: np.ndarray, b: np.ndarray) -> np.ndarray:

@@ -52,6 +52,8 @@ SH4 = np.uint64(4)
 SH2 = np.uint64(2)
 MAX_EXP = 960  # a triple with a larger e is at least 2**1024, past DBL_MAX
 EXP_BITS = np.uint64(0x7FF << 52)  # a double's exponent field, all ones for Inf and NaN
+# R's 0 / 0 on x86: the x87's default NaN, sign bit set (fff8000000000000), not numpy's +NaN
+R_NAN = float(np.array([0xFFF8000000000000], dtype=np.uint64).view(np.float64)[0])
 
 
 def as_bits(a: np.ndarray) -> np.ndarray:
@@ -328,7 +330,7 @@ def line_means(bits):
     k, n = bits.shape
     out = np.empty(k)
     if n == 0:
-        out[:] = np.nan
+        out[:] = R_NAN
         return out
     for r in range(k):
         s, m, e = 0, Z64, 0
@@ -342,13 +344,13 @@ def line_means(bits):
 
 @compiled()
 def _group(bits, rows, center, cov):
-    """One group's colMeans into center (NaN for no rows) and, for 2 or more rows, its cov()
+    """One group's colMeans into center (R's NaN for no rows) and, for 2 or more rows, its cov()
     into cov. False, leaving both unfinished, where a value is Inf or NaN or cov_rows gives
     False: the caller redoes that group in Python."""
     n = rows.size
     p = bits.shape[1]
     if n == 0:
-        center[:] = np.nan
+        center[:] = R_NAN
         return True
     for i in range(n):
         for j in range(p):

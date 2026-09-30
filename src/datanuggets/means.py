@@ -13,11 +13,12 @@ def get_dn_means(x, dn: DataNuggets) -> np.ndarray:
     """The column means of each nugget's rows of x, as a (k, p) float64 array.
 
     Row i is the mean of the rows assigned to nugget i, whatever center method built dn. An
-    empty nugget gets a row of NaN, as in R. Each mean is R's colMeans, summed in long double,
-    so the result matches R bit for bit. R returns a data frame, transposed when x has one
-    column. This returns k rows either way. x must have exactly the rows dn assigns, each to a
-    nugget id in [0, k). R ignores extra rows and skips a row whose id is out of range or
-    fractional. This raises ValueError for both.
+    empty nugget gets a row of R's 0 / 0, the NaN with its sign bit set (fff8000000000000)
+    that x86 R gives, where numpy's own NaN has it clear. Each mean is R's colMeans, summed in
+    long double, so the result matches R bit for bit. R returns a data frame, transposed when x
+    has one column. This returns k rows either way. x must have exactly the rows dn assigns,
+    each to a nugget id in [0, k). R ignores extra rows and skips a row whose id is out of range
+    or fractional. This raises ValueError for both.
     """
     x = as_matrix(x)
     if not isinstance(dn, DataNuggets):

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import struct
 
 import numpy as np
@@ -49,6 +48,7 @@ def _round_half_even(a: int, shift: int, sticky: bool = False) -> int:
 _QUIET = 1 << 51  # the top fraction bit, set in a quiet NaN
 _FRACTION = (1 << 52) - 1
 _INDEFINITE = 0xFFF8000000000000  # the x87's default NaN, which Inf - Inf gives
+_R_NAN = _ldjit.R_NAN  # the same bits as a float: what 0 / 0 gives R on x86
 
 
 def _non_finite_sum(v, *, quiet: bool = False) -> float:
@@ -86,7 +86,7 @@ def _ldouble_mean(v: list[float]) -> float:
     a 64-bit significand (ties to even), then the quotient is rounded to double. No values give
     NaN, R's 0 / 0."""
     if not v:
-        return math.nan
+        return _R_NAN
     m = e = 0  # the running sum is exactly m * 2**e
     for x in v:
         xm, d = x.as_integer_ratio()
@@ -129,7 +129,7 @@ def r_mean(a: np.ndarray, axis: int) -> np.ndarray:
     lines = np.moveaxis(np.asarray(a, dtype=np.float64), axis, -1)
     shape, width = lines.shape[:-1], lines.shape[-1]
     if width == 0:
-        return np.full(shape, np.nan)  # R's 0 / 0
+        return np.full(shape, _R_NAN)  # R's 0 / 0 in long double
     flat = np.ascontiguousarray(lines).reshape(-1, width)
     finite = np.isfinite(flat).all(axis=1)
     out = np.empty(flat.shape[0])
