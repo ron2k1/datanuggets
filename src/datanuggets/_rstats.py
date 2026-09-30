@@ -55,7 +55,7 @@ def r_vec_mean(v) -> float:
     v = [float(x) for x in v]
     n = len(v)
     if not all(map(math.isfinite, v)):
-        return float(sum(x / n for x in v))  # R's rescaled sum, and no second pass
+        return _non_finite_sum(v, quiet=True)  # R's sum of x / n, and no second pass
     s = _ld_sum(v)
     if math.isfinite(ld.to_float(s)):
         s = ld.div_int(s, n)

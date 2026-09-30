@@ -92,6 +92,20 @@ local({
 
 no_args <- setNames(list(), character(0))
 
+# Doubles from their 16 hex digits, bit for bit, so a NaN's sign and payload are what the case says.
+from_bits <- function(h) vapply(h, function(s) readBin(
+  as.raw(strtoi(substring(s, seq(15, 1, -2), seq(16, 2, -2)), 16L)), "double", n = 1L), 0,
+  USE.NAMES = FALSE)
+local(stopifnot(identical(writeBin(from_bits("7ff00000000007a2"), raw(), endian = "little"),
+                          as.raw(c(0xa2, 0x07, 0, 0, 0, 0, 0xf0, 0x7f)))))  # R's NA, unchanged
+
+# NaNs that tell the FPU's rules apart: payload 123 is below NA's 7a2, and the signaling one's
+# significand is above NA's once quieted.
+nan_pay <- from_bits("7ff8000000000123")
+nan_pos <- from_bits("7ff8000000000000")
+nan_neg <- from_bits("fff8000000000000")
+snan_big <- from_bits("7ff4000000000000")
+
 # trace() hooks record what the packages actually do, without modifying them.
 .capture <- new.env()
 

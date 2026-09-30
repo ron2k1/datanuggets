@@ -127,6 +127,11 @@ def same_bits(a, b) -> bool:
     return a.shape == b.shape and np.array_equal(a.view(np.uint64), b.view(np.uint64))
 
 
+def hex_bits(a) -> list[str]:
+    """Each float64 as its 16 hex digits, so a failed same_bits shows which NaN came back."""
+    return [f"{b:016x}" for b in np.asarray(a, dtype=np.float64).reshape(-1).view(np.uint64)]
+
+
 @cache
 def fixture_data() -> dict[str, tuple[np.ndarray, list[np.ndarray]]]:
     """Each distinct finite x in the create_dn, refine_dn, rcompat_means and rcompat_stats

@@ -6,7 +6,7 @@ import pytest
 
 import datanuggets._rcompat as rcompat
 from datanuggets._rcompat import _r_mean_py, r_mean, split_indices
-from rfixtures import fixture_data, load_group, same_bits
+from rfixtures import fixture_data, hex_bits, load_group, same_bits
 
 
 def test_split_indices_matches_r():
@@ -26,9 +26,10 @@ def test_split_indices_matches_r():
 @pytest.mark.parametrize("case", load_group("rcompat_means"), ids=lambda c: c.id)
 def test_r_mean_matches_r_colmeans_and_rowmeans(case):
     x = case.array("x")
-    for mean in (r_mean, _r_mean_py):
-        np.testing.assert_array_equal(mean(x, 0), case.array("col_means"), mean.__name__)
-        np.testing.assert_array_equal(mean(x, 1), case.array("row_means"), mean.__name__)
+    for mean in (r_mean, _r_mean_py):  # bit for bit, so a NaN has to be the one R gives
+        for axis, want in ((0, case.array("col_means")), (1, case.array("row_means"))):
+            got = mean(x, axis)
+            assert same_bits(got, want), (mean.__name__, axis, hex_bits(got), hex_bits(want))
 
 
 def test_r_mean_handles_sums_beyond_the_double_range():

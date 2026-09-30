@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import struct
 
 import numpy as np
 
@@ -45,15 +46,39 @@ def _round_half_even(a: int, shift: int, sticky: bool = False) -> int:
     return q
 
 
-def _non_finite_sum(v) -> float:
-    """R's long double sum of doubles that include Inf or NaN. The finite ones can't overflow a
-    long double, so the rest decide: NaN for any NaN or for both infinities, else that infinity.
-    Dividing by a count keeps it, so it's the mean too."""
-    v = np.asarray(v, dtype=np.float64)
-    pos, neg = bool((v == math.inf).any()), bool((v == -math.inf).any())
-    if np.isnan(v).any() or (pos and neg):
-        return math.nan
-    return math.inf if pos else -math.inf
+_QUIET = 1 << 51  # the top fraction bit, set in a quiet NaN
+_FRACTION = (1 << 52) - 1
+_INDEFINITE = 0xFFF8000000000000  # the x87's default NaN, which Inf - Inf gives
+
+
+def _non_finite_sum(v, *, quiet: bool = False) -> float:
+    """R's long double running sum of doubles, at least one of them Inf or NaN, down to which
+    NaN it is. The finite ones can't overflow a long double, so only the rest decide, one x87
+    add of a double at a time. Emulated on the bits, since another FPU picks other NaNs:
+
+    - a finite or infinite sum plus a NaN is that NaN, quieted
+    - a sum plus an infinity is that infinity, or the default NaN if the signs differ
+    - a NaN sum stays put, except a quiet NaN with a larger significand replaces it (the
+      positive one on a tie). A signaling NaN never does, and R's NA is one.
+
+    quiet=True quiets every NaN first, as mean()'s x / n does in SSE. Dividing by a count keeps
+    the result, so without it this is colMeans and rowMeans too."""
+    v = np.asarray(v, dtype=np.float64).reshape(-1)
+    acc = None  # the running sum's bits once it's non-finite
+    for b in v[~np.isfinite(v)].view(np.uint64).tolist():
+        if b & _FRACTION:  # a NaN
+            b |= _QUIET if quiet else 0
+            if acc is None or not acc & _FRACTION:
+                acc = b | _QUIET
+            elif b & _QUIET and (b & _FRACTION, not b >> 63) > (acc & _FRACTION, not acc >> 63):
+                acc = b
+        elif acc is None:
+            acc = b
+        elif not acc & _FRACTION and acc != b:
+            acc = _INDEFINITE
+    if acc is None:
+        raise ValueError("no Inf or NaN to sum")
+    return struct.unpack("<d", struct.pack("<Q", acc))[0]
 
 
 def _ldouble_mean(v: list[float]) -> float:
@@ -95,9 +120,9 @@ def r_mean(a: np.ndarray, axis: int) -> np.ndarray:
     64-bit significand, divides in long double, and only then rounds to double. numpy's
     pairwise double mean differs by several ulps, and on columns that cancel to nearly zero
     (standardized data) even a correctly rounded mean differs, because R's own running sum
-    rounds. Finite lines run that arithmetic compiled, in _ldjit. A line with Inf or NaN is NaN
-    or one infinity, whichever R's long double sum gives. A double sum can differ there: it
-    overflows [1.7e308, 1.7e308, -inf] to inf - inf = NaN where R gets -Inf.
+    rounds. Finite lines run that arithmetic compiled, in _ldjit. A line with Inf or NaN gets
+    the infinity or the very NaN R's long double sum gives, from _non_finite_sum. A double sum
+    can differ there: it overflows [1.7e308, 1.7e308, -inf] to inf - inf = NaN where R gets -Inf.
     Platforms whose long double is plain double (arm64 macOS, MSVC builds) give R different
     means. Fixture manifests record longdouble_digits for that reason.
     """

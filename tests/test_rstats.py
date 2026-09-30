@@ -27,13 +27,18 @@ from datanuggets._rstats import (
     r_sum,
     r_vec_mean,
 )
-from rfixtures import ATOL, RTOL, fixture_data, load_group, same_bits
+from rfixtures import ATOL, RTOL, fixture_data, hex_bits, load_group, same_bits
 
 CASES = load_group("rcompat_stats")
 
 
 def _kind(kind):
     return [c for c in CASES if c.args["kind"] == kind]
+
+
+def _bitwise(got, want, *label):
+    # == and assert_array_equal pass -0.0 for 0.0 and any NaN for any other NaN
+    assert same_bits(got, want), (*label, hex_bits(got), hex_bits(want))
 
 
 COV = _kind("cov")
@@ -77,12 +82,13 @@ def test_vector_stats_match_r_bitwise(case):
 
 @pytest.mark.parametrize("case", _kind("mean"), ids=lambda c: c.id)
 def test_mean_of_non_finite_values_matches_r(case):
-    np.testing.assert_array_equal(r_vec_mean(case.array("v").tolist()), case.array("mean")[0])
+    # which NaN comes back (sign, NA's payload) is part of R's answer
+    _bitwise(r_vec_mean(case.array("v").tolist()), case.array("mean")[0])
 
 
 @pytest.mark.parametrize("case", _kind("sum"), ids=lambda c: c.id)
 def test_sum_matches_r_past_dbl_max_and_with_inf_or_nan(case):
-    np.testing.assert_array_equal(r_sum(case.array("v").tolist()), case.array("sum")[0])
+    _bitwise(r_sum(case.array("v").tolist()), case.array("sum")[0])
 
 
 @pytest.mark.parametrize("case", _kind("unique"), ids=lambda c: c.id)
