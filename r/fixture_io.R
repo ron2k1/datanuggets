@@ -65,6 +65,31 @@ write_case <- function(group, case_id, args, arrays, extra = list()) {
   invisible(dir)
 }
 
+# Reads back an array write_array wrote: row-major little-endian bytes, in R's own layout.
+read_array <- function(dir, name) {
+  meta <- read_json(file.path(dir, "manifest.json"))$arrays[[name]]
+  if (is.null(meta)) stop("no array ", name, " in ", dir)
+  shape <- as.integer(unlist(meta$shape))
+  int <- meta$dtype == "<i4"
+  con <- file(file.path(dir, meta$file), "rb")
+  on.exit(close(con))
+  v <- readBin(con, if (int) "integer" else "double", n = prod(shape),
+               size = if (int) 4L else 8L, endian = "little")
+  stopifnot(length(v) == prod(shape))
+  if (length(shape) == 1L) v else t(matrix(v, nrow = shape[2], ncol = shape[1]))
+}
+
+# Fail closed if read_array does not invert write_array.
+local({
+  d <- tempfile()
+  dir.create(d)
+  m <- matrix(c(1.5, -2, 3, 4, 5, 6), 2)
+  meta <- list(arrays = list(m = write_array(d, "m", m), i = write_array(d, "i", 3:1)))
+  write_json(meta, file.path(d, "manifest.json"), auto_unbox = TRUE, digits = NA)
+  stopifnot(identical(read_array(d, "m"), m), identical(read_array(d, "i"), 3:1))
+  unlink(d, recursive = TRUE)
+})
+
 no_args <- setNames(list(), character(0))
 
 # trace() hooks record what the packages actually do, without modifying them.
