@@ -150,4 +150,17 @@ write_case("wpca", "sum_ld_stops", list(corr = FALSE),
            extra = list(error = conditionMessage(err)))
 cat(sprintf("%-28s stops: %s\n", "sum_ld_stops", conditionMessage(err)))
 
+# Two additions that each round: every 2^-64 is a tie the 64-bit rounding sends back to 1 + 2^-53,
+# so R's sum is 1 again. Rounding the exact sum 1 + 2^-53 + 2^-63 once gives 1 + 2^-52, and so
+# does adding in the reverse order, where the two 2^-64s meet first.
+x_ld4 <- rbind(x_ld, c(6, 2))
+wrow <- c(1, 2^-53, 2^-64, 2^-64)
+stopifnot(sum(wrow) - 1 == 0, sum(rev(wrow)) == 1 + 2^-52)
+err <- tryCatch({ WCluster::Wpca(x_ld4, wrow, c(1, 1), FALSE); NULL }, error = function(e) e)
+stopifnot(inherits(err, "error"), conditionMessage(err) == "infinite or missing values in 'x'")
+write_case("wpca", "sum_ld_steps_stops", list(corr = FALSE),
+           list(x = x_ld4, wrow = wrow, wcol_in = c(1, 1), sum_wrow = sum(wrow)),
+           extra = list(error = conditionMessage(err)))
+cat(sprintf("%-28s stops: %s\n", "sum_ld_steps_stops", conditionMessage(err)))
+
 untrace("Wpca", where = asNamespace("WCluster"))

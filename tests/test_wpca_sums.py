@@ -2,14 +2,14 @@
 whether Wpca runs.
 
 The cases are recorded by r/fixtures_wpca.R on R 4.6.1 (x86_64-w64-mingw32, 64-bit long double)
-with WCluster 1.3.0. Every case has x = cbind(c(1, 4, 2), c(3, 1, 5)), wcol = c(1, 1) and
-corr = FALSE, and differs only in wrow. In R:
+with WCluster 1.3.0. Every case has wcol = c(1, 1) and corr = FALSE. In R:
 
     x <- cbind(c(1, 4, 2), c(3, 1, 5))
     WCluster::Wpca(x, c(1, 2^-53, 2^-64), c(1, 1), FALSE)        # stops
     WCluster::Wpca(x, c(1, 2^-53, 2^-62), c(1, 1), FALSE)        # runs
     WCluster::Wpca(x, c(1 + 2^-51, 2^-53, 2^-64), c(1, 1), FALSE) # runs
     WCluster::Wpca(x, c(1, 2^-53, 2^-53), c(1, 1), FALSE)        # runs
+    WCluster::Wpca(rbind(x, c(6, 2)), c(1, 2^-53, 2^-64, 2^-64), c(1, 1), FALSE) # stops
 """
 
 import math
@@ -17,21 +17,26 @@ import math
 import numpy as np
 import pytest
 
+from datanuggets import _ldouble as ld
 from datanuggets._rstats import r_sum
 from datanuggets.wcluster.wpca import _wpca_parts, wpca
 from rfixtures import assert_same_values, hex_bits, load_group, same_bits
 
 CASES = {c.id: c for c in load_group("wpca") if c.id.startswith("sum_ld_")}
-X = [[1.0, 3.0], [4.0, 1.0], [2.0, 5.0]]
-# Each case's wrow, and the other sums that get its total wrong: math.fsum rounds the exact sum
-# once, a double sum rounds after every addition. sum_ld_near is sum_ld_stops with 2^-62 for 2^-64.
-WROW = {
-    "sum_ld_stops": ([1.0, 2.0**-53, 2.0**-64], {"fsum"}),
-    "sum_ld_near": ([1.0, 2.0**-53, 2.0**-62], {"double"}),
-    "sum_ld_ties_down": ([1.0 + 2.0**-51, 2.0**-53, 2.0**-64], {"fsum"}),
-    "sum_ld_double_loses": ([1.0, 2.0**-53, 2.0**-53], {"double"}),
+X3 = [[1.0, 3.0], [4.0, 1.0], [2.0, 5.0]]
+X4 = [*X3, [6.0, 2.0]]
+# Each case's x and wrow, and the other sums that get its total wrong. sum_ld_near is sum_ld_stops
+# with 2^-62 for 2^-64. sum_ld_steps_stops adds two 2^-64s: R rounds each one away, and a sum that
+# adds them together first keeps them.
+INPUTS = {
+    "sum_ld_stops": (X3, [1.0, 2.0**-53, 2.0**-64], {"fsum"}),
+    "sum_ld_near": (X3, [1.0, 2.0**-53, 2.0**-62], {"double"}),
+    "sum_ld_ties_down": (X3, [1.0 + 2.0**-51, 2.0**-53, 2.0**-64], {"fsum"}),
+    "sum_ld_double_loses": (X3, [1.0, 2.0**-53, 2.0**-53], {"double"}),
+    "sum_ld_steps_stops": (X4, [1.0, 2.0**-53, 2.0**-64, 2.0**-64], {"fsum", "once", "reversed"}),
 }
-RUNS = [cid for cid in WROW if cid != "sum_ld_stops"]
+STOPS = ["sum_ld_stops", "sum_ld_steps_stops"]
+RUNS = [cid for cid in INPUTS if cid not in STOPS]
 
 
 def double_sum(values):
@@ -41,11 +46,28 @@ def double_sum(values):
     return total
 
 
+def once_sum(values):
+    """The exact sum rounded once to a 64-bit long double, then to double."""
+    parts = [ld.from_float(float(v)) for v in values]
+    e = min(pe for _, pe in parts)
+    return ld.to_float(ld._rounded(sum(m << (pe - e) for m, pe in parts), e))
+
+
+# Sums that differ from R's: math.fsum rounds the exact sum once to double, a double sum rounds
+# after every addition, and the last two keep 64 bits but round once or add in the other order
+OTHER_SUMS = {
+    "fsum": math.fsum,
+    "double": double_sum,
+    "once": once_sum,
+    "reversed": lambda values: r_sum(values[::-1]),
+}
+
+
 def test_every_case_is_recorded():
-    assert set(CASES) == set(WROW)
+    assert set(CASES) == set(INPUTS)
 
 
-@pytest.mark.parametrize("cid", list(WROW))
+@pytest.mark.parametrize("cid", list(INPUTS))
 def test_cases_are_pinned(cid):
     case = CASES[cid]
     versions = case.manifest["versions"]
@@ -54,18 +76,19 @@ def test_cases_are_pinned(cid):
     assert versions["longdouble_digits"] == 64
     assert versions["WCluster"] == "1.3.0"
     assert case.args == {"corr": False}
-    assert case.array("x").tolist() == X
+    x, wrow, wrong = INPUTS[cid]
+    assert case.array("x").tolist() == x
     assert case.array("wcol_in").tolist() == [1.0, 1.0]
-    wrow, wrong = WROW[cid]
     assert case.array("wrow").tolist() == wrow
     # the case separates R from the sums it names, and from no other
     r_total = float(case.array("sum_wrow")[0])
-    assert (math.fsum(wrow) != r_total) == ("fsum" in wrong)
-    assert (double_sum(wrow) != r_total) == ("double" in wrong)
+    for name, total in OTHER_SUMS.items():
+        assert (total(wrow) != r_total) == (name in wrong), name
 
 
-def test_stops_where_r_stops():
-    case = CASES["sum_ld_stops"]
+@pytest.mark.parametrize("cid", STOPS)
+def test_stops_where_r_stops(cid):
+    case = CASES[cid]
     x, wrow, wcol = case.array("x"), case.array("wrow"), case.array("wcol_in")
     assert case.manifest["error"] == "infinite or missing values in 'x'"
     # R's sum is exactly 1, so the covariance divides by 0. The exact sum is above 1.

@@ -110,7 +110,7 @@ def test_fixtures_cover_the_edge_cases():
     assert is_tied(BY_ID["tie_npk"].array("values")).any()
     assert any(not np.array_equal(c.array("cap_s"), c.array("cap_s").T) for c in CORR)
     assert QUIRK in BY_ID and BY_ID[QUIRK].args["corr"]
-    assert set(STOPS) == {"one_iris_first5_petalwidth", "sum_ld_stops"}
+    assert set(STOPS) == {"one_iris_first5_petalwidth", "sum_ld_stops", "sum_ld_steps_stops"}
     assert all(c.manifest["error"] == "infinite or missing values in 'x'" for c in STOPS.values())
     assert set(STOP.manifest["arrays"]) == {"x", "wrow", "wcol_in"}
 
