@@ -16,7 +16,8 @@ numba has hazards Python integers don't, so every kernel follows four rules:
   at that width is even, so it can't change the rounding direction.
 
 Kernels take finite doubles as their bit patterns (a float64 array viewed as uint64). The first
-call compiles them, and cache=True keeps the machine code on disk for later runs.
+call compiles them, and _compiled keeps the machine code on disk for later runs wherever numba
+has a writable cache location.
 """
 
 from __future__ import annotations
@@ -24,7 +25,9 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from numba import njit, prange
+from numba import prange
+
+from datanuggets._compiled import compiled
 
 Z64 = np.uint64(0)
 ONE = np.uint64(1)
@@ -51,7 +54,7 @@ MAX_EXP = 960  # a triple with a larger e is at least 2**1024, past DBL_MAX
 EXP_BITS = np.uint64(0x7FF << 52)  # a double's exponent field, all ones for Inf and NaN
 
 
-@njit(cache=True)
+@compiled()
 def bitlen(x):
     """Number of significant bits in a uint64 (0 for 0)."""
     n = 0
@@ -79,7 +82,7 @@ def bitlen(x):
     return n
 
 
-@njit(cache=True)
+@compiled()
 def mul64(a, b):
     """a * b as a 128-bit (hi, lo), from 32-bit halves."""
     a0 = a & M32
@@ -96,7 +99,7 @@ def mul64(a, b):
     return hi, lo
 
 
-@njit(cache=True)
+@compiled()
 def round128(hi, lo, e):
     """(hi * 2**64 + lo) * 2**e, nonzero, rounded to 64 bits with ties to even."""
     if hi == Z64:
@@ -120,7 +123,7 @@ def round128(hi, lo, e):
     return q, e + shift
 
 
-@njit(cache=True)
+@compiled()
 def place(m, s):
     """m * 2**s as a 128-bit (hi, lo), for s in 0..63."""
     if s == 0:
@@ -128,7 +131,7 @@ def place(m, s):
     return m >> np.uint64(64 - s), m << np.uint64(s)
 
 
-@njit(cache=True)
+@compiled()
 def add(sa, ma, ea, sb, mb, eb):
     """a + b, rounded once."""
     if ma == Z64:
@@ -162,13 +165,13 @@ def add(sa, ma, ea, sb, mb, eb):
     return sa, q, e
 
 
-@njit(cache=True)
+@compiled()
 def sub(sa, ma, ea, sb, mb, eb):
     """a - b, rounded once."""
     return add(sa, ma, ea, (1 - sb) if mb != Z64 else 0, mb, eb)
 
 
-@njit(cache=True)
+@compiled()
 def mul(sa, ma, ea, sb, mb, eb):
     """a * b, rounded once."""
     if ma == Z64 or mb == Z64:
@@ -178,7 +181,7 @@ def mul(sa, ma, ea, sb, mb, eb):
     return sa ^ sb, q, e
 
 
-@njit(cache=True)
+@compiled()
 def from_bits(bits):
     """A finite double, from its bit pattern, exactly."""
     sign = np.int64(bits >> S63)
@@ -192,7 +195,7 @@ def from_bits(bits):
     return sign, (frac | B52) << S11, ex - 1075 - 11
 
 
-@njit(cache=True)
+@compiled()
 def div_count(s, m, e, n):
     """a / n for a count 1 <= n < 2**63, rounded once. Long division one bit at a time: 64
     quotient bits, a guard bit, and the remainder as the sticky bit."""
@@ -230,7 +233,7 @@ def div_count(s, m, e, n):
     return s, q, x
 
 
-@njit(cache=True)
+@compiled()
 def round53(s, m, e):
     """The double nearest a as (s, q, x) standing for q * 2**x, q <= 2**53: 53 bits for a normal
     double, fewer below 2**-1022 where the grid is 2**-1074, ties to even."""
@@ -252,7 +255,7 @@ def round53(s, m, e):
     return s, q, e + shift
 
 
-@njit(cache=True)
+@compiled()
 def to_double(s, m, e):
     """a rounded to double once, like R's (double) cast. Past DBL_MAX gives +-inf."""
     s, q, x = round53(s, m, e)
@@ -260,7 +263,7 @@ def to_double(s, m, e):
     return -v if s == 1 else v
 
 
-@njit(cache=True)
+@compiled()
 def as_double(s, m, e):
     """a rounded to double and read back: R storing a long double in a double variable. The
     result has e > MAX_EXP exactly when that double is +-inf."""
@@ -271,7 +274,7 @@ def as_double(s, m, e):
     return s, q << np.uint64(k), x - k
 
 
-@njit(cache=True)
+@compiled()
 def cov_rows(bits, rows, out):
     """cov(x[rows]) into out, for 2 or more rows: each column mean in two long double passes,
     stored as a double, then long double sums of the products of deviations divided by n - 1.
@@ -313,7 +316,7 @@ def cov_rows(bits, rows, out):
     return True
 
 
-@njit(cache=True)
+@compiled()
 def line_means(bits):
     """rowMeans of a finite matrix given as bit patterns: each row summed in long double from the
     left, divided by its length, then rounded to double once."""
@@ -332,7 +335,7 @@ def line_means(bits):
     return out
 
 
-@njit(cache=True)
+@compiled()
 def _group(bits, rows, center, cov):
     """One group's colMeans into center (NaN for no rows) and, for 2 or more rows, its cov()
     into cov. False, leaving both unfinished, where a value is Inf or NaN or cov_rows gives
@@ -358,7 +361,7 @@ def _group(bits, rows, center, cov):
     return cov_rows(bits, rows, cov)
 
 
-@njit(cache=True)
+@compiled()
 def group_moments_serial(bits, order, starts, counts, centers, covs, ok):
     """_group for each group in turn. Group g's rows are order[starts[g]:starts[g] + counts[g]]."""
     for g in range(starts.size):
@@ -366,7 +369,7 @@ def group_moments_serial(bits, order, starts, counts, centers, covs, ok):
         ok[g] = _group(bits, rows, centers[g], covs[g])
 
 
-@njit(cache=True, parallel=True)
+@compiled(parallel=True)
 def group_moments_parallel(bits, order, starts, counts, centers, covs, ok):
     """group_moments_serial with the groups spread over numba's threads. Each group runs the
     same serial arithmetic, so the result doesn't depend on the thread count."""
