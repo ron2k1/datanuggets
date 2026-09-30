@@ -21,6 +21,8 @@ call compiles them, and cache=True keeps the machine code on disk for later runs
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 from numba import njit
 
@@ -187,3 +189,82 @@ def from_bits(bits):
         s = 64 - bitlen(frac)
         return sign, frac << np.uint64(s), -1074 - s
     return sign, (frac | B52) << S11, ex - 1075 - 11
+
+
+@njit(cache=True)
+def div_count(s, m, e, n):
+    """a / n for a count 1 <= n < 2**63, rounded once. Long division one bit at a time: 64
+    quotient bits, a guard bit, and the remainder as the sticky bit."""
+    if m == Z64:
+        return 0, Z64, 0
+    d = np.uint64(n)
+    r = Z64
+    q = Z64
+    got = 0  # quotient bits kept in q
+    i = 0  # numerator bits used: m's 64, then zeros
+    guard = Z64
+    while True:
+        bit = (m >> np.uint64(63 - i)) & ONE if i < 64 else Z64
+        r = (r << ONE) | bit  # r < n < 2**63 before the shift, so this fits
+        qb = Z64
+        if r >= d:
+            r = r - d
+            qb = ONE
+        i += 1
+        if got == 0 and qb == Z64:
+            continue
+        if got < 64:
+            q = (q << ONE) | qb
+            got += 1
+        else:
+            guard = qb
+            break
+    # m / n * 2**(i - 64) = 2q + guard + r / n, so a / n = (q + (guard + r / n) / 2) * 2**x
+    x = e + 64 - i + 1
+    if guard == ONE and (r != Z64 or (q & ONE) == ONE):
+        q = q + ONE
+        if q == Z64:
+            q = TOP
+            x += 1
+    return s, q, x
+
+
+@njit(cache=True)
+def round53(s, m, e):
+    """The double nearest a as (s, q, x) standing for q * 2**x, q <= 2**53: 53 bits for a normal
+    double, fewer below 2**-1022 where the grid is 2**-1074, ties to even."""
+    if m == Z64:
+        return s, Z64, 0
+    shift = max(-1074 - e, 11)
+    if shift > 64:  # below half the smallest subnormal
+        return s, Z64, 0
+    if shift == 64:
+        q = Z64
+        r = m
+        half = TOP
+    else:
+        q = m >> np.uint64(shift)
+        r = m & ((ONE << np.uint64(shift)) - ONE)
+        half = ONE << np.uint64(shift - 1)
+    if r > half or (r == half and (q & ONE) == ONE):
+        q = q + ONE
+    return s, q, e + shift
+
+
+@njit(cache=True)
+def to_double(s, m, e):
+    """a rounded to double once, like R's (double) cast. Past DBL_MAX gives +-inf."""
+    s, q, x = round53(s, m, e)
+    v = math.ldexp(np.float64(q), x)  # q * 2**x is a double, so this is exact (or inf)
+    return -v if s == 1 else v
+
+
+@njit(cache=True)
+def as_double(s, m, e):
+    """a rounded to double and read back: R storing a long double in a double variable. The
+    result has e > MAX_EXP exactly when that double is +-inf."""
+    s, q, x = round53(s, m, e)
+    if q == Z64:
+        return 0, Z64, 0
+    k = 64 - bitlen(q)
+    return s, q << np.uint64(k), x - k

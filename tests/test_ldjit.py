@@ -1,6 +1,8 @@
 """The compiled long double kernels in _ldjit against the Python-int reference in _ldouble, bit for
 bit, on a fixed-seed fuzz built to hit exact ties, sticky bits and exponent-gap edges."""
 
+import math
+
 import numpy as np
 import pytest
 from numba import njit
@@ -152,11 +154,134 @@ def test_from_bits_matches_the_reference():
     assert from_bits_mismatches(4, FAST) == []
 
 
+def counts(rng, n):
+    """Counts to divide by: small, powers of two, powers of two +-1, 31-bit and 63-bit."""
+    k = rng.integers(0, 6, n)
+    small = rng.integers(1, 11, n)
+    p2 = np.int64(1) << rng.integers(0, 63, n)
+    near = np.clip((np.int64(1) << rng.integers(1, 63, n)) + rng.integers(-1, 2, n), 1, None)
+    mid = rng.integers(1, 2**31, n)
+    big = rng.integers(1, 2**63 - 1, n, dtype=np.int64)
+    return np.select([k == 0, k == 1, k == 2, k == 3, k == 4], [small, p2, near, mid, big], big)
+
+
+@njit
+def div_loop(sa, ma, ea, n):
+    k = sa.size
+    so, mo, eo = np.empty(k, np.int64), np.empty(k, np.uint64), np.empty(k, np.int64)
+    for i in range(k):
+        so[i], mo[i], eo[i] = J.div_count(sa[i], ma[i], ea[i], n[i])
+    return so, mo, eo
+
+
+def div_mismatches(seed, n):
+    rng = np.random.default_rng(seed)
+    sa, ma, ea = rng.integers(0, 2, n), mags(rng, n), rng.integers(-1200, 1201, n)
+    cnt = counts(rng, n)
+    got = zip(*(v.tolist() for v in div_loop(sa, ma, ea, cnt)), strict=True)
+    bad = []
+    for a_s, a_m, a_e, c, g in zip(
+        sa.tolist(), ma.tolist(), ea.tolist(), cnt.tolist(), got, strict=True
+    ):
+        if canonical(ld.div_int(((-a_m if a_s else a_m), a_e), c)) != g:
+            bad.append(((a_s, a_m, a_e), c, g))
+    return bad
+
+
+def near_double_edges(rng, n):
+    """Long doubles around double's range: normal, subnormal, underflow and overflow, a fifth of
+    them exactly halfway between two doubles (or two subnormals)."""
+    s, m = rng.integers(0, 2, n), mags(rng, n)
+    u = rng.random(n)
+    lead = np.select(  # exponent of the leading bit
+        [u < 0.3, u < 0.6, u < 0.8],
+        [rng.integers(-1022, 1024, n), rng.integers(-1080, -1018, n), rng.integers(1018, 1030, n)],
+        rng.integers(-1200, 1200, n),
+    )
+    tie = rng.random(n) < 0.2
+    length = rng.integers(2, 65, n)
+    m = np.where(tie, odd_of_len(rng, n, length) << (64 - length).astype(U), m)
+    return s, m, lead - 63
+
+
+@njit
+def to_double_loop(sa, ma, ea):
+    out = np.empty(sa.size)
+    for i in range(sa.size):
+        out[i] = J.to_double(sa[i], ma[i], ea[i])
+    return out
+
+
+@njit
+def as_double_loop(sa, ma, ea):
+    k = sa.size
+    so, mo, eo = np.empty(k, np.int64), np.empty(k, np.uint64), np.empty(k, np.int64)
+    for i in range(k):
+        so[i], mo[i], eo[i] = J.as_double(sa[i], ma[i], ea[i])
+    return so, mo, eo
+
+
+def to_double_mismatches(seed, n):
+    sa, ma, ea = near_double_edges(np.random.default_rng(seed), n)
+    got = to_double_loop(sa, ma, ea)
+    want = np.array(
+        [
+            ld.to_float(((-m if s else m), e))
+            for s, m, e in zip(sa.tolist(), ma.tolist(), ea.tolist(), strict=True)
+        ]
+    )
+    return np.flatnonzero(got.view(U) != want.view(U)).tolist()  # bits, so -0.0 != 0.0
+
+
+def as_double_mismatches(seed, n):
+    sa, ma, ea = near_double_edges(np.random.default_rng(seed), n)
+    got = zip(*(v.tolist() for v in as_double_loop(sa, ma, ea)), strict=True)
+    bad = []
+    for s, m, e, g in zip(sa.tolist(), ma.tolist(), ea.tolist(), got, strict=True):
+        d = ld.to_float(((-m if s else m), e))
+        if math.isinf(d):
+            ok = g[2] > J.MAX_EXP
+        else:
+            ok = g == canonical(ld.from_float(d)) and g[2] <= J.MAX_EXP
+        if not ok:
+            bad.append(((s, m, e), g))
+    return bad
+
+
+def test_div_count_matches_the_reference():
+    assert div_mismatches(5, FAST) == []
+
+
+def test_to_double_matches_the_reference():
+    assert to_double_mismatches(6, FAST) == []
+
+
+def test_as_double_matches_the_reference():
+    assert as_double_mismatches(7, FAST) == []
+
+
+def test_to_double_keeps_the_sign_of_zero_and_infinity():
+    big = 1100 - 63
+    zero = J.to_double(0, U(0), 0)
+    assert zero == 0.0 and math.copysign(1, zero) == 1
+    tiny = J.to_double(1, TOP, -1200)  # far below the smallest subnormal
+    assert tiny == 0.0 and math.copysign(1, tiny) == -1
+    assert J.to_double(0, TOP, big) == math.inf and J.to_double(1, TOP, big) == -math.inf
+    # DBL_MAX plus half an ulp is a tie, and ties go to even: 2**1024, which is inf
+    assert J.to_double(0, U(((1 << 54) - 1) << 10), 1024 - 64) == math.inf
+    # half the smallest subnormal is a tie too, and goes to even: zero
+    assert J.to_double(0, TOP, -1075 - 63) == 0.0
+    assert J.to_double(0, TOP | ONE, -1075 - 63) == 5e-324
+
+
 LONG_FUZZ = {
     "add": lambda seed, n: binary_mismatches("add", seed, n),
     "sub": lambda seed, n: binary_mismatches("sub", seed, n),
     "mul": lambda seed, n: binary_mismatches("mul", seed, n),
     "from_bits": from_bits_mismatches,
+    "div_count": div_mismatches,
+    "to_double": to_double_mismatches,
+    "as_double": as_double_mismatches,
 }
 
 
