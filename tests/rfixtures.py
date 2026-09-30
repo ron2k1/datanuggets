@@ -81,3 +81,18 @@ def refine_inputs(case: Case) -> tuple[np.ndarray, DataNuggets, dict]:
         assignments=case.array("in_assignments") - 1,
     )
     return case.array("x"), dn, {py: case.args[r] for r, py in REFINE_ARGS.items()}
+
+
+def means_inputs(means: Case, name: str) -> tuple[np.ndarray, DataNuggets]:
+    """x and the nugget set a get_dn_means fixture holds R's means for under `name`, read from
+    the create_dn or refine_dn case it came from (assignments made 0-based)."""
+    path = FIXTURE_ROOT / means.args["source"] / name
+    case = Case(path, json.loads((path / "manifest.json").read_text(encoding="utf-8")))
+    pre = means.args["prefix"]
+    dn = DataNuggets(
+        centers=case.array(pre + "centers"),
+        weights=case.array(pre + "weights"),
+        scales=case.array(pre + "scales"),
+        assignments=case.array(pre + "assignments") - 1,
+    )
+    return case.array("x"), dn

@@ -47,6 +47,26 @@ def check_delete_percent(value) -> float:
     return v
 
 
+def check_assignments(dn, n: int, p: int) -> np.ndarray:
+    """dn's assignments as 0-based nugget ids (intp), after checking that dn describes n rows
+    with p columns."""
+    if dn.centers.ndim != 2 or dn.centers.shape[1] != p:
+        raise ValueError(f"dn has centers of shape {dn.centers.shape}, but x has {p} columns")
+    k = dn.centers.shape[0]
+    a = dn.assignments
+    if a.shape != (n,):
+        raise ValueError(
+            f"dn.assignments must have one entry per row of x ({n}), got shape {a.shape}"
+        )
+    if a.dtype.kind not in "iu" and (a.dtype.kind != "f" or not np.array_equal(a, np.floor(a))):
+        raise ValueError("dn.assignments must be whole numbers (nugget ids)")
+    if a.size and (a.min() < 0 or a.max() >= k):
+        raise ValueError(
+            f"dn.assignments must be nugget ids in [0, {k}), got values from {a.min()} to {a.max()}"
+        )
+    return a.astype(np.intp)
+
+
 def check_n_jobs(n_jobs) -> int:
     """joblib's n_jobs: a positive int, or -1 for every core."""
     if isinstance(n_jobs, bool) or not isinstance(n_jobs, int) or n_jobs == 0 or n_jobs < -1:

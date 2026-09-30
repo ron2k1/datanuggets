@@ -40,7 +40,7 @@ from datanuggets._rstats import (
     r_sum,
     r_vec_mean,
 )
-from datanuggets._validate import as_matrix, as_real, check_n_jobs
+from datanuggets._validate import as_matrix, as_real, check_assignments, check_n_jobs
 from datanuggets.create import _progress_bar
 from datanuggets.exceptions import DataNuggetWarning
 from datanuggets.result import DataNuggets
@@ -113,7 +113,7 @@ def refine_dn(
     n, p = x.shape
     if n == 0:
         raise ValueError("x must contain at least one observation")
-    state = _Nuggets(x, _checked_assignments(dn, n, p), dn.centers.shape[0])
+    state = _Nuggets(x, check_assignments(dn, n, p), dn.centers.shape[0])
     state.refresh(range(state.size), state.members())
     max_splits = math.floor(max_splits)
     mns = math.floor(min_nugget_size) if math.isfinite(min_nugget_size) else min_nugget_size
@@ -255,25 +255,6 @@ def _shape_candidates(state: _Nuggets, min_size: float, delta: float) -> np.ndar
     np.divide(ev1, ev2, out=ratio, where=np.isfinite(ev2) & (ev2 > 0))
     big = (w >= min_size) & np.isfinite(ev1) & (ev1 > 0)
     return np.flatnonzero(big & ((ratio > delta) | (ev1 > s_threshold)))
-
-
-def _checked_assignments(dn: DataNuggets, n: int, p: int) -> np.ndarray:
-    """dn's assignments as 0-based positions, after checking that dn describes these rows."""
-    if dn.centers.ndim != 2 or dn.centers.shape[1] != p:
-        raise ValueError(f"dn has centers of shape {dn.centers.shape}, but x has {p} columns")
-    k = dn.centers.shape[0]
-    a = dn.assignments
-    if a.shape != (n,):
-        raise ValueError(
-            f"dn.assignments must have one entry per row of x ({n}), got shape {a.shape}"
-        )
-    if a.dtype.kind not in "iu" and (a.dtype.kind != "f" or not np.array_equal(a, np.floor(a))):
-        raise ValueError("dn.assignments must be whole numbers (nugget ids)")
-    if a.min() < 0 or a.max() >= k:
-        raise ValueError(
-            f"dn.assignments must be nugget ids in [0, {k}), got values from {a.min()} to {a.max()}"
-        )
-    return a.astype(np.intp)
 
 
 class _Nuggets:

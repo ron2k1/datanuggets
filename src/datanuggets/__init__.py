@@ -3,6 +3,7 @@
 from datanuggets.centers import create_dn_centers
 from datanuggets.create import create_dn
 from datanuggets.exceptions import DataNuggetWarning
+from datanuggets.means import get_dn_means
 from datanuggets.refine import refine_dn
 from datanuggets.result import CentersResult, DataNuggets
 
@@ -14,5 +15,6 @@ __all__ = [
     "DataNuggets",
     "create_dn",
     "create_dn_centers",
+    "get_dn_means",
     "refine_dn",
 ]
