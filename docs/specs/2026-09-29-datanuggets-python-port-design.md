@@ -247,7 +247,7 @@ The first version copies R's algorithms, including their memory cost. Optimizati
 | `getDN.means` with other rows than the assignments | fewer rows stop (subscript out of bounds), extra rows are silently ignored | `ValueError` on any mismatch, the check `refine_dn` uses |
 | NA or NaN in `x` | passed through (`create.DN` gives NA centers, `getDN.means` NA means) | rejected with `ValueError` by every function that reads the values |
 | `AC` on a matrix or data.table | `class(x) %in% ...` has length 2, so R 4.6.1 stops | any 2-D input; listed as a deviation that fixes an upstream bug |
-| `AC` loops that cycle (`DN.num2 <= -2`, a target `DN.num1/G` below -1 or strictly between -1 and 0, `2^60` with a cut that floors to 0) | never returns | `ValueError` from a cycle check |
+| `AC` loops that cycle (`DN.num2 < -1` with `floor(DN.num1) > floor(DN.num2)`, a target `DN.num1/G` below -1 or strictly between -1 and 0, `2^60` with a cut that floors to 0) | never returns | `ValueError`, at once for a target below -1 (the loop never goes below -1), else from a cycle check |
 | `AC` with a non-finite `DN.num1`/`DN.num2` or an `x` with no rows | stops, loops, returns Inf (both Inf) or NaN (no rows) | `ValueError` |
 
 ## 11. Repo, tooling, license

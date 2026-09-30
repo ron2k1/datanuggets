@@ -21,9 +21,9 @@ main <- merge(expand.grid(shape = names(shapes), R = c(100, 150, 250.7, 1000, 50
                           dp = c(0.01, 0.1, 0.3, 0.5, 0.9, 0.99), stringsAsFactors = FALSE),
               pairs(c(10^4, 2000), c(100, 20), c(100.9, 20.2), c(60, 60), c(1000, 1), c(3, 0),
                     c(0, 0), c(0, -1), c(5000, 4999), c(7, 3), c(2, 1), c(1, 1)))
-# Cycles: a DN.num2 of -2 or less traps loop 2 between 0 and -1, a target DN.num1/G below -1 or
-# strictly between -1 and 0 traps loop 1 the same way, and at 2^60 a cut that floors to 0
-# leaves DN.num1 - 1 == DN.num1
+# Cycles: a DN.num2 below -1 traps loop 2 between 0 and -1 unless DN.num1 floors to the same
+# integer, a target DN.num1/G below -1 or strictly between -1 and 0 traps loop 1 the same way, and
+# at 2^60 a cut that floors to 0 leaves DN.num1 - 1 == DN.num1
 hangs <- merge(expand.grid(shape = c("faithful", "women"), R = c(100, 5000), dp = c(0.1, 0.5),
                            stringsAsFactors = FALSE),
                pairs(c(1, -3), c(-5, -10), c(-0.5, -1)))

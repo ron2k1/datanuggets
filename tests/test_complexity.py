@@ -1,6 +1,7 @@
 """arithmetic_complexity against R's AC over the row and column counts of real R datasets."""
 
 import math
+import time
 import warnings
 from fractions import Fraction
 
@@ -53,6 +54,24 @@ def test_raises_where_r_never_returns():
     for row in rows:
         with pytest.raises(ValueError, match="never returns"):
             _call(row)
+
+
+def test_raises_at_once_where_r_counts_down_forever():
+    # R never returns from either call, because loop 2 can't go below -1. The first steps down by
+    # 1 for 1e8 passes before it cycles, so a cycle check alone takes about half a minute.
+    x = np.zeros((272, 2))
+    for args in ((100, 1e-8, 1e8, -3), (100, 0.1, 1, -1.5)):
+        start = time.perf_counter()
+        with pytest.raises(ValueError, match="never returns"):
+            arithmetic_complexity(x, *args)
+        assert time.perf_counter() - start < 1, args
+
+
+def test_returns_like_r_when_dn_num1_already_equals_a_target_below_minus_one():
+    # R returns NaN with its warning here: loop 2 never runs
+    with pytest.warns(DataNuggetWarning, match="NaNs produced"):
+        value = arithmetic_complexity(np.zeros((272, 2)), 100, 0.1, -3, -3)
+    assert math.isnan(value)
 
 
 def test_grid_needs_r_double_rounding():

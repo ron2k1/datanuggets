@@ -20,8 +20,8 @@ def arithmetic_complexity(x, r, delete_percent, dn_num1, dn_num2) -> float:
     dn_num2 in B passes, each pass costing a pairwise distance matrix, plus n + 1 rows measured
     against dn_num2 centers, all times the column count. A and B come from R's two while loops,
     run here in the same double arithmetic, so they match R's counts exactly. Some arguments
-    make those loops cycle and R never returns, a dn_num2 of -2 or less for one. This raises
-    ValueError for them.
+    make those loops cycle and R never returns. A dn_num2 below -1 is one, unless dn_num1 floors
+    to the same integer. This raises ValueError for them.
     """
     shape = np.shape(x)
     if len(shape) != 2:
@@ -68,8 +68,15 @@ def _shrink(name: str, value: float, target: float, delete_percent: float) -> tu
 
     The loop is deterministic, so a value that comes back means R never returns. Brent's cycle
     check compares each value with one saved at power-of-two intervals, in constant memory
-    however long the loop runs.
+    however long the loop runs. A target below -1 is out of reach from any value above it, since
+    the value never goes below -1, so that raises before the loop. The loop could otherwise step
+    down by 1 for as many passes as value is large before its cycle begins.
     """
+    if target < -1 and value > target:
+        raise ValueError(
+            f"R's AC never returns for these arguments: {name} never goes below -1, so it never"
+            f" reaches {target!r}"
+        )
     count = 1
     saved, horizon, steps = value, 1, 0
     while value != target:
