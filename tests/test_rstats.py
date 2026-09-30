@@ -5,10 +5,12 @@ import subprocess
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 
 import numba
 import numpy as np
 import pytest
+from numba.np import ufunc as numba_ufunc
 
 import datanuggets._rstats as rstats
 from datanuggets._rcompat import _r_mean_py, unique_first
@@ -262,3 +264,67 @@ def test_group_moments_reads_rows_the_way_numpy_does(rows):
     rows = np.array(rows)
     ((center, cov),) = group_moments(x, [rows])
     assert same_bits(center, [3.0, 4.0, 5.0]) and same_bits(cov, _r_cov_py(x[rows]))
+
+
+LAYERS = [
+    ("omp", "GNU", True),
+    ("omp", "MS", False),
+    ("omp", "Intel", False),
+    ("workqueue", "GNU", False),
+    ("tbb", "GNU", False),
+]
+
+
+@pytest.mark.parametrize(("layer", "vendor", "forbids"), LAYERS)
+def test_only_gnu_openmp_forbids_a_launch_after_fork(monkeypatch, layer, vendor, forbids):
+    monkeypatch.setattr(numba, "threading_layer", lambda: layer)
+    fake = SimpleNamespace(openmp_vendor=vendor)
+    monkeypatch.setattr(numba_ufunc, "omppool", fake, raising=False)
+    assert rstats._layer_forbids_fork() is forbids
+
+
+def test_no_parallel_launch_yet_leaves_fork_safe(monkeypatch):
+    def unset():
+        raise ValueError("Threading layer is not initialized.")
+
+    monkeypatch.setattr(numba, "threading_layer", unset)
+    assert rstats._layer_forbids_fork() is False
+
+
+def _moment_bytes(moments) -> bytes:
+    return b"".join(c.tobytes() + (b"" if v is None else v.tobytes()) for c, v in moments)
+
+
+@pytest.mark.skipif(not hasattr(os, "fork"), reason="needs os.fork")
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")  # fork() from a process with threads
+def test_group_moments_runs_serially_in_a_child_forked_after_gnu_openmp(monkeypatch):
+    x, sets = DATA[BIGGEST]
+    groups = _nuggets(sets[0])
+    want = _moment_bytes(group_moments(x, groups, 2))  # the parent launches before the fork
+
+    def launch(*args):
+        raise AssertionError("numba threads launched")
+
+    monkeypatch.setattr(rstats, "_layer_forbids_fork", lambda: True)
+    monkeypatch.setattr(rstats._ldjit, "group_moments_parallel", launch)
+    read, write = os.pipe()
+    pid = os.fork()
+    if pid == 0:  # the child sends its bits and exits without returning into pytest
+        code = 1
+        try:
+            with os.fdopen(write, "wb") as pipe:
+                pipe.write(_moment_bytes(group_moments(x, groups, 2)))
+            code = 0
+        except BaseException as e:
+            os.write(2, f"child: {e!r}\n".encode())
+            raise  # the finally exits first, so this only satisfies the linter
+        finally:
+            os._exit(code)
+    os.close(write)
+    with os.fdopen(read, "rb") as pipe:
+        sent = pipe.read()
+    _, status = os.waitpid(pid, 0)
+    assert os.waitstatus_to_exitcode(status) == 0
+    assert sent == want
+    with pytest.raises(AssertionError, match="numba threads launched"):  # only the child is serial
+        list(group_moments(x, groups, 2))
