@@ -161,8 +161,9 @@ _LABEL_LIMIT = 1e15  # R's factor() tells labels apart by 15 significant digits
 
 
 def as_weights(w, n: int, name: str = "w", per: str = "row") -> np.ndarray:
-    """One weight per row (or column) as float64. None means ones: R's own default for wmean,
-    wwcss and distw has one weight per cell, which stops unless the data is square."""
+    """One weight per row (or column) as float64. None means ones: R's own default,
+    rep(1, length(x)), is one weight per column in wmean and wwcss, which stops unless x is
+    square, and one per cell in distw, which stops unless x has one column."""
     if w is None:
         return np.ones(n)
     arr = np.asarray(w)
@@ -280,7 +281,7 @@ bands <- cut(quakes$depth, c(0, 150, 300, 450, 700), labels = FALSE)
 
 - [ ] **Step 1: Failing parity tests.** `test_wmean_matches_r` (asserts R's shape `(p, k)`, then compares with the transpose), `test_wss_matches_r`, `test_wwcss_matches_r` (the float, and `WwcssResult` with `group_sum=True`), `test_distw_matches_r` (every case with `k >= 2`, lower triangle Exact, NaN on the diagonal and above). Each is parametrized over every case of both groups that has the array, by case id, and runs inside `warnings.catch_warnings()` with `simplefilter("error")` so a stray numpy warning fails. Each passes `x` once C-ordered and once Fortran-ordered. `test_fixtures_cover_the_edge_cases`: every parametrized list is non-empty, and across `wstats` there is a case with a `<i4` `x`, a `<f8` `cl`, k = 1, p = 1, one new row, a zero-weight cluster first, in the middle and last, negative labels, a negative entry in R's `z` and an exact tie in R's `z`. Tests import from `datanuggets.wcluster.wstats` (Task 6 adds the package exports). Run: `$UV run pytest tests/test_wstats.py -q`. Expected: `ImportError`.
 
-- [ ] **Step 2: Failing behaviour tests.** `test_zero_weight_cluster_is_nan_and_quiet` (on `mtcars_gear_am`, `mtcars_carb_am` and `mtcars_cyl_vs`: no warning, no exception, NaN exactly where R has it, and first asserts that R's `wmean` has a NaN row in that position). `test_labels_need_not_start_at_zero` (labels 4/6/8 as ints and as floats give the same arrays as labels 0/1/2). `test_default_weights_are_ones` (`w=None` equals `np.ones(n)`. R stops here unless the data is square). `test_distw_needs_two_clusters` (`ValueError`. R stops with "missing value where TRUE/FALSE needed"). `test_weight_and_label_errors` (one case per rule, through each public function). `test_rejects_1d_and_non_finite_x`. `test_accepts_a_dataframe` (skipped without pandas). `test_wwcss_total_is_the_long_double_sum` (on the k = 3 cases: first asserts `want_total != float(np.float64(g[0]) + g[1] + g[2])` with `g` R's per-cluster values, then that the port's total equals R's).
+- [ ] **Step 2: Failing behaviour tests.** `test_zero_weight_cluster_is_nan_and_quiet` (on `mtcars_gear_am`, `mtcars_carb_am` and `mtcars_cyl_vs`: no warning, no exception, NaN exactly where R has it, and first asserts that R's `wmean` has a NaN row in that position). `test_labels_need_not_start_at_zero` (labels 4/6/8 as ints and as floats give the same arrays as labels 0/1/2). `test_default_weights_are_ones` (`w=None` equals `np.ones(n)`. R's default `rep(1, length(x))` stops unless `x` is square in `wmean` and `wwcss`, and unless it has one column in `distw`. `wss` defaults to `rep(1, nrow(x))`, which works). `test_distw_needs_two_clusters` (`ValueError`. R stops with "missing value where TRUE/FALSE needed"). `test_weight_and_label_errors` (one case per rule, through each public function). `test_rejects_1d_and_non_finite_x`. `test_accepts_a_dataframe` (skipped without pandas). `test_wwcss_total_is_the_long_double_sum` (on the k = 3 cases: first asserts `want_total != float(np.float64(g[0]) + g[1] + g[2])` with `g` R's per-cluster values, then that the port's total equals R's).
 
 - [ ] **Step 3: `wstats.py`.**
 
