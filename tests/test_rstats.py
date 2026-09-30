@@ -1,10 +1,11 @@
-"""R's long-double statistics, unique() and %*% replayed bit for bit; eigen() to Numeric tier."""
+"""R's long double stats, unique(), %*% and weighted.mean bit for bit. eigen() to Numeric tier."""
 
 import os
 import signal
 import subprocess
 import sys
 import threading
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from types import SimpleNamespace
@@ -23,15 +24,18 @@ from datanuggets._rstats import (
     r_cov,
     r_eigen_sym,
     r_mad,
+    r_matmul,
     r_matvec,
     r_median,
     r_quantile7,
     r_sum,
     r_vec_mean,
+    r_weighted_mean,
 )
 from rfixtures import ATOL, RTOL, fixture_data, hex_bits, load_group, same_bits
 
 CASES = load_group("rcompat_stats")
+WCASES = load_group("rcompat_wstats")
 
 
 def _kind(kind):
@@ -93,6 +97,74 @@ def test_sum_matches_r_past_dbl_max_and_with_inf_or_nan(case):
 @pytest.mark.parametrize("case", _kind("unique"), ids=lambda c: c.id)
 def test_unique_first_matches_r(case):
     np.testing.assert_array_equal(unique_first(case.array("x")) + 1, case.array("first"))
+
+
+def _wkind(kind):
+    return [c for c in WCASES if c.args["kind"] == kind]
+
+
+MATMUL = _wkind("matmul")
+WMEAN = _wkind("wmean")
+WSUM = _wkind("sum")
+NAN_MATMUL = "matmul_mtcars_gear_am_centers_nan"
+NEGZERO_MATMUL = "matmul_negzero_column"
+ZERO_TOTAL_WMEAN = "wmean_mtcars_gear3_mpg_am_zero_total"
+INF_AT_ZERO_WMEAN = "wmean_iris_sepallength_inf_at_zero_weight"
+
+
+def _wcase(case_id):
+    return next(c for c in WCASES if c.id == case_id)
+
+
+def test_rcompat_wstats_covers_each_kind():
+    assert MATMUL and WMEAN and WSUM
+    ids = {c.id for c in WCASES}
+    assert {NAN_MATMUL, NEGZERO_MATMUL, ZERO_TOTAL_WMEAN, INF_AT_ZERO_WMEAN} <= ids
+    # R's [w != 0] drops the Inf * 0 term, which would otherwise make the mean NaN
+    inf_at_zero = _wcase(INF_AT_ZERO_WMEAN)
+    v, w = inf_at_zero.array("v"), inf_at_zero.array("w")
+    assert np.isinf(v[w == 0]).any() and np.isfinite(inf_at_zero.array("mean")).all()
+    prod = _wcase(NAN_MATMUL).array("prod")
+    assert np.isnan(prod[:, 0]).all() and np.isfinite(prod[:, 1:]).all()
+    b = _wcase(NEGZERO_MATMUL).array("b")
+    assert (b[:, 0] == 0).all() and np.signbit(b[:, 0]).all()
+    zero = _wcase(ZERO_TOTAL_WMEAN)
+    assert (zero.array("w") == 0).all()
+    assert hex_bits(zero.array("mean")) == ["fff8000000000000"]  # the x87 and SSE default NaN
+
+
+@pytest.mark.parametrize("order", ["C", "F"])
+@pytest.mark.parametrize("case", MATMUL, ids=lambda c: c.id)
+def test_r_matmul_matches_r(case, order):
+    a = np.asarray(case.array("a"), order=order)
+    b = np.asarray(case.array("b"), order=order)
+    got, want = r_matmul(a, b), case.array("prod")
+    nan = np.isnan(want)
+    # which NaN x * NaN gives depends on the machine, so NaN is compared by position only
+    np.testing.assert_array_equal(np.isnan(got), nan)
+    _bitwise(got[~nan], want[~nan])
+
+
+def test_r_matmul_never_returns_negative_zero():
+    case = _wcase(NEGZERO_MATMUL)
+    a, b = case.array("a"), case.array("b")
+    assert (a > 0).all() and np.signbit(b[:, 0]).all()  # every product in column 0 is -0
+    got = r_matmul(a, b)
+    assert (got[:, 0] == 0).all() and not np.signbit(got[:, 0]).any()
+    _bitwise(got, case.array("prod"))
+
+
+@pytest.mark.parametrize("case", WMEAN, ids=lambda c: c.id)
+def test_r_weighted_mean_matches_r(case):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # a zero total gives NaN or Inf without a numpy warning
+        got = r_weighted_mean(case.array("v"), case.array("w"))
+    _bitwise(got, case.array("mean")[0])
+
+
+@pytest.mark.parametrize("case", WSUM, ids=lambda c: c.id)
+def test_r_sum_boundaries(case):
+    _bitwise(r_sum(case.array("v")), case.array("sum")[0])
 
 
 DATA = fixture_data()
