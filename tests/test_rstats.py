@@ -51,8 +51,8 @@ EIGEN = [c for c in COV if c.has("values")]
 def test_cov_and_scale_match_r_bitwise(case):
     x = case.array("x")
     s = r_cov(x)
-    np.testing.assert_array_equal(s, case.array("cov"))
-    assert r_sum(np.diag(s)) / x.shape[1] == case.array("scale")[0]
+    _bitwise(s, case.array("cov"), "cov")
+    _bitwise(r_sum(np.diag(s)) / x.shape[1], case.array("scale")[0], "scale")
 
 
 @pytest.mark.parametrize("case", EIGEN, ids=lambda c: c.id)
@@ -68,18 +68,15 @@ def test_eigen_matches_r_numerically(case):
 @pytest.mark.parametrize("case", EIGEN, ids=lambda c: c.id)
 def test_matvec_matches_r_bitwise(case):
     got = r_matvec(case.array("x"), case.array("vectors")[:, 0])
-    np.testing.assert_array_equal(got, case.array("proj"))
+    _bitwise(got, case.array("proj"))
 
 
 @pytest.mark.parametrize("case", _kind("vec"), ids=lambda c: c.id)
 def test_vector_stats_match_r_bitwise(case):
     v = case.array("v").tolist()
-    assert r_sum(v) == case.array("sum")[0]
-    assert r_vec_mean(v) == case.array("mean")[0]
-    assert r_median(v) == case.array("median")[0]
-    assert r_mad(v) == case.array("mad")[0]
-    got = [r_quantile7(v, q) for q in case.args["probs"]]
-    np.testing.assert_array_equal(got, case.array("q"))
+    for name, stat in (("sum", r_sum), ("mean", r_vec_mean), ("median", r_median), ("mad", r_mad)):
+        _bitwise(stat(v), case.array(name)[0], name)
+    _bitwise([r_quantile7(v, q) for q in case.args["probs"]], case.array("q"), "q")
 
 
 @pytest.mark.parametrize("case", _kind("mean"), ids=lambda c: c.id)
