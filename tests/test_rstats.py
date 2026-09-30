@@ -79,6 +79,11 @@ def test_mean_of_non_finite_values_matches_r(case):
     np.testing.assert_array_equal(r_vec_mean(case.array("v").tolist()), case.array("mean")[0])
 
 
+@pytest.mark.parametrize("case", _kind("sum"), ids=lambda c: c.id)
+def test_sum_matches_r_past_dbl_max_and_with_inf_or_nan(case):
+    np.testing.assert_array_equal(r_sum(case.array("v").tolist()), case.array("sum")[0])
+
+
 @pytest.mark.parametrize("case", _kind("unique"), ids=lambda c: c.id)
 def test_unique_first_matches_r(case):
     np.testing.assert_array_equal(unique_first(case.array("x")) + 1, case.array("first"))

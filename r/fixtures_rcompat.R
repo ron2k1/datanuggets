@@ -79,7 +79,10 @@ mean_sets <- list(
   quakes = as_dbl(quakes),
   faithful = as_dbl(faithful),
   mtcars = as_dbl(mtcars),
-  volcano_scaled = as_dbl(scale(volcano))
+  volcano_scaled = as_dbl(scale(volcano)),
+  # each non-finite line is NaN or one infinity: a long double sum of finite doubles can't overflow
+  non_finite = rbind(c(1.7e308, 1.7e308, -Inf), c(Inf, 1, -Inf), c(NaN, Inf, 2), c(-Inf, 3, -Inf),
+                     c(1, 2, 3))
 )
 for (nm in names(mean_sets)) {
   x <- mean_sets[[nm]]

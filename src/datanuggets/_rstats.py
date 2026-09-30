@@ -23,7 +23,7 @@ from scipy.linalg import LinAlgError, lapack
 from datanuggets import _ldjit
 from datanuggets import _ldouble as ld
 from datanuggets._defaults import MAD_CONSTANT, MOMENTS_CHUNK
-from datanuggets._rcompat import r_mean
+from datanuggets._rcompat import _non_finite_sum, r_mean
 
 
 def _ld_sum(v: list[float]) -> tuple[int, int]:
@@ -33,12 +33,20 @@ def _ld_sum(v: list[float]) -> tuple[int, int]:
     return s
 
 
+_DBL_MAX = (2**53 - 1) << 971  # DBL_MAX as an exact integer
+
+
 def r_sum(v) -> float:
-    """sum() of a double vector: a long double running sum, rounded to double once."""
+    """sum() of a double vector, as R's rsum: a long double running sum that's +-Inf once it's
+    past +-DBL_MAX, even where rounding would give DBL_MAX back, and otherwise rounds to double
+    once. With Inf or NaN in v only those decide."""
     v = [float(x) for x in v]
     if not all(map(math.isfinite, v)):
-        return float(sum(v))  # Inf and NaN come out the same at any precision
-    return ld.to_float(_ld_sum(v))
+        return _non_finite_sum(v)
+    m, e = _ld_sum(v)
+    if abs(m) << max(e, 0) > _DBL_MAX << max(-e, 0):  # |m| * 2**e > DBL_MAX, exactly
+        return math.copysign(math.inf, m)
+    return ld.to_float((m, e))
 
 
 def r_vec_mean(v) -> float:

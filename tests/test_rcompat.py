@@ -26,8 +26,9 @@ def test_split_indices_matches_r():
 @pytest.mark.parametrize("case", load_group("rcompat_means"), ids=lambda c: c.id)
 def test_r_mean_matches_r_colmeans_and_rowmeans(case):
     x = case.array("x")
-    np.testing.assert_array_equal(r_mean(x, axis=0), case.array("col_means"))
-    np.testing.assert_array_equal(r_mean(x, axis=1), case.array("row_means"))
+    for mean in (r_mean, _r_mean_py):
+        np.testing.assert_array_equal(mean(x, 0), case.array("col_means"), mean.__name__)
+        np.testing.assert_array_equal(mean(x, 1), case.array("row_means"), mean.__name__)
 
 
 def test_r_mean_handles_sums_beyond_the_double_range():

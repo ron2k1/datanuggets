@@ -45,6 +45,17 @@ def _round_half_even(a: int, shift: int, sticky: bool = False) -> int:
     return q
 
 
+def _non_finite_sum(v) -> float:
+    """R's long double sum of doubles that include Inf or NaN. The finite ones can't overflow a
+    long double, so the rest decide: NaN for any NaN or for both infinities, else that infinity.
+    Dividing by a count keeps it, so it's the mean too."""
+    v = np.asarray(v, dtype=np.float64)
+    pos, neg = bool((v == math.inf).any()), bool((v == -math.inf).any())
+    if np.isnan(v).any() or (pos and neg):
+        return math.nan
+    return math.inf if pos else -math.inf
+
+
 def _ldouble_mean(v: list[float]) -> float:
     """sum(v) / len(v) the way R computes it: every partial sum and the quotient are rounded to
     a 64-bit significand (ties to even), then the quotient is rounded to double. No values give
@@ -84,8 +95,9 @@ def r_mean(a: np.ndarray, axis: int) -> np.ndarray:
     64-bit significand, divides in long double, and only then rounds to double. numpy's
     pairwise double mean differs by several ulps, and on columns that cancel to nearly zero
     (standardized data) even a correctly rounded mean differs, because R's own running sum
-    rounds. Finite lines run that arithmetic compiled, in _ldjit. A line with Inf or NaN gets
-    numpy's mean: R propagates those silently, and the answer doesn't depend on precision.
+    rounds. Finite lines run that arithmetic compiled, in _ldjit. A line with Inf or NaN is NaN
+    or one infinity, whichever R's long double sum gives. A double sum can differ there: it
+    overflows [1.7e308, 1.7e308, -inf] to inf - inf = NaN where R gets -Inf.
     Platforms whose long double is plain double (arm64 macOS, MSVC builds) give R different
     means. Fixture manifests record longdouble_digits for that reason.
     """
@@ -98,9 +110,8 @@ def r_mean(a: np.ndarray, axis: int) -> np.ndarray:
     out = np.empty(flat.shape[0])
     done = flat if finite.all() else flat[finite]
     out[finite] = _ldjit.line_means(done.view(np.uint64))
-    with np.errstate(invalid="ignore"):
-        for i in np.flatnonzero(~finite).tolist():
-            out[i] = np.mean(flat[i])
+    for i in np.flatnonzero(~finite).tolist():
+        out[i] = _non_finite_sum(flat[i])
     return out.reshape(shape)
 
 
@@ -113,9 +124,8 @@ def _r_mean_py(a: np.ndarray, axis: int) -> np.ndarray:
         v = lines[idx].tolist()
         try:
             out[idx] = _ldouble_mean(v)
-        except (OverflowError, ValueError):  # Inf or NaN in the line: R propagates it silently
-            with np.errstate(invalid="ignore"):
-                out[idx] = np.mean(v)
+        except (OverflowError, ValueError):  # Inf or NaN in the line
+            out[idx] = _non_finite_sum(v)
     return out
 
 
