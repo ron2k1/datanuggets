@@ -40,15 +40,21 @@ from rfixtures import (
     load_group,
     means_inputs,
     refine_inputs,
+    same_values,
 )
 
 # R's Wpca with one column and corr = TRUE, where the port departs from R on purpose
 WPCA_QUIRK = "petalwidth_1d_corr"
+# What "yes" means in every table
+SAME = (
+    "the same float64 bits, so -0 isn't 0, except that any NaN matches any NaN (`same_values`"
+    " in `tests/rfixtures.py`)"
+)
 
 
 def verdict(a: np.ndarray, b: np.ndarray) -> str:
-    """'yes' when bit-identical (NaN equal to NaN), else the largest relative difference."""
-    if np.array_equal(a, b, equal_nan=True):
+    """'yes' when same_values holds, else the largest relative difference."""
+    if same_values(a, b):
         return "yes"
     rel = np.abs(a - b) / np.maximum(np.abs(b), 1e-300)
     return f"**NO** (max rel. {np.max(rel):.1e})"
@@ -98,7 +104,7 @@ def create_report() -> str:
         f" ({v['R']}, datanugget {v['datanugget']}, Rfast {v['Rfast']}, {v['platform']},"
         f" BLAS: {v['blas']}, long double: {v['longdouble_digits']}-bit significand)."
         " R's random draws are replayed, so any difference would be arithmetic, not randomness."
-        ' "yes" means bit-identical (`np.array_equal`).\n\n'
+        f' "yes" means {SAME}.\n\n'
         "| case | data | nuggets | assignments | weights | centers | scales |\n"
         "|---|---|---|---|---|---|---|\n"
     )
@@ -122,7 +128,7 @@ def refine_report() -> str:
         f" ({v['R']}, datanugget {v['datanugget']}, {v['platform']}, LAPACK {v['lapack']},"
         f" BLAS: {v['blas']}, long double: {v['longdouble_digits']}-bit significand)."
         " R's random draws are replayed, so any difference would be arithmetic, not randomness."
-        ' "yes" means bit-identical (`np.array_equal`). Eigenvalues only steer which nuggets'
+        f' "yes" means {SAME}. Eigenvalues only steer which nuggets'
         " split. They come from LAPACK's dsyevr through SciPy, the routine R's eigen() calls,"
         " and the tests hold them to R's within 1e-8 relative plus 1e-10 absolute. Their error"
         " is rounding on the scale of the largest eigenvalue, so a second eigenvalue near zero"
@@ -157,8 +163,7 @@ def means_report() -> str:
         " one nugget set from the create_dn or refine_dn fixtures: create.DN's output, the"
         " nuggets refine.DN was given, or refine.DN's output. R's getDN.means returns one"
         " column's means as a single row, and those are compared transposed."
-        ' "yes" means bit-identical (`np.array_equal`, with NaN equal to NaN for empty'
-        " nuggets).\n\n"
+        f' "yes" means {SAME}.\n\n'
         "| set | case | data | nuggets | empty | means |\n"
         "|---|---|---|---|---|---|\n"
     )
@@ -205,7 +210,7 @@ def ac_report() -> str:
             warnings.simplefilter("ignore")
             got = arithmetic_complexity(x, *args)
         want = row["value"]
-        if got == want or (math.isnan(got) and math.isnan(want)):
+        if same_values(got, want):
             s["bitwise"] += 1
         else:
             s["worst"] = max(s["worst"], abs(got - want) / abs(want))
@@ -251,7 +256,7 @@ def _wcluster_source(group: str, cases) -> str:
 _STATS_NOTE = (
     " The cases in `tests/fixtures/wstats_constructed/` are built rather than real, so they're"
     " tested and not reported here."
-    ' "yes" means bit-identical (`np.array_equal`, with NaN equal to NaN).'
+    f' "yes" means {SAME}.'
 )
 
 
@@ -412,7 +417,7 @@ def wpca_report() -> str:
     header = (
         "# wpca parity with R\n\n"
         f"{_wcluster_source('wpca', group)} Everything up to the matrix handed to eigen() is"
-        ' compared bit for bit, and "yes" there means `np.array_equal`. R returns the single'
+        f' compared bit for bit, and "yes" there means {SAME}. R returns the single'
         " number 1 as its scale when corr is FALSE, and the port returns one 1 per column."
         ' "centered data" and "eigen input" are the traced locals of R\'s Wpca, the centered'
         " x and the matrix eigen() reads. \"scores product\" means the port's scores are R's"

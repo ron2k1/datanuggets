@@ -154,6 +154,17 @@ def test_r_matmul_never_returns_negative_zero():
     _bitwise(got, case.array("prod"))
 
 
+def test_r_matvec_never_returns_negative_zero():
+    # R's matrix times vector goes through dgemv, whose y starts at +0 as dgemm's does, in the
+    # same order. On R 4.6.1, as.matrix(iris[1:5, 1:4]) %*% rep(-0, 4) is five +0.
+    case = _wcase(NEGZERO_MATMUL)
+    a, v = case.array("a"), case.array("b")[:, 0]
+    assert (a > 0).all() and np.signbit(v).all()
+    got = r_matvec(a, v)
+    assert (got == 0).all() and not np.signbit(got).any()
+    _bitwise(got, case.array("prod")[:, 0])
+
+
 @pytest.mark.parametrize("case", WMEAN, ids=lambda c: c.id)
 def test_r_weighted_mean_matches_r(case):
     with warnings.catch_warnings():

@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from datanuggets.wcluster.wstats import distw, wmean, wss, wwcss
-from rfixtures import FIXTURE_ROOT, load_group
+from rfixtures import FIXTURE_ROOT, assert_same_values, load_group
 
 CASES = load_group("wstats") + load_group("wstats_constructed")
 REAL = {c.id: c for c in load_group("wstats")}
@@ -43,7 +43,7 @@ def test_wmean_matches_r(case, order):
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         got = wmean(x, cl, w)
-    np.testing.assert_array_equal(got, want.T)
+    assert_same_values(got, want.T)
 
 
 @ORDERS
@@ -55,7 +55,7 @@ def test_wss_matches_r(case, order):
         warnings.simplefilter("error")
         got = wss(x, w)
     assert isinstance(got, float)
-    np.testing.assert_array_equal(got, want)
+    assert_same_values(got, want)
 
 
 @ORDERS
@@ -69,10 +69,10 @@ def test_wwcss_matches_r(case, order):
         got = wwcss(x, cl, w)
         res = wwcss(x, cl, w, group_sum=True)
     assert isinstance(got, float)
-    np.testing.assert_array_equal(got, total)
+    assert_same_values(got, total)
     assert res.total.shape == ()
-    np.testing.assert_array_equal(res.per_cluster, groups)
-    np.testing.assert_array_equal(res.total, total)
+    assert_same_values(res.per_cluster, groups)
+    assert_same_values(res.total, total)
 
 
 @ORDERS
@@ -88,8 +88,8 @@ def test_distw_matches_r(case, order):
         got = distw(x, cl, w)
     assert np.isnan(got[np.triu_indices(k)]).all()
     low = np.tril_indices(k, -1)
-    np.testing.assert_array_equal(got[low], want[low])
-    np.testing.assert_array_equal(got, want)
+    assert_same_values(got[low], want[low])
+    assert_same_values(got, want)
 
 
 def _dead_column(case) -> list[int]:
@@ -164,9 +164,9 @@ def test_zero_weight_cluster_is_nan_and_quiet(cid, pos):
     assert np.isnan(res.per_cluster[dead]).all() and np.isfinite(res.per_cluster[~dead]).all()
     assert np.isnan(res.total)
     assert np.isnan(pairs[pos, :pos]).all() and np.isnan(pairs[pos + 1 :, pos]).all()
-    np.testing.assert_array_equal(mean, want_mean)
-    np.testing.assert_array_equal(res.per_cluster, want_groups)
-    np.testing.assert_array_equal(pairs, case.array("distw"))
+    assert_same_values(mean, want_mean)
+    assert_same_values(res.per_cluster, want_groups)
+    assert_same_values(pairs, case.array("distw"))
 
 
 def test_labels_need_not_start_at_zero():
@@ -175,10 +175,10 @@ def test_labels_need_not_start_at_zero():
     assert cl.dtype == np.float64 and np.array_equal(np.unique(cl), [4.0, 6.0, 8.0])
     codes = np.searchsorted([4.0, 6.0, 8.0], cl)
     for labels in (cl, cl.astype(np.int64), cl.astype(np.int32)):
-        np.testing.assert_array_equal(wmean(x, labels, w), wmean(x, codes, w))
+        assert_same_values(wmean(x, labels, w), wmean(x, codes, w))
         assert wwcss(x, labels, w, group_sum=True) == wwcss(x, codes, w, group_sum=True)
-        np.testing.assert_array_equal(distw(x, labels, w), distw(x, codes, w))
-    np.testing.assert_array_equal(wmean(x, codes, w), case.array("wmean").T)
+        assert_same_values(distw(x, labels, w), distw(x, codes, w))
+    assert_same_values(wmean(x, codes, w), case.array("wmean").T)
 
 
 def test_default_weights_are_ones():
@@ -189,16 +189,16 @@ def test_default_weights_are_ones():
     case = REAL["iris_species_ones"]
     x, cl, w = _inputs(case)
     assert np.array_equal(w, np.ones(x.shape[0]))
-    np.testing.assert_array_equal(wmean(x, cl), case.array("wmean").T)
-    np.testing.assert_array_equal(wss(x), case.array("wss")[0])
-    np.testing.assert_array_equal(wwcss(x, cl), case.array("wwcss_total")[0])
-    np.testing.assert_array_equal(distw(x, cl), case.array("distw"))
+    assert_same_values(wmean(x, cl), case.array("wmean").T)
+    assert_same_values(wss(x), case.array("wss")[0])
+    assert_same_values(wwcss(x, cl), case.array("wwcss_total")[0])
+    assert_same_values(distw(x, cl), case.array("distw"))
     x, cl, _ = _inputs(REAL["mtcars_gear_vs"])
     ones = np.ones(x.shape[0])
-    np.testing.assert_array_equal(wmean(x, cl), wmean(x, cl, ones))
+    assert_same_values(wmean(x, cl), wmean(x, cl, ones))
     assert wss(x) == wss(x, ones)
     assert wwcss(x, cl, group_sum=True) == wwcss(x, cl, ones, group_sum=True)
-    np.testing.assert_array_equal(distw(x, cl), distw(x, cl, ones))
+    assert_same_values(distw(x, cl), distw(x, cl, ones))
 
 
 def test_distw_needs_two_clusters():
@@ -280,10 +280,10 @@ def test_accepts_a_dataframe():
     case = REAL["iris_species_petalwidth"]
     x, cl, w = _inputs(case)
     frame = pd.DataFrame(x, columns=["sl", "sw", "pl", "pw"])
-    np.testing.assert_array_equal(wmean(frame, pd.Series(cl), pd.Series(w)), wmean(x, cl, w))
+    assert_same_values(wmean(frame, pd.Series(cl), pd.Series(w)), wmean(x, cl, w))
     assert wss(frame, w) == wss(x, w)
     assert wwcss(frame, cl, w) == wwcss(x, cl, w)
-    np.testing.assert_array_equal(distw(frame, cl, w), case.array("distw"))
+    assert_same_values(distw(frame, cl, w), case.array("distw"))
 
 
 @pytest.mark.parametrize("cid", K3)
@@ -294,5 +294,5 @@ def test_wwcss_total_is_the_long_double_sum(cid):
     assert g.shape == (3,)
     # R's sum() adds the three in long double: a double sum lands on another value
     assert want != float(np.float64(g[0]) + g[1] + g[2])
-    np.testing.assert_array_equal(wwcss(x, cl, w), want)
-    np.testing.assert_array_equal(wwcss(x, cl, w, group_sum=True).total, want)
+    assert_same_values(wwcss(x, cl, w), want)
+    assert_same_values(wwcss(x, cl, w, group_sum=True).total, want)

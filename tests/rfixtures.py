@@ -180,6 +180,37 @@ def hex_bits(a) -> list[str]:
     return [f"{b:016x}" for b in np.asarray(a, dtype=np.float64).reshape(-1).view(np.uint64)]
 
 
+def _same_entries(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    a = np.ascontiguousarray(a, dtype=np.float64).reshape(-1)
+    b = np.ascontiguousarray(b, dtype=np.float64).reshape(-1)
+    nan_a, nan_b = np.isnan(a), np.isnan(b)
+    return (nan_a & nan_b) | (~nan_a & ~nan_b & (a.view(np.uint64) == b.view(np.uint64)))
+
+
+def same_values(a, b) -> bool:
+    """Equal as float64 bit patterns, except that any NaN matches any NaN. -0.0 isn't 0.0, which
+    == and assert_array_equal miss. NaN bits aren't compared because R's NA and the x86 default
+    NaN differ, and where a WCluster port keeps R's NaN bits the tests use same_bits instead."""
+    a, b = np.asarray(a, dtype=np.float64), np.asarray(b, dtype=np.float64)
+    return a.shape == b.shape and bool(_same_entries(a, b).all())
+
+
+def assert_same_values(got, want) -> None:
+    """same_values as an assertion that shows the first entry that differs, in hex."""
+    got, want = np.asarray(got, dtype=np.float64), np.asarray(want, dtype=np.float64)
+    assert got.shape == want.shape, f"shape {got.shape}, want {want.shape}"
+    same = _same_entries(got, want)
+    if not same.all():
+        bad = np.flatnonzero(~same)
+        i = int(bad[0])
+        g, w = got.reshape(-1)[i], want.reshape(-1)[i]
+        raise AssertionError(
+            f"{bad.size} of {same.size} entries differ, first at "
+            f"{np.unravel_index(i, got.shape)}: {hex_bits(g)[0]} ({g!r}), want "
+            f"{hex_bits(w)[0]} ({w!r})"
+        )
+
+
 @cache
 def fixture_data() -> dict[str, tuple[np.ndarray, list[np.ndarray]]]:
     """Each distinct finite x in the create_dn, refine_dn, rcompat_means and rcompat_stats

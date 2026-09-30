@@ -10,7 +10,16 @@ import pytest
 from datanuggets._rstats import r_eigen_sym, r_matmul, r_sum
 from datanuggets.exceptions import DataNuggetWarning
 from datanuggets.wcluster.wpca import _wpca_parts, wpca
-from rfixtures import EIG_C, EIG_FLOOR, EIG_K, EIG_TIE, eigen_mismatches, load_group, same_bits
+from rfixtures import (
+    EIG_C,
+    EIG_FLOOR,
+    EIG_K,
+    EIG_TIE,
+    assert_same_values,
+    eigen_mismatches,
+    load_group,
+    same_bits,
+)
 
 EPS = float(np.finfo(float).eps)
 # The plan's rule as literals, so a looser rule in rfixtures can't loosen the near misses too
@@ -108,31 +117,31 @@ def test_fixtures_cover_the_edge_cases():
 def test_parts_match_r(case, order):
     x, wrow, wcol, corr = inputs(case)
     center, wcol_out, x0, scale, s = _wpca_parts(np.asarray(x, order=order), wrow, wcol, corr)
-    np.testing.assert_array_equal(center, case.array("center"))
-    np.testing.assert_array_equal(wcol_out, case.array("wcol"))
-    np.testing.assert_array_equal(x0, case.array("cap_x_0"))
-    np.testing.assert_array_equal(s, case.array("cap_s"))
-    np.testing.assert_array_equal(scale, r_scale(case))
+    assert_same_values(center, case.array("center"))
+    assert_same_values(wcol_out, case.array("wcol"))
+    assert_same_values(x0, case.array("cap_x_0"))
+    assert_same_values(s, case.array("cap_s"))
+    assert_same_values(scale, r_scale(case))
     if corr:
         cov = _wpca_parts(np.asarray(x, order=order), wrow, wcol, False)[4]
-        np.testing.assert_array_equal(cov, case.array("cap_cov"))
+        assert_same_values(cov, case.array("cap_cov"))
 
 
 @pytest.mark.parametrize("case", CASES, ids=ids(CASES))
 def test_scores_product_matches_r(case):
     got = r_matmul(case.array("cap_x_0"), case.array("rotation"))
-    np.testing.assert_array_equal(got, case.array("scores"))
+    assert_same_values(got, case.array("scores"))
 
 
 @pytest.mark.parametrize("case", MATCHED, ids=ids(MATCHED))
 def test_wpca_matches_r(case):
     got, _ = run(*inputs(case))
-    np.testing.assert_array_equal(got.center, case.array("center"))
-    np.testing.assert_array_equal(got.scale, r_scale(case))
-    np.testing.assert_array_equal(got.wcol, case.array("wcol"))
-    np.testing.assert_array_equal(got.wrow, case.array("wrow"))
+    assert_same_values(got.center, case.array("center"))
+    assert_same_values(got.scale, r_scale(case))
+    assert_same_values(got.wcol, case.array("wcol"))
+    assert_same_values(got.wrow, case.array("wrow"))
     # the scores are R's product of R's centered data with whatever rotation LAPACK gave
-    np.testing.assert_array_equal(got.x, r_matmul(case.array("cap_x_0"), got.rotation))
+    assert_same_values(got.x, r_matmul(case.array("cap_x_0"), got.rotation))
     wrong = eigen_mismatches(
         case.array("cap_s"),
         case.array("values"),
@@ -282,12 +291,12 @@ def test_eigen_reads_the_lower_triangle(case):
 def test_one_column_corr_departs_from_r():
     case = BY_ID[QUIRK]
     # R's diag() of one number builds an identity, so R's sdev is the unscaled one, dd itself
-    np.testing.assert_array_equal(case.array("sdev"), case.array("scale"))
+    assert_same_values(case.array("sdev"), case.array("scale"))
     assert case.array("sdev").tolist() != [1.0]
     got, rec = run(*inputs(case))
     assert rec == []
-    np.testing.assert_array_equal(got.scale, case.array("scale"))
-    np.testing.assert_array_equal(got.center, case.array("center"))
+    assert_same_values(got.scale, case.array("scale"))
+    assert_same_values(got.center, case.array("center"))
     assert got.sdev.shape == (1,)
     assert abs(got.sdev[0] - 1.0) <= 4 * EPS
 
@@ -378,9 +387,9 @@ def test_one_row():
         # R's Wpca(matrix(c(1, 2, 3), 1), wrow = w) returns sdev 0 0 0 and no warning
         got, rec = run(x, np.array([w]))
         assert rec == []
-        np.testing.assert_array_equal(got.sdev, np.zeros(3))
-        np.testing.assert_array_equal(got.center, x[0])
-        np.testing.assert_array_equal(got.x, np.zeros((1, 3)))
+        assert_same_values(got.sdev, np.zeros(3))
+        assert_same_values(got.center, x[0])
+        assert_same_values(got.x, np.zeros((1, 3)))
 
 
 def test_overflow_is_quiet_as_in_r():
@@ -430,8 +439,8 @@ def test_default_weights_are_ones():
     n, p = x.shape
     got = wpca(x)
     assert got == wpca(x, np.ones(n), np.ones(p), False)
-    np.testing.assert_array_equal(got.wrow, np.ones(n))
-    np.testing.assert_array_equal(got.wcol, np.ones(p))
+    assert_same_values(got.wrow, np.ones(n))
+    assert_same_values(got.wcol, np.ones(p))
     counts = wpca(x, np.full(n, 2), np.full(p, 3))
     assert counts.wrow.dtype == np.float64
     assert counts == wpca(x, np.full(n, 2.0), np.full(p, 3.0))

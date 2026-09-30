@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from datanuggets.wcluster.predict import _wdist_mat, cluster_predict
-from rfixtures import load_group
+from rfixtures import assert_same_values, load_group
 
 CASES = load_group("wstats") + load_group("wstats_constructed")
 BY_ID = {c.id: c for c in CASES}
@@ -61,7 +61,7 @@ def test_wdist_mat_matches_r(case, order):
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         got = _wdist_mat(_layout(newx, order), _layout(centers, order))
-    np.testing.assert_array_equal(got, want)  # NaN equals NaN, and each Inf keeps its place
+    assert_same_values(got, want)  # any NaN matches any NaN, and each Inf keeps its place
 
 
 @ORDERS
@@ -127,7 +127,7 @@ def test_overflow_rows_match_r(cid):
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         got = _wdist_mat(newx, case.array("wmean").T)
-    np.testing.assert_array_equal(got, want)
+    assert_same_values(got, want)
     if case.args.get("pred") == "list":
         # a row with no finite distance makes R's which.min return integer(0) there, so apply()
         # hands back a list instead of a vector
@@ -189,7 +189,7 @@ def test_negative_labels_break_ties_in_sorted_order():
     assert (cl < 0).all()
     # newx rows 3 and 4 are iris rows 102 and 143, the same measurements with the same weight, so
     # the tie between labels -102 and -143 goes to -143: first in sorted order, last in x
-    np.testing.assert_array_equal(newx[3], newx[4])
+    assert_same_values(newx[3], newx[4])
     assert {3, 4} <= set(_tie_rows(case.array("z")).tolist())
     want = case.array("pred") - 1
     levels = np.unique(cl)
