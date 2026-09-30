@@ -160,6 +160,17 @@ def test_group_moments_match_the_replay_on_every_fixture_nugget(key, index, n_jo
     assert _same_moments(got, want)
 
 
+@pytest.mark.parametrize("n_jobs", [1, 4])
+def test_group_moments_uses_the_compiled_path_for_finite_data(monkeypatch, n_jobs):
+    def replay(*args):
+        raise AssertionError("group_moments fell back to r_mean or r_cov")
+
+    monkeypatch.setattr(rstats, "r_mean", replay)
+    monkeypatch.setattr(rstats, "r_cov", replay)
+    x, sets = DATA[BIGGEST]
+    groups = _nuggets(sets[0])
+    assert len(list(group_moments(x, groups, n_jobs))) == len(groups)
+
 def test_group_moments_chunking_gives_the_same_result(monkeypatch):
     x, sets = DATA[BIGGEST]
     groups = _nuggets(sets[0])
