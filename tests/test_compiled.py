@@ -8,6 +8,7 @@ from numba.core.caching import FunctionCache
 from numba.core.registry import CPUDispatcher
 
 from datanuggets import _ldjit
+from datanuggets._compiled import frozen
 from datanuggets._rcompat import r_mean
 from datanuggets._rstats import group_moments, r_cov
 from rfixtures import fixture_data
@@ -27,6 +28,13 @@ x = np.load(sys.argv[1])
 ((center, cov),) = group_moments(x, [np.arange(x.shape[0])], 2)
 print(r_mean(x, 0).tobytes().hex(), r_cov(x).tobytes().hex(), center.tobytes().hex(), cov.tobytes().hex())
 """
+
+
+def test_frozen_is_a_read_only_view_of_the_same_memory():
+    a = np.arange(6.0).reshape(2, 3)
+    view = frozen(a)
+    assert not view.flags.writeable and a.flags.writeable
+    assert np.shares_memory(view, a) and view.dtype == a.dtype and view.shape == a.shape
 
 
 def test_every_kernel_caches_when_numba_can():

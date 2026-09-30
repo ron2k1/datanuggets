@@ -27,7 +27,7 @@ import math
 import numpy as np
 from numba import prange
 
-from datanuggets._compiled import compiled
+from datanuggets._compiled import compiled, frozen
 
 Z64 = np.uint64(0)
 ONE = np.uint64(1)
@@ -55,12 +55,8 @@ EXP_BITS = np.uint64(0x7FF << 52)  # a double's exponent field, all ones for Inf
 
 
 def as_bits(a: np.ndarray) -> np.ndarray:
-    """a's float64 bits as a read-only uint64 view. numba compiles a separate kernel for read-only
-    arrays, so making every input read-only keeps one compiled kernel for writable and read-only
-    callers alike."""
-    bits = a.view(np.uint64)
-    bits.flags.writeable = False
-    return bits
+    """a's float64 bits as a read-only uint64 view (see frozen)."""
+    return frozen(a.view(np.uint64))
 
 
 @compiled()

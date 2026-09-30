@@ -1,7 +1,9 @@
-"""numba's njit, with its on-disk cache wherever numba has somewhere to put it."""
+"""numba's njit, with its on-disk cache wherever numba has somewhere to put it, and the read-only
+views every kernel input goes through."""
 
 from __future__ import annotations
 
+import numpy as np
 from numba import njit
 
 
@@ -19,3 +21,11 @@ def compiled(**options):
             return njit(**options)(fn)
 
     return decorate
+
+
+def frozen(a: np.ndarray) -> np.ndarray:
+    """A read-only view of a. numba compiles a separate kernel for read-only arrays, so making every
+    input read-only keeps one compiled kernel for writable and read-only callers alike."""
+    view = a.view()
+    view.flags.writeable = False
+    return view
