@@ -98,6 +98,18 @@ for (sz in c(half, half + 1)) {
 }
 cat(sprintf("size boundary at n=%.0f: seed %d, the branches first part at draw %d\n", n, seed, d[1]))
 
+# R_unif_index takes its bit count from ceil(log2(dn)), which is 49 at n = 2^49 + 1 though 2^49
+# needs 50 bits. The hash branch draws from all n without a pool, so a call this large is cheap.
+n <- 2^49 + 1
+stopifnot(ceiling(log2(n)) == 49, use_hash(n, 3))
+set.seed(291102)
+s0 <- seed_now()
+first <- sample.int(n, 3)
+write_case("rsample", "bits_2p49p1", list(n = n, size = 3L, seed = 291102),
+           list(state0 = s0, first = first, state1 = seed_now()),
+           extra = list(rng = rng, use_hash = use_hash(n, 3)))
+cat(sprintf("bits at n=2^49+1: %s\n", paste(sprintf("%.0f", first), collapse = " ")))
+
 # R's useHash across the n and size boundaries, and with replace or prob, which always turn it off
 ns <- c(1e7 - 1, 1e7, 1e7 + 1, 1e7 + 2, 2^24 + 1, 2^31 - 1, 2^31 + 1)
 tab <- do.call(rbind, lapply(ns, function(n) {

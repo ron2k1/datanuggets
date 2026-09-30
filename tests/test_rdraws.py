@@ -3,6 +3,7 @@
 sampler above n = 1e7 is checked without a large dataset."""
 
 import itertools
+import math
 import warnings
 
 import numpy as np
@@ -47,6 +48,7 @@ def test_every_case_is_recorded():
     }
     assert {c.id for c in SIZE} == {"size_5000001_of_10000002", "size_5000002_of_10000002"}
     assert len(SEEDS) == 12 and "use_hash_table" in GROUP and "seed_invalid" in GROUP
+    assert "bits_2p49p1" in GROUP
     # the cases tell the branches apart where they should
     differ = {c.id for c in SWITCH if c.manifest["branches_differ"]}
     assert differ == {"switch_2p24p1_size2", "switch_1e7_size1200", "switch_1e7p1_size1200"}
@@ -96,6 +98,30 @@ def test_invalid_seeds_stop_like_r():
         assert all(w.category is DataNuggetWarning for w in caught)
 
 
+def test_integer_seeds_take_the_same_path_as_r_doubles():
+    # set.seed's asInteger stops at 2^31 and -2^31, whose int32 is NA, and keeps +-(2^31 - 1).
+    # R records these as doubles, and a Python int or numpy integer at the same value must agree.
+    case = GROUP["seed_invalid"]
+    recorded = dict(
+        zip(
+            case.array("seeds").tolist(),
+            zip(case.manifest["errors"], case.manifest["warnings"], strict=True),
+            strict=True,
+        )
+    )
+    for value in (2.0**31, -(2.0**31)):
+        error, warned = recorded[value]
+        for seed in (int(value), np.int64(value)):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                with pytest.raises(ValueError, match=f"^{error}$"):
+                    RDraws(seed)
+            assert [str(w.message) for w in caught] == warned, seed
+    for c in (GROUP["seed_intmax"], GROUP["seed_neg_intmax"]):
+        for seed in (int(c.args["seed"]), np.int64(c.args["seed"])):
+            assert RDraws(seed).random_seed().tolist() == ints(c, "state0"), seed
+
+
 @pytest.mark.parametrize("seed", [True, "12", None])
 def test_seeds_r_coerces_are_refused(seed):
     # R's set.seed(TRUE) and set.seed("12") seed with 1 and 12, and set.seed(NULL) picks a seed
@@ -133,6 +159,19 @@ def test_size_condition_on_the_sampler(case):
     head = ints(case, "head")
     got = RDraws(case.args["seed"])._values(n, size, r_use_hash(n, size))
     assert [v + 1 for v in itertools.islice(got, len(head))] == head
+
+
+def test_bit_count_comes_from_log2_like_r():
+    # R_unif_index draws ceil(log2(n)) bits. At n = 2^49 + 1 that is 49, though n - 1 = 2^49
+    # needs 50, so R never draws the last value and an exact bit count draws something else.
+    case = GROUP["bits_2p49p1"]
+    n, size = int(case.args["n"]), case.args["size"]
+    assert math.ceil(math.log2(n)) == 49 and (n - 1).bit_length() == 50
+    assert r_use_hash(n, size) and case.manifest["use_hash"]
+    draws = RDraws(case.args["seed"])
+    assert draws.random_seed().tolist() == ints(case, "state0")
+    assert (draws.sample(n, size) + 1).tolist() == ints(case, "first")
+    assert draws.random_seed().tolist() == ints(case, "state1")
 
 
 def test_use_hash_matches_r_across_the_boundaries():
