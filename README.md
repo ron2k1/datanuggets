@@ -8,13 +8,17 @@ Beavers et al. (cited below) run weighted PCA and weighted k-means on the nugget
 
 ## Status
 
-Version `0.1.0.dev0` is in development. Three functions are ported:
+Version `0.1.0.dev0` is in development. Five functions are ported:
 
 - `create_dn`, from R's `create.DN`
 - `create_dn_centers`, from R's `create.DNcenters`
 - `refine_dn`, from R's `refine.DN`
+- `get_dn_means`, from R's `getDN.means`
+- `arithmetic_complexity`, from R's `AC`
 
-`refine_dn` splits nuggets that are spread out or elongated with 2-means, through a port of the Hartigan-Wong k-means in R's `stats::kmeans`. Next come `optimal_dn` and the remaining `datanugget` helpers, followed by `WCluster`'s weighted statistics, clustering methods and data-nugget wrappers.
+`refine_dn` splits nuggets that are spread out or elongated with 2-means, through a port of the Hartigan-Wong k-means in R's `stats::kmeans`. `get_dn_means` averages the rows in each nugget. `arithmetic_complexity` gives the arithmetic cost of a `create_dn` call on a log10 scale, from the shape of the data alone.
+
+Next come the rest of `WCluster`'s building blocks: `wmean`, `wss`, `wwcss`, `distw`, `wpca` and `cluster_predict`. Its weighted k-means and hierarchical clustering follow. The data-nugget wrappers and `optimal_dn` come last.
 
 ## Install
 
@@ -87,6 +91,8 @@ Defaults match R except for `n_jobs`. `create_dn` and `refine_dn` default to `n_
 
 Nugget IDs and assignments are 0-based instead of R's 1-based values. `seed` accepts an integer or a NumPy `Generator`. The same seed doesn't give the same nuggets as R because the random number generators differ.
 
+Every function that reads the values in the data rejects NaN and infinite values. R lets NA through, so `create.DN` returns NA centers and `getDN.means` returns NA means for the nuggets it lands in.
+
 `refine_dn` maps its arguments the same way:
 
 | R | Python |
@@ -106,6 +112,10 @@ Nugget IDs and assignments are 0-based instead of R's 1-based values. `seed` acc
 
 `refine_dn` reads only the assignments from `dn`. Like R, it recomputes every center, weight and scale from the rows. It also drops empty nuggets and gives single-row nuggets a scale of 0, where `create_dn` keeps empty nuggets and floors single-row scales. Both come from R. R re-seeds before every split, so each split starts from a fresh copy of the seed's stream and the result doesn't depend on `n_jobs`. With `n_jobs` other than 1 the splits of a round run in worker processes. Unlike R, `refine_dn` rejects an `nstart` or `max_splits` that isn't finite and a `shape_split` that isn't a bool.
 
+`get_dn_means(x, dn)` takes R's `x` and `DN` and returns a NumPy array with one row per nugget, where R returns a data frame. An empty nugget gets a row of NaN, as in R. With one column R transposes its result into a single row, but `get_dn_means` still returns one row per nugget. R ignores any rows of `x` past the ones `dn` assigns. `get_dn_means` raises `ValueError` unless `x` has exactly those rows.
+
+`arithmetic_complexity(x, r, delete_percent, dn_num1, dn_num2)` names its arguments like `create_dn` and has no defaults, like R's `AC`. It reads only the shape of `x`. R 4.6.1's class check in `AC` stops on a matrix or a data.table, so R only takes a plain data frame. The port takes any 2-D input. Some arguments send R's loops around a cycle forever, a `DN.num2` of -2 or less among them. The port spots the cycle and raises `ValueError`. It also raises on a `dn_num1` or `dn_num2` that isn't finite and on an `x` with no rows, where R stops, loops, or returns `Inf` or `NaN`.
+
 ## Parity with R
 
 Every case in the `create_dn` parity table matches R bit for bit in all four outputs: assignments, weights, centers and scales. The cases run iris, faithful and quakes under both metrics and all three center methods. Edge cases add a one-column dataset, tied grids, duplicate rows and a 61-column scaled dataset. Tests replay the exact random draws recorded from R and compare with `np.array_equal`, with no tolerance. The full table is in [docs/validation/create_dn.md](docs/validation/create_dn.md).
@@ -113,6 +123,10 @@ Every case in the `create_dn` parity table matches R bit for bit in all four out
 `refine_dn` is checked the same way on its own grid. On faithful it runs every combination of `ev_tol`, `max_splits`, `min_nugget_size`, `shape_split`, `delta` and `nstart`. Six more datasets run four settings each: iris, quakes, the petal columns of iris, a one-column dataset, the scaled volcano data and a tied grid. More cases cover refining a refined result, an empty input nugget and splits that fail. Every kmeans call clusters the same rows as R's and returns the same clusters, and the outputs match bit for bit.
 
 Shape splits cluster the rows projected on the first eigenvector. Those projections and the eigenvalues that decide which nuggets get a split attempt come from LAPACK. They're compared with NumPy's `assert_allclose` using `rtol=1e-8` and `atol=1e-10`. The eigenvalues differ by rounding on the scale of the largest eigenvalue. A second eigenvalue near zero can have a large relative error while staying within `1e-10` absolute. No split decision in the fixture grid changes because of that rounding. The table is in [docs/validation/refine_dn.md](docs/validation/refine_dn.md).
+
+`get_dn_means` runs on every nugget set in those two fixture grids: each `create.DN` output, and each input and output of `refine.DN`. That's 293 sets, two of them with an empty nugget and nine with one column. All 293 match R bit for bit. They're too small for the order of R's long-double sums to change a mean, so one constructed case, recorded from R, pins that order. The table is in [docs/validation/get_dn_means.md](docs/validation/get_dn_means.md).
+
+`arithmetic_complexity` runs on the row and column counts of eight R datasets, crossed with values of `r`, `delete_percent`, `dn_num1` and `dn_num2`. That makes 3481 calls. Whenever R's `AC` returns, the pass counts traced inside it equal the port's, and the value matches bit for bit. The tests still allow a relative difference of `1e-8` in the value, since it goes through the platform's `log10`. Running those loops in exact arithmetic would get 289 of the counts wrong, so the port repeats R's double arithmetic step by step. R never returned from 19 of the calls, and the port raises on exactly those 19. The table is in [docs/validation/arithmetic_complexity.md](docs/validation/arithmetic_complexity.md).
 
 Getting the last bit right meant copying how R adds things up. Rfast keeps two running sums for distance terms, one over even columns and one over odd. R's `colMeans` and `rowMeans` add in 80-bit x87 precision before rounding to double, and the port replays that with Python integers. `refine_dn` needs R's `cov`, `mean`, `median`, `mad` and `quantile` too, which also add in long double.
 
