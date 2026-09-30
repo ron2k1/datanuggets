@@ -9,6 +9,8 @@ suppressPackageStartupMessages({
   library(datanugget)
 })
 stopifnot(packageVersion("datanugget") == "1.5.0")
+# WCluster stays unattached: the generators call WCluster:: and WCluster::: by name.
+stopifnot(packageVersion("WCluster") == "1.3.0")
 
 # R's arithmetic order depends on the build: Rfast::dista's Euclidean sums go through BLAS ddot
 # for more than 32 features, and colMeans/rowMeans accumulate in long double. Record both, so a
@@ -25,6 +27,8 @@ versions <- function() list(
   platform = R.version$platform,
   datanugget = as.character(packageVersion("datanugget")),
   Rfast = as.character(packageVersion("Rfast")),
+  WCluster = as.character(packageVersion("WCluster")),
+  matprod = getOption("matprod"),
   lapack = La_version(),
   blas = blas_id(),
   longdouble_digits = .Machine$longdouble.digits
