@@ -9,11 +9,12 @@ import warnings
 import numpy as np
 import pytest
 
-from datanuggets import DataNuggetWarning, refine_dn
-from datanuggets._draws import NumpyDraws, RDraws, as_draws, r_use_hash
-from rfixtures import load_group, refine_inputs
+from datanuggets import DataNuggetWarning, create_dn, refine_dn
+from datanuggets._draws import NumpyDraws, RDraws, ReplayDraws, as_draws, r_use_hash
+from rfixtures import create_args, load_group, refine_inputs
 
 GROUP = {c.id: c for c in load_group("rsample")}
+CREATE = {c.id: c for c in load_group("create_dn")}
 SEEDS = [c for c in GROUP.values() if c.id.startswith("seed_") and c.id != "seed_invalid"]
 SWITCH = [c for c in GROUP.values() if c.id.startswith("switch_")]
 SIZE = [c for c in GROUP.values() if c.id.startswith("size_")]
@@ -249,7 +250,25 @@ def test_rdraws_splits_in_parallel_like_serial():
     np.testing.assert_array_equal(one.centers, two.centers)
 
 
+def test_create_dn_reseeds_an_rdraws_like_set_seed():
+    # create.DN calls set.seed(seed) before it draws, so one RDraws passed to two calls gives
+    # R's result both times
+    case = CREATE["iris_euclidean_random"]
+    draws = RDraws(case.args["seed"])
+    for _ in range(2):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DataNuggetWarning)
+            dn = create_dn(case.array("x"), **create_args(case), seed=draws)
+        np.testing.assert_array_equal(dn.assignments + 1, case.array("assignments"))
+        np.testing.assert_array_equal(dn.weights, case.array("weights"))
+        np.testing.assert_array_equal(dn.centers, case.array("centers"))
+        np.testing.assert_array_equal(dn.scales, case.array("scales"))
+    # the caller's RDraws is left where it was, and other Draws pass through as they are
+    assert draws.random_seed().tolist() == RDraws(case.args["seed"]).random_seed().tolist()
+    replay = ReplayDraws([])
+    assert as_draws(replay) is replay
+
+
 def test_numpy_stays_the_default():
     assert isinstance(as_draws(5), NumpyDraws)
-    draws = RDraws(5)
-    assert as_draws(draws) is draws
+    assert isinstance(as_draws(np.random.default_rng(5)), NumpyDraws)

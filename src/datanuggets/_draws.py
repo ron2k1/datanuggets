@@ -100,7 +100,9 @@ def r_use_hash(n: int, size: int) -> bool:
 class RDraws:
     """R's own draws: set.seed(seed) under R's default RNGkind (Mersenne-Twister, Inversion,
     Rejection), then sample.int() as R 4.6.1 runs it, hash branch included. Pass RDraws(seed)
-    as seed= and create_dn and refine_dn draw exactly what R's create.DN and refine.DN draw."""
+    as seed= and create_dn and refine_dn draw exactly what R's create.DN and refine.DN draw.
+    Each call starts from seed, as the set.seed(seed) inside them does, so one RDraws can be
+    passed to many calls."""
 
     def __init__(self, seed):
         self._seed = _r_seed(seed)
@@ -242,6 +244,8 @@ class ReplayDraws:
 
 
 def as_draws(seed) -> Draws:
+    if isinstance(seed, RDraws):  # create.DN's set.seed(seed): start from the seed every call
+        return seed.fork()
     if isinstance(seed, Draws):
         return seed
     if isinstance(seed, np.random.Generator) or (
