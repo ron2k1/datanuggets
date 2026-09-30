@@ -62,6 +62,15 @@ for (k in 2:4) {
   add_case(sprintf("den_iris_first%d_petalwidth", k), iris4[1:k, , drop = FALSE], iris$Petal.Width[1:k])
 }
 add_case("tie_npk", npkx)
+# Row weights whose total only a long double sum gets right. sum() adds 1, then 2^-53 exactly,
+# then rounds once to 64 bits and once to 53. sum_ld_near is sum_ld_stops, below, with 2^-62 for
+# 2^-64: math.fsum agrees with R, and a double sum drops 2^-53 and gives 1. sum_ld_ties_down: the
+# 64-bit rounding leaves a tie that goes down to 1 + 2^-51, where fsum rounds up.
+# sum_ld_double_loses: a double sum drops both 2^-53 and gives 1, where R keeps them.
+x_ld <- cbind(c(1, 4, 2), c(3, 1, 5))
+add_case("sum_ld_near", x_ld, c(1, 2^-53, 2^-62))
+add_case("sum_ld_ties_down", x_ld, c(1 + 2^-51, 2^-53, 2^-64))
+add_case("sum_ld_double_loses", x_ld, c(1, 2^-53, 2^-53))
 
 # The band inside which an eigenvalue's sign isn't determined, as tests/rfixtures.py computes it
 band <- function(v) 1024 * .Machine$double.eps * max(abs(v), 1e-300)
@@ -79,6 +88,7 @@ for (id in names(cases)) {
     values = r$values, cap_x_0 = r$x_0, cap_s = r$s
   )
   if (cs$corr) arrays$cap_cov <- run_wpca(cs$x, cs$wrow, cs$wcol, FALSE)$s
+  if (startsWith(id, "sum_ld_")) arrays$sum_wrow <- sum(cs$wrow)
 
   # R's one warning is sqrt's, raised once exactly when an eigenvalue is negative
   stopifnot(all(r$warnings == "NaNs produced"), length(r$warnings) == any(r$values < 0))
@@ -102,6 +112,9 @@ for (id in names(cases)) {
     stopifnot(p == 49L, (1 / p) * p != 1)
   }
   if (id == "faithful1d") stopifnot(p == 1L)
+  if (id == "sum_ld_near") stopifnot(sum(cs$wrow) == 1 + 2^-52, (1 + 2^-53) + 2^-62 == 1)
+  if (id == "sum_ld_ties_down") stopifnot(sum(cs$wrow) == 1 + 2^-51)
+  if (id == "sum_ld_double_loses") stopifnot(sum(cs$wrow) == 1 + 2^-52, (1 + 2^-53) + 2^-53 == 1)
 
   write_case("wpca", id, list(corr = cs$corr), arrays, extra = list(warnings = I(r$warnings)))
   cat(sprintf("%-28s n=%4d p=%2d corr=%-5s warnings=%d min value %.3e band %.3e NaN sdev=%d\n",
@@ -124,5 +137,17 @@ stopifnot(inherits(err, "error"), conditionMessage(err) == "infinite or missing 
 write_case("wpca", "one_iris_first5_petalwidth", list(corr = FALSE),
            list(x = x, wrow = wrow, wcol_in = rep(1, 4)), extra = list(error = conditionMessage(err)))
 cat(sprintf("%-28s stops: %s\n", "one_iris_first5_petalwidth", conditionMessage(err)))
+
+# 1 + 2^-53 + 2^-64 is above 1, but the 64-bit rounding leaves 1 + 2^-53, a tie that the 53-bit
+# rounding sends to 1. So R's sum(wrow) - 1 is 0 and eigen() stops, where math.fsum gives
+# 1 + 2^-52 and a covariance.
+wrow <- c(1, 2^-53, 2^-64)
+stopifnot(sum(wrow) - 1 == 0, .Machine$longdouble.digits == 64L)
+err <- tryCatch({ WCluster::Wpca(x_ld, wrow, c(1, 1), FALSE); NULL }, error = function(e) e)
+stopifnot(inherits(err, "error"), conditionMessage(err) == "infinite or missing values in 'x'")
+write_case("wpca", "sum_ld_stops", list(corr = FALSE),
+           list(x = x_ld, wrow = wrow, wcol_in = c(1, 1), sum_wrow = sum(wrow)),
+           extra = list(error = conditionMessage(err)))
+cat(sprintf("%-28s stops: %s\n", "sum_ld_stops", conditionMessage(err)))
 
 untrace("Wpca", where = asNamespace("WCluster"))

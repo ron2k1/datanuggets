@@ -25,8 +25,10 @@ EPS = float(np.finfo(float).eps)
 # The plan's rule as literals, so a looser rule in rfixtures can't loosen the near misses too
 PLAN_FLOOR, PLAN_C, PLAN_K, PLAN_TIE = 1e-10, 256.0, 1024.0, 1e-12
 GROUP = load_group("wpca")
-(STOP,) = [c for c in GROUP if c.id == "one_iris_first5_petalwidth"]
-CASES = [c for c in GROUP if c is not STOP]
+# Cases where R's Wpca stops, recorded as inputs and R's error
+STOPS = {c.id: c for c in GROUP if "error" in c.manifest}
+STOP = STOPS["one_iris_first5_petalwidth"]
+CASES = [c for c in GROUP if c.id not in STOPS]
 BY_ID = {c.id: c for c in CASES}
 QUIRK = "petalwidth_1d_corr"
 MATCHED = [c for c in CASES if c.id != QUIRK]
@@ -108,7 +110,8 @@ def test_fixtures_cover_the_edge_cases():
     assert is_tied(BY_ID["tie_npk"].array("values")).any()
     assert any(not np.array_equal(c.array("cap_s"), c.array("cap_s").T) for c in CORR)
     assert QUIRK in BY_ID and BY_ID[QUIRK].args["corr"]
-    assert STOP.manifest["error"] == "infinite or missing values in 'x'"
+    assert set(STOPS) == {"one_iris_first5_petalwidth", "sum_ld_stops"}
+    assert all(c.manifest["error"] == "infinite or missing values in 'x'" for c in STOPS.values())
     assert set(STOP.manifest["arrays"]) == {"x", "wrow", "wcol_in"}
 
 
