@@ -268,3 +268,45 @@ def as_double(s, m, e):
         return 0, Z64, 0
     k = 64 - bitlen(q)
     return s, q << np.uint64(k), x - k
+
+
+@njit(cache=True)
+def cov_rows(bits, rows, out):
+    """cov(x[rows]) into out, for 2 or more rows: each column mean in two long double passes,
+    stored as a double, then long double sums of the products of deviations divided by n - 1.
+    Returns False, leaving out unfinished, where a column mean is past DBL_MAX."""
+    n = rows.size
+    p = bits.shape[1]
+    ds = np.empty((p, n), np.int64)
+    dm = np.empty((p, n), np.uint64)
+    de = np.empty((p, n), np.int64)
+    for j in range(p):
+        s, m, e = 0, Z64, 0
+        for i in range(n):
+            vs, vm, ve = from_bits(bits[rows[i], j])
+            s, m, e = add(s, m, e, vs, vm, ve)
+        ms, mm, me = div_count(s, m, e, n)
+        if as_double(ms, mm, me)[2] <= MAX_EXP:  # R: if (R_FINITE((double) tmp))
+            s, m, e = 0, Z64, 0
+            for i in range(n):
+                vs, vm, ve = from_bits(bits[rows[i], j])
+                ts, tm, te = sub(vs, vm, ve, ms, mm, me)
+                s, m, e = add(s, m, e, ts, tm, te)
+            cs, cm, ce = div_count(s, m, e, n)
+            ms, mm, me = add(ms, mm, me, cs, cm, ce)
+        ms, mm, me = as_double(ms, mm, me)  # R keeps the column means as doubles
+        if me > MAX_EXP:
+            return False
+        for i in range(n):
+            vs, vm, ve = from_bits(bits[rows[i], j])
+            ds[j, i], dm[j, i], de[j, i] = sub(vs, vm, ve, ms, mm, me)
+    for a in range(p):
+        for b in range(a + 1):
+            s, m, e = 0, Z64, 0
+            for i in range(n):
+                ps, pm, pe = mul(ds[a, i], dm[a, i], de[a, i], ds[b, i], dm[b, i], de[b, i])
+                s, m, e = add(s, m, e, ps, pm, pe)
+            qs, qm, qe = div_count(s, m, e, n - 1)
+            out[a, b] = to_double(qs, qm, qe)
+            out[b, a] = out[a, b]
+    return True

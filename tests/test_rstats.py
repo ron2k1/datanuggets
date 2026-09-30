@@ -3,8 +3,10 @@
 import numpy as np
 import pytest
 
+import datanuggets._rstats as rstats
 from datanuggets._rcompat import unique_first
 from datanuggets._rstats import (
+    _r_cov_py,
     r_cov,
     r_eigen_sym,
     r_mad,
@@ -14,7 +16,7 @@ from datanuggets._rstats import (
     r_sum,
     r_vec_mean,
 )
-from rfixtures import ATOL, RTOL, load_group
+from rfixtures import ATOL, RTOL, fixture_data, load_group, same_bits
 
 CASES = load_group("rcompat_stats")
 
@@ -70,3 +72,64 @@ def test_mean_of_non_finite_values_matches_r(case):
 @pytest.mark.parametrize("case", _kind("unique"), ids=lambda c: c.id)
 def test_unique_first_matches_r(case):
     np.testing.assert_array_equal(unique_first(case.array("x")) + 1, case.array("first"))
+
+
+DATA = fixture_data()
+BIGGEST = max((k for k in DATA if DATA[k][1]), key=lambda k: DATA[k][0].size)
+
+
+def _nuggets(a):
+    """Each nugget's rows in ascending order, for 0-based assignments a."""
+    order = np.argsort(a, kind="stable")
+    return np.split(order, np.cumsum(np.bincount(a))[:-1])
+
+
+@pytest.mark.parametrize("key", sorted(DATA))
+def test_r_cov_matches_the_replay_on_every_fixture_nugget(key):
+    x, sets = DATA[key]
+    for rows in [np.arange(x.shape[0])] + [g for a in sets for g in _nuggets(a)]:
+        if rows.size >= 2:
+            assert same_bits(r_cov(x[rows]), _r_cov_py(x[rows])), rows[:5]
+
+
+def test_r_cov_uses_the_compiled_path_for_finite_data(monkeypatch):
+    def replay(x):
+        raise AssertionError("r_cov fell back to the Python replay")
+
+    monkeypatch.setattr(rstats, "_r_cov_py", replay)
+    x = DATA[BIGGEST][0]
+    assert r_cov(x).shape == (x.shape[1], x.shape[1])
+
+
+EDGE_COLUMNS = {
+    "subnormal": [5e-324, -5e-324, 1e-310, 0.0, 2.5e-320, -1e-315],
+    "signed_zero": [0.0, -0.0, -0.0, 0.0, -0.0, 0.0],
+    "constant": [3.7] * 6,
+    "big_offset": [1e15 + 0.125 * i for i in range(6)],
+    "near_one": [1.0, 1.0 + 2**-52, 1.0, 1.0 - 2**-53, 1.0, 1.0 + 2**-51],
+    "huge": [1e300, -1e300, 1e300, -1e300, 1e300, 1.7e308],
+}
+
+
+def test_r_cov_edge_columns_match_the_replay():
+    # every pair of columns meets in one cov() call, and "huge" gives covariances past DBL_MAX
+    x = np.column_stack(list(EDGE_COLUMNS.values()))
+    got = r_cov(x)
+    assert same_bits(got, _r_cov_py(x))
+    assert np.isinf(got[-1, -1])
+
+
+def test_r_cov_takes_any_layout_and_dtype():
+    x = DATA[BIGGEST][0]
+    want = _r_cov_py(x)
+    for view in (np.asfortranarray(x), np.repeat(x, 2, axis=0)[::2]):
+        assert same_bits(r_cov(view), want)
+    ints = np.rint(x * 10).astype(np.int64)
+    assert same_bits(r_cov(ints), _r_cov_py(ints.astype(np.float64)))
+
+
+@pytest.mark.parametrize(("bad", "error"), [(np.inf, OverflowError), (np.nan, ValueError)])
+def test_r_cov_raises_on_inf_and_nan_like_the_replay(bad, error):
+    x = np.array([[1.0, 2.0], [bad, 3.0], [4.0, 5.0]])
+    with pytest.raises(error, match="cannot convert"):
+        r_cov(x)

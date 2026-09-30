@@ -6,6 +6,7 @@ import json
 import math
 from dataclasses import dataclass
 from fractions import Fraction
+from functools import cache
 from pathlib import Path
 
 import numpy as np
@@ -118,3 +119,33 @@ def exact_ac_count(value, target, delete_percent) -> int:
             value -= cut
         count += 1
     return count
+
+
+def same_bits(a, b) -> bool:
+    """Equal as float64 bit patterns: -0.0 isn't 0.0, and a NaN equals only the same NaN."""
+    a, b = np.asarray(a, dtype=np.float64), np.asarray(b, dtype=np.float64)
+    return a.shape == b.shape and np.array_equal(a.view(np.uint64), b.view(np.uint64))
+
+
+@cache
+def fixture_data() -> dict[str, tuple[np.ndarray, list[np.ndarray]]]:
+    """Each distinct finite x in the create_dn, refine_dn, rcompat_means and rcompat_stats
+    fixtures, keyed "group/case" by the first case holding it, with the distinct 0-based nugget
+    assignments recorded for it. The compiled long double tests compare against the Python
+    replay, not R, so any real matrix serves."""
+    first: dict[tuple, str] = {}
+    out: dict[str, tuple[np.ndarray, dict[bytes, np.ndarray]]] = {}
+    for group in ("create_dn", "refine_dn", "rcompat_means", "rcompat_stats"):
+        for case in load_group(group):
+            if not case.has("x"):
+                continue
+            x = np.ascontiguousarray(case.array("x"), dtype=np.float64)
+            if x.ndim != 2 or not np.isfinite(x).all():
+                continue
+            key = first.setdefault((x.shape, x.tobytes()), f"{group}/{case.id}")
+            sets = out.setdefault(key, (x, {}))[1]
+            for name in ("assignments", "in_assignments"):
+                if case.has(name):
+                    a = case.array(name).astype(np.int64) - 1
+                    sets.setdefault(a.tobytes(), a)
+    return {key: (x, list(sets.values())) for key, (x, sets) in out.items()}

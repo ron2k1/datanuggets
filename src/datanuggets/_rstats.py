@@ -1,10 +1,11 @@
 """R's summary statistics as refine.DN uses them.
 
 sum, mean, median, mad, type-7 quantile, cov and %*% are replayed bit for bit. R accumulates
-sums in long double (x87 extended precision on x86-64), which _ldouble reproduces with Python
-integers. eigen() calls LAPACK's dsyevr with R's arguments, so eigenvalues agree with R's to
-rounding on the scale of the largest one, not bit for bit: LAPACK builds differ in their kernels.
-A second eigenvalue near zero can be far off relative to itself.
+sums in long double (x87 extended precision on x86-64). cov runs that arithmetic compiled, in
+_ldjit. sum and mean replay it with Python integers through _ldouble, which is also the reference
+the compiled code is tested against. eigen() calls LAPACK's dsyevr with R's arguments, so
+eigenvalues agree with R's to rounding on the scale of the largest one, not bit for bit: LAPACK
+builds differ in their kernels. A second eigenvalue near zero can be far off relative to itself.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ import math
 import numpy as np
 from scipy.linalg import LinAlgError, lapack
 
+from datanuggets import _ldjit
 from datanuggets import _ldouble as ld
 from datanuggets._defaults import MAD_CONSTANT
 
@@ -82,7 +84,22 @@ def r_quantile7(v, prob: float) -> float:
 
 def r_cov(x: np.ndarray) -> np.ndarray:
     """cov(x): each column mean in two long double passes, stored as a double, then long double
-    sums of the products of deviations divided by n - 1."""
+    sums of the products of deviations divided by n - 1. Compiled for finite data. Inf or NaN
+    goes to the Python replay, which raises OverflowError or ValueError."""
+    x = np.ascontiguousarray(x, dtype=np.float64)
+    n, p = x.shape
+    if n < 2:
+        raise ValueError("cov needs at least two rows")
+    out = np.empty((p, p))
+    rows = np.arange(n, dtype=np.int64)
+    if np.isfinite(x).all() and _ldjit.cov_rows(x.view(np.uint64), rows, out):
+        return out
+    return _r_cov_py(x)
+
+
+def _r_cov_py(x: np.ndarray) -> np.ndarray:
+    """cov(x) replayed with Python integers: r_cov's path for data with Inf or NaN, which it
+    rejects as from_float does, and the reference the compiled path is tested against."""
     n, p = x.shape
     if n < 2:
         raise ValueError("cov needs at least two rows")
