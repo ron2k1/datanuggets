@@ -27,7 +27,7 @@ from datanuggets._defaults import (
     NSTART,
     SEED,
 )
-from datanuggets._draws import Draws, NumpyDraws, as_draws
+from datanuggets._draws import Draws, NumpyDraws, RDraws, as_draws
 from datanuggets._hartigan_wong import KMeansError, kmeans
 from datanuggets._rstats import (
     group_moments,
@@ -106,7 +106,7 @@ def refine_dn(
         raise ValueError(f"nstart must be finite, got {nstart!r}")
     check_n_jobs(n_jobs)
     draws = as_draws(seed)
-    if n_jobs != 1 and not isinstance(draws, NumpyDraws):
+    if n_jobs != 1 and not isinstance(draws, (NumpyDraws, RDraws)):
         raise ValueError(
             "replayed or custom Draws need n_jobs=1: their stream can't be copied into worker "
             "processes. Pass an int seed or a numpy Generator to split in parallel."
