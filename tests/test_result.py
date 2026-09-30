@@ -1,10 +1,39 @@
+import importlib
 from dataclasses import FrozenInstanceError, fields
 
 import numpy as np
 import pytest
 
+import datanuggets
+import datanuggets.wcluster
 from datanuggets import CentersResult, DataNuggets
 from datanuggets.result import WpcaResult, WwcssResult
+
+# Each WCluster leaf and the module that defines it. The modules are reached through importlib,
+# because the exported function wpca shadows its module as an attribute of datanuggets.wcluster.
+WCLUSTER_LEAVES = {
+    "cluster_predict": "datanuggets.wcluster.predict",
+    "distw": "datanuggets.wcluster.wstats",
+    "wmean": "datanuggets.wcluster.wstats",
+    "wpca": "datanuggets.wcluster.wpca",
+    "wss": "datanuggets.wcluster.wstats",
+    "wwcss": "datanuggets.wcluster.wstats",
+}
+
+
+def test_wcluster_leaves_are_exported_from_both_packages():
+    for name, module in WCLUSTER_LEAVES.items():
+        defined = getattr(importlib.import_module(module), name)
+        assert getattr(datanuggets.wcluster, name, None) is defined, name
+        assert getattr(datanuggets, name, None) is defined, name
+    assert datanuggets.wcluster.__all__ == sorted(WCLUSTER_LEAVES)
+    assert datanuggets.WpcaResult is WpcaResult
+    assert datanuggets.WwcssResult is WwcssResult
+    top = set(WCLUSTER_LEAVES) | {"WpcaResult", "WwcssResult"}
+    assert top <= set(datanuggets.__all__)
+    assert datanuggets.__all__ == sorted(datanuggets.__all__)
+    for name in datanuggets.__all__:
+        assert hasattr(datanuggets, name), name
 
 
 def _dn(**over):
