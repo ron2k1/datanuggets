@@ -49,6 +49,7 @@ _QUIET = 1 << 51  # the top fraction bit, set in a quiet NaN
 _FRACTION = (1 << 52) - 1
 _INDEFINITE = 0xFFF8000000000000  # the x87's default NaN, which Inf - Inf gives
 _R_NAN = _ldjit.R_NAN  # the same bits as a float: what 0 / 0 gives R on x86
+_NA_BITS = 0x7FF00000000007A2  # R's NA_real_: a signaling NaN whose payload is 1954
 
 
 def _non_finite_sum(v, *, quiet: bool = False) -> float:

@@ -158,7 +158,6 @@ In the `WCluster` functions `Wpca` becomes `wpca`, `cluster.predict` becomes `cl
 | Item | R | Python |
 | --- | --- | --- |
 | `wmean` layout | `p` rows by `k` columns | `(k, p)`, like every other center array in the package |
-| `distw` cells R never fills | `NA`, distinct from a computed `NaN` | `NaN` in both places |
 | `distw` with one cluster | stops ("missing value where TRUE/FALSE needed") | `ValueError` naming the cause |
 | cluster labels | `wwcss` groups by `factor()` (15 significant digits), `distw` by `sort(unique())`, text by locale collation | whole numbers smaller than 1e15 in size, sorted. Text, bool, fractional and NaN labels raise |
 | `cluster.predict` result | 1-based position in sorted label order, not the label | 0-based position |
@@ -194,7 +193,7 @@ Shape splits cluster the rows projected on the first eigenvector. Those projecti
 
 `wwcss` matches R bit for bit in all 49 cases. That holds for the per-cluster values and the total that `group_sum=True` returns, and for the plain total. The table is in [docs/validation/wwcss.md](docs/validation/wwcss.md).
 
-`distw` needs two clusters, so it runs on the 45 of those cases that have more than one. The whole matrix matches R in all 45. Every entry R computes matches bit for bit, including entries at zero or just below it, and the port has NaN in each cell where R leaves NA. The table is in [docs/validation/distw.md](docs/validation/distw.md).
+`distw` needs two clusters, so it runs on the 45 of those cases that have more than one. The whole matrix matches R in all 45. Every entry R computes matches bit for bit, including entries at zero or just below it. Each cell R leaves NA holds R's NA in the port too, the NaN with payload 1954, so `np.isnan` finds it and a bit-level comparison matches R. The table is in [docs/validation/distw.md](docs/validation/distw.md).
 
 `cluster_predict` runs on the 39 cases recorded with new rows to place, 6,422 rows in all. In every case the squared distances from R's centers match R's, each number bit for bit and each NaN in the same place. The positions match too, compared with R's 1-based ones minus one. Ties go to the first cluster in sorted label order, as in R. The table is in [docs/validation/cluster_predict.md](docs/validation/cluster_predict.md).
 

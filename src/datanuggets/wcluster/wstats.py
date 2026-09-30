@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from datanuggets._rcompat import _NA_BITS
 from datanuggets._rstats import r_matvec, r_sum, r_weighted_mean
 from datanuggets._validate import as_labels, as_matrix, as_weights
 from datanuggets.result import WwcssResult
@@ -97,7 +98,8 @@ def distw(x, cl, w=None) -> np.ndarray:
 
     Entry [i, j] with j < i is the wss of clusters i and j pooled, minus the wss of each on its
     own, with clusters in sorted label order. It's R's value bit for bit, so rounding can leave
-    it at zero or a little below. The diagonal and the upper triangle are NaN where R has NA.
+    it at zero or a little below. The diagonal and the upper triangle hold R's NA, the NaN with
+    payload 1954 (7ff00000000007a2), so np.isnan finds them and a bit-level compare matches R.
     A pair that touches a cluster whose weights sum to zero is NaN, as in R. It needs two
     clusters or more and raises ValueError on one, where R stops with "missing value where
     TRUE/FALSE needed". w is one weight per row of x, and None means ones. R's own default,
@@ -107,7 +109,7 @@ def distw(x, cl, w=None) -> np.ndarray:
     if k < 2:
         raise ValueError("distw needs at least two clusters")
     alone = _group_wss(x, codes, k, w)
-    out = np.full((k, k), np.nan)
+    out = np.full((k, k), _NA_BITS, dtype=np.uint64).view(np.float64)  # bits, never arithmetic
     for i in range(1, k):
         for j in range(i):
             out[i, j] = _distwij(x, codes, w, i, j, alone)

@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from datanuggets.wcluster.wstats import distw, wmean, wss, wwcss
-from rfixtures import FIXTURE_ROOT, assert_same_values, from_hex, load_group
+from rfixtures import FIXTURE_ROOT, assert_same_values, from_hex, hex_bits, load_group
 
 CASES = load_group("wstats") + load_group("wstats_constructed")
 REAL = {c.id: c for c in load_group("wstats")}
@@ -18,6 +18,7 @@ DISTW = [c for c in CASES if c.has("distw")]
 K3 = ["iris_species_petallength_k3", "mtcars_cyl_qsec_k3", "usarrests_regions123_pop_k3"]
 K3 += ["plantgrowth_group_k3"]
 ORDERS = pytest.mark.parametrize("order", ["C", "F"])
+R_NA = "7ff00000000007a2"  # NA_real_: a signaling NaN whose payload is 1954
 
 
 def _ids(cases):
@@ -86,7 +87,9 @@ def test_distw_matches_r(case, order):
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         got = distw(x, cl, w)
-    assert np.isnan(got[np.triu_indices(k)]).all()
+    # the cells distw never fills hold R's NA itself, not just some NaN
+    assert set(hex_bits(want[np.triu_indices(k)])) == {R_NA}
+    assert set(hex_bits(got[np.triu_indices(k)])) == {R_NA}
     low = np.tril_indices(k, -1)
     assert_same_values(got[low], want[low])
     assert_same_values(got, want)

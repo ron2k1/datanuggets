@@ -346,8 +346,8 @@ def distw_report() -> str:
         "# distw parity with R\n\n"
         f"{_wcluster_source('wstats', cases)} Only cases with at least two clusters hold R's"
         " distw, because R stops on one cluster. R fills the lower triangle below the diagonal"
-        " and leaves NA on the diagonal and above it. The port holds NaN there, so the whole"
-        " matrix is compared." + _STATS_NOTE + "\n\n"
+        " and leaves NA on the diagonal and above it. The port writes R's NA bits there, and"
+        " the tests check those bits, so the whole matrix is compared." + _STATS_NOTE + "\n\n"
         "| case | data | clusters | distw |\n"
         "|---|---|---|---|\n"
     )
