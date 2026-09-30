@@ -16,7 +16,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 
-from datanuggets import DataNuggets, DataNuggetWarning, create_dn, refine_dn
+from datanuggets import DataNuggets, DataNuggetWarning, _rcompat, _rstats, create_dn, refine_dn
 from datanuggets._draws import ReplayDraws
 from rfixtures import Case
 
@@ -57,6 +57,15 @@ def stage_lines(messages: list[str]) -> list[str]:
     return [m.strip() for m in messages if m != "completed!"]
 
 
+def warm_up(x: np.ndarray) -> None:
+    """Load (or on a cold cache compile) every numba kernel, so no timing includes it."""
+    head = np.ascontiguousarray(x[:50], dtype=np.float64)
+    _rcompat.r_mean(head, 0)
+    _rstats.r_cov(head)
+    list(_rstats.group_moments(head, [np.arange(50)]))
+    list(_rstats.group_moments(head, [np.arange(50)], n_jobs=2))
+
+
 def run(fn, case: Case, want_messages=None):
     handler = Infos()
     logger = logging.getLogger("datanuggets")
@@ -89,6 +98,7 @@ def main(size: str) -> None:
     cid = f"covertype_{size}"
     cr = load(cid + "_create")
     x = cr.array("x")
+    warm_up(x)
     report = {"n": int(x.shape[0]), "p": int(x.shape[1])}
 
     dn, secs, extra = run(lambda d: create_dn(x, seed=d), cr, stage_lines(cr.manifest["messages"]))
