@@ -28,9 +28,9 @@ for (target in names(targets)) {
   cat(target, length(means), "nugget sets\n")
 }
 
-# Row order inside a nugget changes a mean only once the long-double running sum rounds, and none
-# of the real sets above rounds. One constructed set pins R's order (which() is ascending):
-# 1e20 - 1e20 + 1 is 1, but in reverse 1 - 1e20 + 1e20 is 0.
+# Row order inside a nugget changes a mean only once the long-double running sum rounds. Some real
+# sets above round, but reversing their rows changes none of their means. One constructed set pins
+# R's order (which() is ascending): 1e20 - 1e20 + 1 is 1, but in reverse 1 - 1e20 + 1e20 is 0.
 x <- cbind(c(1e20, 5, -1e20, 7, 1, 3), 1:6)
 assignments <- rep(1:2, 3)
 dn <- as_dn(matrix(0, 2, 2), c(3, 3), c(0, 0), assignments)

@@ -28,7 +28,7 @@ def test_get_dn_means_matches_r(means, name):
 
 
 def test_sums_each_nugget_in_row_order_like_r():
-    # No real set rounds its long-double sums, so a constructed one recorded from R pins R's order
+    # Reversed rows change no real set's means, so a constructed set recorded from R pins R's order
     x = ORDER.array("x")
     dn = DataNuggets(
         np.zeros((2, 2)), np.array([3, 3]), np.zeros(2), ORDER.array("assignments") - 1
