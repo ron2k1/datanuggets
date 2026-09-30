@@ -37,7 +37,7 @@ Out of scope: numba threads inside `nearest_index` or `dist_matrix` (spec 9.3 do
 
 - Branch `feat/speed`, tracking `origin/feat/speed`. `main` advances only by PR, and merging is RON2K's call.
 - Parity: every existing fixture test passes unchanged. Compiled results equal the kept Python references bit for bit. Compare floats with `same_bits` (`.view(np.uint64)`), so -0.0 and 0.0 count as different.
-- Every kernel is `@compiled(nogil=True)` from `datanuggets._compiled`, with no `fastmath` and no `parallel`. `compiled` is numba's `njit(cache=True)`, falling back to plain `njit` where numba has nowhere to write its cache. `tests/test_compiled.py` finds every `*jit` module by itself and checks both, so a kernel written with `njit` directly fails there. Each loop runs its floating-point operations in the same order as the Python code it replaces. Loops may be reordered only where no sum or compare changes order, like looping over centers innermost.
+- Every kernel in the three new modules is `@compiled(nogil=True)` from `datanuggets._compiled`, with no `fastmath` and no `parallel`. `_ldjit`'s kernels keep what they have. `compiled` is numba's `njit(cache=True)`, falling back to plain `njit` where numba has nowhere to write its cache. `tests/test_compiled.py` finds every `*jit` module by itself and checks both, and it fails a kernel written with `njit` directly or with `compiled` outside a `*jit` module. Each loop runs its floating-point operations in the same order as the Python code it replaces. Loops may be reordered only where no sum or compare changes order, like looping over centers innermost.
 - Kernels see only finite float64 data, which `as_matrix` guarantees for every public entry point. The Python wrappers make every array C-contiguous float64 before a kernel reads it, because numba indexes raw memory without bounds checks. For the same reason a wrapper whose two inputs must have the same number of columns checks that and raises `ValueError`. Every array a kernel only reads goes through `_compiled.frozen`, a read-only view, because numba compiles a separate kernel for read-only arrays and one kernel should serve every caller.
 - `_cross_distances_py`, `arma_sum_last`, `_select_centers_py` and `_kmns_py` (with `_HW`) stay in the package as test references and don't run in normal use.
 - Callers reach kernels through the module, `from datanuggets import _rfastjit` then `_rfastjit.name(...)`, never `from datanuggets._rfastjit import name`. Kernel names are unique across the `*jit` modules, because the profiler books each one as `compiled_<name>`.
@@ -405,7 +405,7 @@ DIST_BLOCK_ROWS = 1024
 ASSIGN_BLOCK_ROWS = 1024  # 1024 x 2000 centers = 16 MB per temporary
 ```
 
-Run: `grep -rn "BLOCK_ROWS\|block_rows" src tests benchmarks`
+Run: `git grep -n "BLOCK_ROWS\|block_rows" -- src tests benchmarks`
 Expected: no output.
 
 - [ ] **Step 5: Run the tests**
