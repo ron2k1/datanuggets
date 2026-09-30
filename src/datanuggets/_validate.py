@@ -21,6 +21,46 @@ def as_matrix(x, name: str = "x") -> np.ndarray:
     return arr
 
 
+_LABEL_LIMIT = 1e15  # R's factor() tells labels apart by 15 significant digits
+
+
+def as_weights(w, n: int, name: str = "w", per: str = "row") -> np.ndarray:
+    """One weight per row (or column) as float64. None means ones: R's own default,
+    rep(1, length(x)), is one weight per column in wmean and wwcss, which stops unless x is
+    square, and one per cell in distw, which stops unless x has one column."""
+    if w is None:
+        return np.ones(n)
+    arr = np.asarray(w)
+    if arr.dtype.kind not in "iuf":
+        raise TypeError(f"{name} must be numeric")
+    if arr.shape != (n,):
+        raise ValueError(f"{name} must have one weight per {per} ({n}), got shape {arr.shape}")
+    arr = np.ascontiguousarray(arr, dtype=np.float64)
+    if not np.isfinite(arr).all():
+        raise ValueError(f"{name} contains NaN or infinite values")
+    return arr
+
+
+def as_labels(cl, n: int, name: str = "cl") -> tuple[np.ndarray, np.ndarray]:
+    """The sorted distinct labels and each row's 0-based position among them. Labels are whole
+    numbers smaller than 1e15 in size: the labels R's factor() and sort(unique()) group and
+    order alike, which is how wwcss and distw read them."""
+    arr = np.asarray(cl)
+    if arr.dtype.kind not in "iuf":
+        raise TypeError(f"{name} must hold numeric cluster labels")
+    if arr.shape != (n,):
+        raise ValueError(f"{name} must have one label per row ({n}), got shape {arr.shape}")
+    if n == 0:
+        raise ValueError(f"{name} is empty: there are no rows to cluster")
+    size = np.abs(arr.astype(np.float64))
+    if not np.isfinite(size).all() or not np.array_equal(size, np.floor(size)):
+        raise ValueError(f"{name} must hold whole numbers")
+    if size.max() >= _LABEL_LIMIT:
+        raise ValueError(f"{name} must hold labels smaller than 1e15 in size")
+    levels, codes = np.unique(arr, return_inverse=True)
+    return levels, codes.reshape(-1).astype(np.intp)
+
+
 def check_choice(name: str, value, choices: tuple[str, ...]) -> str:
     if value not in choices:
         raise ValueError(f"{name} must be one of {', '.join(map(repr, choices))}, got {value!r}")
