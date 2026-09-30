@@ -240,6 +240,29 @@ def test_eigen_rule_rejects_wrong_outputs(kind, cid):
         assert not any(m.startswith("R2") for m in wrong)
 
 
+# Outputs no LAPACK build gives, and the rule that has to catch each. A comparison with NaN is
+# false, so a rule written as "flag if off > tol" would let NaN through.
+IMPOSSIBLE = {"nan_scores": "R5", "inf_score": "R5", "nan_rotation": "R1", "negative_sdev": "R3"}
+
+
+@pytest.mark.parametrize("cid", ["iris", "tie_npk"])
+@pytest.mark.parametrize("kind", list(IMPOSSIBLE))
+def test_eigen_rule_fails_closed(kind, cid):
+    case = BY_ID[cid]
+    sdev, rotation, scores = (a.copy() for a in r_outputs(case))
+    if kind == "nan_scores":
+        scores[:] = np.nan
+    elif kind == "inf_score":
+        scores[0, 0] = np.inf
+    elif kind == "nan_rotation":
+        rotation[:] = np.nan
+    else:
+        assert (sdev > 0).any()
+        sdev = -sdev
+    wrong = mismatches(case, sdev, rotation, scores)
+    assert any(m.startswith(IMPOSSIBLE[kind]) for m in wrong), wrong
+
+
 def test_eigen_rule_constants_are_the_plans():
     assert (EIG_FLOOR, EIG_C, EIG_K, EIG_TIE) == (PLAN_FLOOR, PLAN_C, PLAN_K, PLAN_TIE)
 
