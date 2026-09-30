@@ -1,5 +1,8 @@
 """R's long-double statistics, unique() and %*% replayed bit for bit; eigen() to Numeric tier."""
 
+import os
+import subprocess
+import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -171,6 +174,7 @@ def test_group_moments_uses_the_compiled_path_for_finite_data(monkeypatch, n_job
     groups = _nuggets(sets[0])
     assert len(list(group_moments(x, groups, n_jobs))) == len(groups)
 
+
 def test_group_moments_chunking_gives_the_same_result(monkeypatch):
     x, sets = DATA[BIGGEST]
     groups = _nuggets(sets[0])
@@ -201,10 +205,11 @@ def test_group_moments_caps_and_restores_threads(monkeypatch, n_jobs):
     assert numba.get_num_threads() == before
 
 
-def test_group_moments_from_two_threads_at_once():
+def test_group_moments_from_two_threads_at_once(monkeypatch):
     x, sets = DATA[BIGGEST]
     groups = _nuggets(sets[0])
     want = list(group_moments(x, groups))
+    monkeypatch.setattr(rstats, "MOMENTS_CHUNK", x.shape[1] ** 2)  # a launch per group
     start = threading.Barrier(2)
 
     def run():
@@ -215,6 +220,23 @@ def test_group_moments_from_two_threads_at_once():
         futures = [pool.submit(run) for _ in range(2)]
         results = [f.result() for f in futures]
     assert all(_same_moments(got, want) for got in results)
+
+
+def test_group_moments_from_two_threads_under_workqueue():
+    # workqueue aborts the process when two launches overlap, so a missing lock fails here on
+    # every machine, not only where workqueue is the default layer
+    test = f"{__file__}::test_group_moments_from_two_threads_at_once"
+    env = {**os.environ, "NUMBA_THREADING_LAYER": "workqueue"}
+    run = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", test],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=600,
+        check=False,
+    )
+    # an abort dumps its traceback from the top of stderr
+    assert run.returncode == 0, run.stdout[-3000:] + run.stderr[:3000]
 
 
 def test_group_moments_leaves_non_finite_groups_to_the_replay():
