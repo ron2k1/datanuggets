@@ -36,11 +36,11 @@ Ship a pip-installable Python package, `datanuggets`, that reimplements the R pa
 | (internal) `stats::kmeans` Hartigan-Wong, k=2 | `_hartigan_wong.py` | | 1 | Exact labels + Numeric |
 | `getDN.means` | `get_dn_means` | `means.py` | 2 | Exact |
 | `AC` | `arithmetic_complexity` | `complexity.py` | 2 | Exact (loop counts) + Numeric (value) |
-| `wmean` | `wmean` | `wcluster/wstats.py` | 2 | Numeric |
-| `wss` | `wss` | `wcluster/wstats.py` | 2 | Numeric |
-| `wwcss` | `wwcss` | `wcluster/wstats.py` | 2 | Numeric |
-| `distw` | `distw` | `wcluster/wstats.py` | 2 | Numeric |
-| `Wpca` | `wpca` | `wcluster/wpca.py` | 2 | Numeric (sdev), Up-to-sign (rotation, scores) |
+| `wmean` | `wmean` | `wcluster/wstats.py` | 2 | Exact |
+| `wss` | `wss` | `wcluster/wstats.py` | 2 | Exact |
+| `wwcss` | `wwcss` | `wcluster/wstats.py` | 2 | Exact |
+| `distw` | `distw` | `wcluster/wstats.py` | 2 | Exact |
+| `Wpca` | `wpca` | `wcluster/wpca.py` | 2 | Exact (center, scale, wcol, eigen input) + Eigen (sdev, rotation, scores) |
 | `cluster.predict` | `cluster_predict` | `wcluster/predict.py` | 2 | Exact |
 | `Wkmeans` | `wkmeans` | `wcluster/wkmeans.py` | 3 | Exact labels + Numeric |
 | `Whclust` | `whclust` | `wcluster/whclust.py` | 3 | Exact merge/order + Numeric height |
@@ -143,15 +143,19 @@ class Draws(Protocol):
 
 | Tier | Applies to | Assertion |
 |---|---|---|
-| Exact | assignments, weights, kept indices, cluster labels, merge matrix, order; `create_dn` centers and scales | `np.array_equal` |
-| Numeric | other centers and scales, WWCSS, eigenvalues, heights, PSI math | `assert_allclose(rtol=1e-8, atol=1e-10)` |
-| Up-to-sign | PCA rotation and scores | flip each column to match R's sign, then Numeric |
+| Exact | assignments, weights, kept indices, cluster labels, merge matrix, order, `create_dn` centers and scales, `wmean`, `wss`, `wwcss`, `distw`, `cluster_predict` positions and distances, `wpca` up to the eigen input | `np.array_equal`, with NaN equal to NaN |
+| Numeric | other centers and scales, `refine_dn`'s EV1 and EV2, heights, PSI math | `assert_allclose(rtol=1e-8, atol=1e-10)` |
+| Up-to-sign | `refine_dn`'s shape-split projections on the first eigenvector | flip each column to match R's sign, then Numeric |
+| Eigen | `wpca` sdev, rotation and scores | the residual and subspace rule below |
 | Distributional | `optimal_dn` propensity fits only | section 7 |
+
+The Eigen tier never compares eigen output entry by entry, and a column's sign is unspecified. The rotation must be orthonormal within the floor, 1e-10. Each column must solve the eigen input, read from its lower triangle as R's `eigen()` reads it, for R's eigenvalue with a residual inside a band of K = 1024 machine epsilons times the largest eigenvalue. Each `sdev` must be zero or more with its square inside that band of R's eigenvalue, and a NaN `sdev` is allowed only where R's eigenvalue is at most the band. Eigenvalues closer than the tie threshold, 1e-12 times the largest, form a cluster, and only a cluster's subspace is determined. Its projector must match R's within the larger of the floor and C = 256 machine epsilons over the cluster's gap to the other eigenvalues, taken relative to the largest. The scores projected onto each cluster must match R's row by row within that tolerance plus 8 p machine epsilons, times the length of the row of centered data. Each check passes only a value shown to be inside its bound, so a NaN or an infinity in the port's output fails the rule. The rule and its four constants live in `tests/rfixtures.py` beside `RTOL` and `ATOL`.
 
 ### Fixture datasets
 
 Parity fixtures use real data:
-- R built-ins: `iris` (150 x 4), `faithful` (272 x 2), `quakes` (1000 x 5)
+- R built-ins: `iris` (150 x 4), `faithful` (272 x 2), `quakes` (1000 x 5), `mtcars`, `volcano`, `ChickWeight`, `EuStockMarkets`, `USArrests` with `state.x77` and `state.region`, `PlantGrowth`, `rock`, `LifeCycleSavings`, `swiss`, `infert`, `trees` and `npk`, plus `airquality` and `women`, whose shapes alone feed `AC`
+- R's own `create.DN` outputs, read back from `tests/fixtures/create_dn/` as data for the `WCluster` fixtures
 - a pinned real subsample of UCI Covertype (20,000 x 10 continuous columns)
 - the Beavers et al. datasets, if the advisor provides them
 
@@ -281,7 +285,7 @@ Tests:
 ### 9.4 Other planned optimizations
 
 - `create_dn_centers`: stage 2 builds a `dn_num1` x `dn_num1` float64 matrix (800 MB at 1e4), as R does. A later optimization tracks the remaining rows with a mask instead of copying the submatrix every pass and vectorizes the row minimum over the active set. The greedy marking loop is sequential. It gets compiled only if the profile flags it.
-- `whclust`: R recomputes WSS from raw rows for every pair, O(n^3) with a large constant. The closed-form weighted Ward cost `W_A W_B / (W_A + W_B) * ||mu_A - mu_B||^2` is algebraically equal to R's `wss(A+B) - wss(A) - wss(B)` and ships only if merge order matches R on every fixture. Ties are broken column-major, like R's `which.min` on a matrix.
+- `whclust`: R recomputes WSS from raw rows for every pair, O(n^3) with a large constant. The closed-form weighted Ward cost `W_A W_B / (W_A + W_B) * ||mu_A - mu_B||^2` is algebraically equal to R's `wss(A+B) - wss(A) - wss(B)` and ships only if merge order matches R on every fixture. Ties are broken column-major, like R's `which.min` on a matrix. It doesn't ship. Run through `Whclust`'s own loop on iris with unit weights, it changes 6 of the 149 merge steps, because its rounding differs from R's subtraction of sums of squares.
 
 The earlier plan for a `np.longdouble` fast path on Linux x86-64 is dropped. The compiled kernels are exact on every platform, so there's one code path.
 
@@ -297,7 +301,7 @@ Benchmarks then confirm it: `create_dn` and `refine_dn` on Covertype at n in {1e
 
 | Item | R behavior | Python |
 |---|---|---|
-| `wmean`/`wwcss`/`distw` default `w = rep(1, length(x))` | wrong length (columns, not rows), so the default always errors | default `np.ones(n)`; listed as a deviation that fixes an upstream bug |
+| `wmean`/`wwcss`/`distw` default `w = rep(1, length(x))` | `length(x)` counts columns once `wmean` and `wwcss` turn `x` into a data frame, and cells in `distw`, so the default stops unless the data is square (`wmean`, `wwcss`) or has one column (`distw`) | `None` means `np.ones(n)`, a deviation that fixes an upstream bug |
 | create vs refine scale for single-obs nuggets | create floors to min/100, refine sets 0 | kept as-is, documented |
 | create keeps empty nuggets, refine drops them | | kept as-is, documented |
 | `Whclust` height | cumulative total WWCSS, not merge cost | kept (it is the R result); `.to_linkage()` notes it |
@@ -311,6 +315,22 @@ Benchmarks then confirm it: `create_dn` and `refine_dn` on Covertype at n in {1e
 | `AC` on a matrix or data.table | `class(x) %in% ...` has length 2, so R 4.6.1 stops | any 2-D input; listed as a deviation that fixes an upstream bug |
 | `AC` loops that cycle (`DN.num2 < -1` with `floor(DN.num1) > floor(DN.num2)`, a target `DN.num1/G` below -1 or strictly between -1 and 0, `2^60` with a cut that floors to 0) | never returns | `ValueError`, at once for a target below -1 (the loop never goes below -1), else from a cycle check |
 | `AC` with a non-finite `DN.num1`/`DN.num2` or an `x` with no rows | stops, loops, returns Inf (both Inf) or NaN (no rows) | `ValueError` |
+| `wmean` layout | `p` rows by `k` columns | `(k, p)`, like every other center array in the package |
+| `distw` cells R never fills | `NA`, distinct from a computed `NaN` | `NaN` in both places |
+| `distw` with one cluster | stops ("missing value where TRUE/FALSE needed") | `ValueError` naming the cause |
+| cluster labels | `wwcss` groups by `factor()` (15 significant digits), `distw` by `sort(unique())`, text by locale collation | whole numbers smaller than 1e15 in size, sorted. Text, bool, fractional and NaN labels raise |
+| `cluster.predict` result | 1-based position in sorted label order, not the label | 0-based position, documented |
+| `cluster.predict` argument order | `(x, w, cl, newx)`, and a swapped `w` and `cl` runs silently | `(x, cl, newx, *, w=None)` |
+| `cluster.predict` for a row with no finite distance (every center NaN, or another new row overflows) | `integer(0)` when no row has one, a list with empty entries when only some rows do | `ValueError` naming both causes |
+| `cluster.predict` distances after R's identity multiply | `0 * Inf` from one overflowing row turns its whole column NaN, and a lone `Inf` stays | the same, computed without the multiply |
+| 1-D `x` in the six WCluster leaves | accepted as one column | `ValueError`, as everywhere else |
+| integer `x` with integer weights | `wmean` and `cluster.predict`: an NA center on overflow with a warning. `Wpca`: the NA becomes 0 in its column sum, a wrong center with a warning. `wss`, `wwcss`, `distw`: no integer products | float64 arithmetic, no overflow |
+| NaN or infinite weights, text or bool weights | passed through or stopped late in `eigen` | `ValueError` or `TypeError` up front |
+| `Wpca` row weights summing to 1, a zero total, a negative row weight, zero variance under `corr`, row weights summing below 1 under `corr`, column weights with a zero sum or mixed signs | stop inside `eigen` ("infinite or missing values in 'x'"), some after a "NaNs produced" warning | `ValueError` naming the cause |
+| `Wpca` with one column and `corr = TRUE` | `diag()` of one number builds an identity: the covariance passes through unscaled for `0.5 < dd <= 1`, and R stops otherwise | the general formula, `sdev` 1 to rounding. A deviation that fixes an upstream bug |
+| `Wpca` `scale` with `corr = FALSE` | the single number 1 | ones, one per column |
+| `Wpca` `corr` | `TRUE`, `1` and `"TRUE"` all pass, other values fail obscurely | a bool, else `TypeError` |
+| `w = NULL` | stops, though the help pages say it means unit weights | `None` means unit weights |
 
 ## 11. Repo, tooling, license
 
@@ -326,6 +346,9 @@ Benchmarks then confirm it: `create_dn` and `refine_dn` on Covertype at n in {1e
 3. Is comparing EV1 against the scale-based shape threshold intentional?
 4. Authorship and venue: JOSS first, JCGS software note, or both?
 5. Is the `wmean`/`wwcss`/`distw` default-weight bug worth an upstream fix on CRAN?
+6. Is `Wpca`'s behavior with one column and `corr = TRUE`, where `diag()` of one number builds an identity, worth an upstream fix?
+7. Should `distw` values at or below zero, which come from rounding when identical rows sit in different clusters, be clamped upstream?
+8. Is it intended that `wwcss` groups labels with `factor()` while `distw` groups them with `sort(unique())`?
 
 ## 13. Risks
 

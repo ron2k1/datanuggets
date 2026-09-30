@@ -1,12 +1,13 @@
-"""R's summary statistics as refine.DN uses them.
+"""R's summary statistics as refine.DN and WCluster use them.
 
-sum, mean, median, mad, type-7 quantile, cov and %*% are replayed bit for bit. R accumulates
-sums in long double (x87 extended precision on x86-64). cov and group_moments, which gives
-every nugget's colMeans and cov in one call, run that arithmetic compiled, in _ldjit. sum and
-mean replay it with Python integers through _ldouble, which is also the reference the compiled
-code is tested against. eigen() calls LAPACK's dsyevr with R's arguments, so eigenvalues agree
-with R's to rounding on the scale of the largest one, not bit for bit: LAPACK builds differ in
-their kernels. A second eigenvalue near zero can be far off relative to itself.
+sum, mean, median, mad, type-7 quantile, cov, weighted.mean and %*% (a matrix times a vector,
+or two matrices) are replayed bit for bit. R accumulates sums in long double (x87 extended
+precision on x86-64). cov and group_moments, which gives every nugget's colMeans and cov in one
+call, run that arithmetic compiled, in _ldjit. sum and mean replay it with Python integers
+through _ldouble, which is also the reference the compiled code is tested against. eigen()
+calls LAPACK's dsyevr with R's arguments, so eigenvalues agree with R's to rounding on the
+scale of the largest one, not bit for bit: LAPACK builds differ in their kernels. A second
+eigenvalue near zero can be far off relative to itself.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from scipy.linalg import LinAlgError, lapack
 from datanuggets import _ldjit
 from datanuggets import _ldouble as ld
 from datanuggets._defaults import MAD_CONSTANT, MOMENTS_CHUNK
-from datanuggets._rcompat import _non_finite_sum, r_mean
+from datanuggets._rcompat import _INDEFINITE, _non_finite_sum, r_mean
 
 
 def _ld_sum(v: list[float]) -> tuple[int, int]:
@@ -231,6 +232,32 @@ def r_matvec(a: np.ndarray, v: np.ndarray) -> np.ndarray:
     for j in range(a.shape[1]):
         y += a[:, j] * v[j]
     return y
+
+
+_R_NAN = float(np.array([_INDEFINITE], dtype=np.uint64).view(np.float64)[0])
+
+
+def r_matmul(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """a %*% b as R computes it with reference BLAS dgemm: c = 0, then c += a[:, k] * b[k, :]
+    for k in order, every product and sum rounded to double. A sum starts at +0, so no entry
+    comes back as -0."""
+    c = np.zeros((a.shape[0], b.shape[1]))
+    for k in range(a.shape[1]):
+        c += np.multiply.outer(a[:, k], b[k, :])
+    return c
+
+
+def r_weighted_mean(v: np.ndarray, w: np.ndarray) -> float:
+    """weighted.mean(v, w): sum((v * w)[w != 0]) / sum(w), both sums R's long double sum and
+    the division in double. A zero total gives NaN or an infinity, as in R. A NaN made by the
+    division is the x86 default NaN R gets, whatever this machine's own division gives."""
+    with np.errstate(all="ignore"):
+        num = r_sum((v * w)[w != 0])
+        den = r_sum(w)
+        q = float(np.float64(num) / np.float64(den))
+    if math.isnan(q) and not (math.isnan(num) or math.isnan(den)):
+        return _R_NAN
+    return q
 
 
 def r_eigen_sym(s: np.ndarray, vectors: bool = False):

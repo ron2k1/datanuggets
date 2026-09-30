@@ -68,3 +68,31 @@ class DataNuggets(_ArrayFields):
         df["Weight"] = self.weights
         df["Scale"] = self.scales
         return df
+
+
+@dataclass(frozen=True, eq=False)
+class WwcssResult(_ArrayFields):
+    """wwcss(group_sum=True) output: each cluster's weighted within-cluster sum of squares, in
+    sorted label order, and their total as a 0-d float64. A cluster whose weights sum to zero
+    is NaN, and so is the total then, as in R."""
+
+    per_cluster: np.ndarray
+    total: np.ndarray
+
+
+@dataclass(frozen=True, eq=False)
+class WpcaResult(_ArrayFields):
+    """wpca output, with R's field names in R's order. sdev holds the square roots of the
+    eigenvalues, largest first, and rotation the eigenvectors as columns. x is the scores,
+    named as R names it: the centered data times rotation, unscaled even with corr=True, as in
+    R. center is the weighted column means. scale is what corr=True divides the covariance by,
+    the square roots of its diagonal, and ones without corr. wrow is the row weights and wcol
+    the column weights normalised to sum to the number of columns."""
+
+    sdev: np.ndarray
+    rotation: np.ndarray
+    x: np.ndarray
+    center: np.ndarray
+    scale: np.ndarray
+    wrow: np.ndarray
+    wcol: np.ndarray

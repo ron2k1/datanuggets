@@ -1,7 +1,39 @@
+import importlib
+from dataclasses import FrozenInstanceError, fields
+
 import numpy as np
 import pytest
 
+import datanuggets
+import datanuggets.wcluster
 from datanuggets import CentersResult, DataNuggets
+from datanuggets.result import WpcaResult, WwcssResult
+
+# Each WCluster leaf and the module that defines it. The modules are reached through importlib,
+# because the exported function wpca shadows its module as an attribute of datanuggets.wcluster.
+WCLUSTER_LEAVES = {
+    "cluster_predict": "datanuggets.wcluster.predict",
+    "distw": "datanuggets.wcluster.wstats",
+    "wmean": "datanuggets.wcluster.wstats",
+    "wpca": "datanuggets.wcluster.wpca",
+    "wss": "datanuggets.wcluster.wstats",
+    "wwcss": "datanuggets.wcluster.wstats",
+}
+
+
+def test_wcluster_leaves_are_exported_from_both_packages():
+    for name, module in WCLUSTER_LEAVES.items():
+        defined = getattr(importlib.import_module(module), name)
+        assert getattr(datanuggets.wcluster, name, None) is defined, name
+        assert getattr(datanuggets, name, None) is defined, name
+    assert datanuggets.wcluster.__all__ == sorted(WCLUSTER_LEAVES)
+    assert datanuggets.WpcaResult is WpcaResult
+    assert datanuggets.WwcssResult is WwcssResult
+    top = set(WCLUSTER_LEAVES) | {"WpcaResult", "WwcssResult"}
+    assert top <= set(datanuggets.__all__)
+    assert datanuggets.__all__ == sorted(datanuggets.__all__)
+    for name in datanuggets.__all__:
+        assert hasattr(datanuggets, name), name
 
 
 def _dn(**over):
@@ -54,3 +86,63 @@ def test_centers_result_equality():
     a = CentersResult(centers=np.eye(2), kept=np.array([0, 1]))
     assert a == CentersResult(centers=np.eye(2), kept=np.array([0, 1]))
     assert a != CentersResult(centers=np.eye(2), kept=np.array([1, 0]))
+
+
+def _wwcss(**over):
+    values = {"per_cluster": np.array([1.5, np.nan]), "total": np.float64(np.nan)}
+    values.update(over)
+    return WwcssResult(**values)
+
+
+def _wpca(**over):
+    values = {
+        "sdev": np.array([2.0, np.nan]),
+        "rotation": np.eye(2),
+        "x": np.array([[1.0, 0.0], [0.0, -1.0], [-1.0, 1.0]]),
+        "center": np.array([0.5, 0.25]),
+        "scale": np.ones(2),
+        "wrow": np.array([1.0, 2.0, 1.0]),
+        "wcol": np.ones(2),
+    }
+    values.update(over)
+    return WpcaResult(**values)
+
+
+def test_wcluster_result_fields_follow_the_spec():
+    assert [f.name for f in fields(WwcssResult)] == ["per_cluster", "total"]
+    assert [f.name for f in fields(WpcaResult)] == [
+        "sdev",
+        "rotation",
+        "x",
+        "center",
+        "scale",
+        "wrow",
+        "wcol",
+    ]
+
+
+def test_wcluster_results_are_read_only_copies():
+    per = np.array([1.5, 2.5])
+    rotation = np.eye(2)
+    ww, pc = _wwcss(per_cluster=per), _wpca(rotation=rotation)
+    per[0] = rotation[0, 0] = 99.0
+    assert ww.per_cluster[0] == 1.5 and pc.rotation[0, 0] == 1.0
+    assert ww.total.shape == () and ww.total.dtype == np.float64
+    for arr in (ww.per_cluster, ww.total, *(getattr(pc, f.name) for f in fields(pc))):
+        assert not arr.flags.writeable
+    with pytest.raises(ValueError):
+        ww.per_cluster[0] = 5.0
+    with pytest.raises(FrozenInstanceError):
+        pc.sdev = np.zeros(2)
+
+
+def test_wcluster_results_equal_by_value_with_nan():
+    assert _wwcss() == _wwcss()
+    assert _wwcss() != _wwcss(total=np.float64(1.5))
+    assert _wwcss() != _wwcss(per_cluster=np.array([1.5, 2.5]))
+    assert _wpca() == _wpca()
+    assert _wpca() != _wpca(rotation=-np.eye(2))
+    assert _wpca() != _wpca(wcol=np.array([0.5, 1.5]))
+    assert _wwcss() != _wpca()
+    with pytest.raises(TypeError):
+        hash(_wpca())

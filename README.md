@@ -8,7 +8,7 @@ Beavers et al. (cited below) run weighted PCA and weighted k-means on the nugget
 
 ## Status
 
-Version `0.1.0.dev0` is in development. Five functions are ported:
+Version `0.1.0.dev0` is in development. Eleven functions are ported. Five come from `datanugget`:
 
 - `create_dn`, from R's `create.DN`
 - `create_dn_centers`, from R's `create.DNcenters`
@@ -16,9 +16,20 @@ Version `0.1.0.dev0` is in development. Five functions are ported:
 - `get_dn_means`, from R's `getDN.means`
 - `arithmetic_complexity`, from R's `AC`
 
+Six come from `WCluster`:
+
+- `wmean`, from R's `wmean`
+- `wss`, from R's `wss`
+- `wwcss`, from R's `wwcss`
+- `distw`, from R's `distw`
+- `wpca`, from R's `Wpca`
+- `cluster_predict`, from R's `cluster.predict`
+
 `refine_dn` splits nuggets that are spread out or elongated with 2-means, through a port of the Hartigan-Wong k-means in R's `stats::kmeans`. `get_dn_means` averages the rows in each nugget. `arithmetic_complexity` gives the arithmetic cost of a `create_dn` call on a log10 scale, from the shape of the data alone.
 
-Next come the rest of `WCluster`'s building blocks: `wmean`, `wss`, `wwcss`, `distw`, `wpca` and `cluster_predict`. Its weighted k-means and hierarchical clustering follow. The data-nugget wrappers and `optimal_dn` come last.
+The `WCluster` functions treat each row as a point with a weight, such as a nugget with its row count. `wmean` gives each cluster's weighted mean and `wss` the weighted sum of squares around the weighted mean. `wwcss` adds up each cluster's `wss`, and `distw` gives how much merging two clusters adds to it. `cluster_predict` sends new rows to the nearest weighted cluster mean. `wpca` is principal components with a weight per row and per column.
+
+Next come `WCluster`'s weighted k-means and hierarchical clustering. The data-nugget wrappers and `optimal_dn` come last.
 
 ## Install
 
@@ -68,11 +79,37 @@ Output of `to_frame().head()`:
 4            4  3.074095 -1.813385  0.944272       3  0.033129
 ```
 
-Those weight-1 nuggets are expected. Closest-pair deletion keeps points far out in the tails as centers. They share the scale 0.000331 because a nugget with fewer than 2 rows gets the smallest scale among nuggets with 2 or more rows, divided by 100. R does the same. The call took 28.9 seconds on my laptop (i7-13650HX).
+Those weight-1 nuggets are expected. Closest-pair deletion keeps points far out in the tails as centers. They share the scale 0.000331 because a nugget with fewer than 2 rows gets the smallest scale among nuggets with 2 or more rows, divided by 100. R does the same. The call took 14.6 seconds on my laptop (i7-13650HX).
+
+The `WCluster` functions take the nuggets' centers as the data and their weights as row weights. Continuing the example, this runs weighted PCA and splits the nuggets by the sign of their first coordinate:
+
+```python
+from datanuggets import cluster_predict, wmean, wpca, wwcss
+
+pca = wpca(dn.centers, wrow=dn.weights)
+print(pca.sdev)
+
+cl = (dn.centers[:, 0] > 0).astype(int)
+print(wmean(dn.centers, cl, dn.weights))
+print(wwcss(dn.centers, cl, dn.weights))
+print(cluster_predict(dn.centers, cl, x[:5], w=dn.weights))
+```
+
+Output:
+
+```text
+[0.95152184 0.94524503 0.94031221]
+[[-0.7682159  -0.02598546  0.21580461]
+ [ 0.71713231  0.01851018 -0.19804108]]
+208903.8865164328
+[0 1 1 0 0]
+```
+
+`cluster_predict` returns each new row's 0-based position among the sorted labels. The labels here are 0 and 1, so the positions equal the labels.
 
 ## Differences from R
 
-Defaults match R except for `n_jobs`. `create_dn` and `refine_dn` default to `n_jobs=1`, while R's `create.DN` and `refine.DN` default to `no.cores = detectCores() - 1`. The argument names map as follows:
+Defaults match R except for `n_jobs` and the default weights of `wmean`, `wwcss` and `distw`, which are described below. `create_dn` and `refine_dn` default to `n_jobs=1`, while R's `create.DN` and `refine.DN` default to `no.cores = detectCores() - 1`. The argument names map as follows:
 
 | R | Python |
 | --- | --- |
@@ -116,6 +153,29 @@ Every function that reads the values in the data rejects NaN and infinite values
 
 `arithmetic_complexity(x, r, delete_percent, dn_num1, dn_num2)` names its arguments like `create_dn` and has no defaults, like R's `AC`. It reads only the shape of `x`. R 4.6.1's class check in `AC` stops on a matrix or a data.table, so R only takes a plain data frame. The port takes any 2-D input. Some arguments send R's loops around a cycle forever. A `DN.num2` below -1 does it unless `DN.num1` floors to the same integer. The port raises `ValueError` on these at once, even where R would count down for a long time before the cycle starts. It also raises on a `dn_num1` or `dn_num2` that isn't finite and on an `x` with no rows, where R stops, loops, or returns `Inf` or `NaN`.
 
+In the `WCluster` functions `Wpca` becomes `wpca`, `cluster.predict` becomes `cluster_predict` and the `groupSum` argument of `wwcss` becomes `group_sum`. The other names are R's. A weight argument left as `None` means one weight per row, or per column for `wpca`'s `wcol`. R's `wmean`, `wwcss` and `distw` default to `rep(1, length(x))` instead, which has the wrong length. It stops unless the data is square (`wmean`, `wwcss`) or has one column (`distw`). A cluster whose weights sum to zero gets a NaN `wwcss` and NaN in every `distw` entry that touches it, as in R. Its `wmean` row is NaN when every weight is zero. When weights of both signs cancel, the row is infinite instead, with NaN in any column whose weighted sum is zero too, again as in R. `cluster_predict` doesn't pick such a cluster while another is at a finite distance. The other differences are these:
+
+| Item | R | Python |
+| --- | --- | --- |
+| `wmean` layout | `p` rows by `k` columns | `(k, p)`, like every other center array in the package |
+| `distw` cells R never fills | `NA`, distinct from a computed `NaN` | `NaN` in both places |
+| `distw` with one cluster | stops ("missing value where TRUE/FALSE needed") | `ValueError` naming the cause |
+| cluster labels | `wwcss` groups by `factor()` (15 significant digits), `distw` by `sort(unique())`, text by locale collation | whole numbers smaller than 1e15 in size, sorted. Text, bool, fractional and NaN labels raise |
+| `cluster.predict` result | 1-based position in sorted label order, not the label | 0-based position |
+| `cluster.predict` argument order | `(x, w, cl, newx)`, and a swapped `w` and `cl` runs silently | `(x, cl, newx, *, w=None)` |
+| `cluster.predict` for a row where every distance is NaN (NaN centers, another new row that overflows, or centers of infinities once there are two new rows) | `integer(0)` when every row is like that, a list with empty entries when only some are | `ValueError` |
+| `cluster.predict` distances after R's identity multiply | `0 * Inf` from one overflowing row turns its whole column NaN, and a lone `Inf` stays | the same, computed without the multiply |
+| 1-D `x` | accepted as one column | `ValueError`, as everywhere else |
+| integer `x` with integer weights | `wmean` and `cluster.predict`: an NA center on overflow with a warning. `Wpca`: the NA becomes 0 in its column sum, a wrong center with a warning. `wss`, `wwcss`, `distw`: no integer products | float64 arithmetic, no overflow |
+| NaN or infinite weights, text or bool weights | passed through or stopped late in `eigen` | `ValueError` or `TypeError` up front |
+| `Wpca` row weights summing to 1, a zero total, a negative row weight, zero variance under `corr`, row weights summing below 1 under `corr`, column weights with a zero sum or mixed signs | stop inside `eigen` ("infinite or missing values in 'x'"), some after a "NaNs produced" warning | `ValueError` naming the cause |
+| `Wpca` with one column and `corr = TRUE` | `diag()` of one number builds an identity: the covariance passes through unscaled for `0.5 < dd <= 1`, and R stops otherwise | the general formula, `sdev` 1 to rounding. It fixes an upstream bug |
+| `Wpca` `scale` with `corr = FALSE` | the single number 1 | ones, one per column |
+| `Wpca` `corr` | `TRUE`, `1` and `"TRUE"` all pass, other values fail obscurely | a bool, else `TypeError` |
+| `w = NULL` | stops, though the help pages say it means unit weights | `None` means unit weights |
+
+`wpca`'s `rotation` columns, and the scores with them, can have the opposite sign from R's, since LAPACK picks each column's sign.
+
 ## Parity with R
 
 Every case in the `create_dn` parity table matches R bit for bit in all four outputs: assignments, weights, centers and scales. The cases run iris, faithful and quakes under both metrics and all three center methods. Edge cases add a one-column dataset, tied grids, duplicate rows and a 61-column scaled dataset. Tests replay the exact random draws recorded from R and compare with `np.array_equal`, with no tolerance. The full table is in [docs/validation/create_dn.md](docs/validation/create_dn.md).
@@ -128,9 +188,23 @@ Shape splits cluster the rows projected on the first eigenvector. Those projecti
 
 `arithmetic_complexity` runs on the row and column counts of eight R datasets, crossed with values of `r`, `delete_percent`, `dn_num1` and `dn_num2`. That makes 3481 calls. Whenever R's `AC` returns, the pass counts traced inside it equal the port's, and the value matches bit for bit. The tests still allow a relative difference of `1e-8` in the value, since it goes through the platform's `log10`. Running the first loop in exact arithmetic would get 289 of its counts wrong, so the port repeats R's double arithmetic step by step. R never returned from 19 of the calls, and the port raises on exactly those 19. The table is in [docs/validation/arithmetic_complexity.md](docs/validation/arithmetic_complexity.md).
 
-Getting the last bit right meant copying how R adds things up. Rfast keeps two running sums for distance terms, one over even columns and one over odd. R's `colMeans` and `rowMeans` add in 80-bit x87 precision before rounding to double, and the port replays that with Python integers. `refine_dn` needs R's `cov`, `mean`, `median`, `mad` and `quantile` too, which also add in long double.
+`wmean`, `wss`, `wwcss`, `distw` and `cluster_predict` share one set of cases recorded from R. The data comes from iris, faithful, quakes, mtcars, volcano, ChickWeight, EuStockMarkets, USArrests, PlantGrowth, rock, LifeCycleSavings and infert, and from nuggets R's `create.DN` made of iris, quakes and scaled volcano. Weights are ones or a real column, such as the nugget weights. Labels come from factors, cuts of a real column, Ward clusterings and one cluster per row. Some clusters have weights that sum to zero, and some labels are negative. `wmean` matches R bit for bit in all 49 cases, which run from 25 to 1860 rows, up to 61 columns and up to 200 clusters. The table is in [docs/validation/wmean.md](docs/validation/wmean.md).
 
-Parity is against R 4.6.1 on x86-64 Windows with `datanugget` 1.5.0, Rfast 2.1.5.2 and R's reference BLAS. OpenBLAS, MKL and Accelerate can round the last bits differently. So can arm64 macOS, where `long double` is plain double. On tied data, those differences can change assignments. The fixture manifests record the BLAS and `long double` width.
+`wss` matches R bit for bit on the same 49 cases. R returns a vector of length one, so its only entry is compared. The table is in [docs/validation/wss.md](docs/validation/wss.md).
+
+`wwcss` matches R bit for bit in all 49 cases. That holds for the per-cluster values and the total that `group_sum=True` returns, and for the plain total. The table is in [docs/validation/wwcss.md](docs/validation/wwcss.md).
+
+`distw` needs two clusters, so it runs on the 45 of those cases that have more than one. The whole matrix matches R in all 45. Every entry R computes matches bit for bit, including entries at zero or just below it, and the port has NaN in each cell where R leaves NA. The table is in [docs/validation/distw.md](docs/validation/distw.md).
+
+`cluster_predict` runs on the 39 cases recorded with new rows to place, 6,422 rows in all. In every case the squared distances from R's centers match R's, each number bit for bit and each NaN in the same place. The positions match too, compared with R's 1-based ones minus one. Ties go to the first cluster in sorted label order, as in R. The table is in [docs/validation/cluster_predict.md](docs/validation/cluster_predict.md).
+
+The tie and heavy-weight cases are constructed, so they're tested and not reported. R recorded them in `tests/fixtures/wstats_constructed/` like the rest. The ties are midpoints between two cluster centers and one- and two-ulp nudges of them. The heavy weights are powers of two of a real column, or a real column scaled by 1e296 or into the subnormal range. A few more cases hold rows whose squares overflow.
+
+`wpca` runs on 22 cases from iris, mtcars, faithful, quakes, volcano, trees and npk and from the same nuggets, 4 of them with `corr=True`. Everything up to the matrix R hands to `eigen()` matches R bit for bit in all 22: the center, the scale, the column and row weights, the centered data and the eigen input. The eigen output isn't compared bit for bit, because LAPACK builds round it differently. A rule holds it to R's instead, and passes in all 22. The rotation must be orthonormal, and each column must solve the eigen input for R's eigenvalue within 1024 machine epsilons times the largest eigenvalue. Eigenvalues closer than 1e-12 times the largest form a cluster whose subspace has to match R's, since the vectors inside it aren't determined. The scores must be R's matrix product of the centered data and the port's rotation. Two cases aren't reported. R stops in `eigen()` on one, and the other is the one-column `corr=True` case where the port departs from R on purpose. The table is in [docs/validation/wpca.md](docs/validation/wpca.md).
+
+Getting the last bit right meant copying how R adds things up. Rfast keeps two running sums for distance terms, one over even columns and one over odd. R's `colMeans` and `rowMeans` add in 80-bit x87 precision before rounding to double. The port repeats that arithmetic exactly in 64-bit integer code that numba compiles. `refine_dn` needs R's `cov`, `mean`, `median`, `mad` and `quantile` too, which also add in long double. The `WCluster` functions add through R's `%*%`, which the reference BLAS sums in its own order, and through `weighted.mean` and `sum`, which add in long double.
+
+Parity is against R 4.6.1 on x86-64 Windows with `datanugget` 1.5.0, `WCluster` 1.3.0, Rfast 2.1.5.2 and R's reference BLAS. OpenBLAS, MKL and Accelerate can round the last bits differently. So can arm64 macOS, where `long double` is plain double. On tied data, those differences can change assignments. The fixture manifests record the BLAS and `long double` width.
 
 ## Covertype benchmark
 
@@ -151,7 +225,7 @@ Wall time in seconds, around the function call only, one run each:
 | 581,012 | create | 202.1 | 239.6 |
 | 581,012 | refine | 0.9 | 50.0 |
 
-R's shape-split run took 30 minutes at 100,000 rows, so the full-size run skips shape splits. Python's 50 seconds for `refine_dn` at full size go into its first pass. That pass computes every nugget's covariance with R's long-double sums, replayed in pure Python one nugget at a time. Speeding it up is future work.
+R's shape-split run took 30 minutes at 100,000 rows, so the full-size run skips shape splits. The Python times and memory figures here come from before the compiled long double kernels. Python's 50 seconds for `refine_dn` at full size went into its first pass, which then replayed every nugget's covariance with R's long-double sums in pure Python, one nugget at a time. That pass now runs in numba-compiled code, and the table gets new timings when the benchmark is rerun.
 
 Peak memory was 2072, 2092 and 2183 MiB in R at the three sizes and 1444, 1454 and 1501 MiB in Python. That's the peak working set of the whole process, data load included. It hardly grows with the row count. The biggest object is the 10,000 by 10,000 distance matrix between the first-stage centers, which is the same size every time.
 
@@ -193,6 +267,8 @@ DOI: `10.1080/10618600.2024.2341896`. arXiv: `2403.03099`.
 
 ## License and credit
 
-GPL-2.0-only, the same license as the R packages. The algorithms are the R authors' work.
+GPL-2.0-only, the same license as the R packages `datanugget` and `WCluster`. The algorithms are the R authors' work.
 
 The `datanugget` authors are Rituparna Dey (maintainer), Yajie Duan, Traymon Beavers, Javier Cabrera, Ge Cheng, Kunting Qi and Mariusz Lubomirski.
+
+The `WCluster` authors are Rituparna Dey (maintainer), Yajie Duan, Javier Cabrera and Ge Cheng.
