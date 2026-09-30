@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
+from fractions import Fraction
 from pathlib import Path
 
 import numpy as np
@@ -96,3 +98,23 @@ def means_inputs(means: Case, name: str) -> tuple[np.ndarray, DataNuggets]:
         assignments=case.array(pre + "assignments") - 1,
     )
     return case.array("x"), dn
+
+
+def exact_ac_count(value, target, delete_percent) -> int:
+    """One of AC's while loops run in exact rational arithmetic, returning R's counter. It's
+    what the code says without double rounding. Where it disagrees with R's count, only a port
+    doing R's double operations in R's order can match."""
+    value, target, dp = Fraction(value), Fraction(target), Fraction(delete_percent)
+    count = 1
+    while value != target:
+        if count > 100_000:
+            raise AssertionError("the exact loop did not end")
+        cut = math.floor(dp * value)
+        if value - cut < target:
+            value = target
+        elif cut == 0:
+            value -= 1
+        else:
+            value -= cut
+        count += 1
+    return count
