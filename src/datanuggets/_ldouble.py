@@ -2,8 +2,14 @@
 
 R accumulates sums, means and covariances in LDOUBLE, which on x86-64 is x87 extended precision:
 a 64-bit significand, rounded to nearest with ties to even after every operation. A value here is
-a pair (m, e) standing for exactly m * 2**e with |m| < 2**64. Exponent range limits are ignored:
-long double's range covers every sum and product of finite doubles that R forms here.
+a pair (m, e) standing for exactly m * 2**e. Every rounded result has |m| < 2**64. from_float
+doesn't round. It keeps a double's integer ratio, so a double of 2**64 or more gives a wider m that
+ends in zeros, and add passes such a value through when the other operand is zero. Exponent range
+limits are ignored: long double's range covers every sum and product of finite doubles that R
+forms here.
+
+The compiled kernels in _ldjit do the same arithmetic fast. This module is the reference their
+tests compare against.
 """
 
 from __future__ import annotations
