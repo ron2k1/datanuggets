@@ -166,7 +166,7 @@ def test_group_moments_chunking_gives_the_same_result(monkeypatch):
     want = list(group_moments(x, groups))
     p = x.shape[1]
     for chunk in (1, 3 * p * p):  # one group per call, then three
-        monkeypatch.setattr(rstats, "_MOMENTS_CHUNK", chunk)
+        monkeypatch.setattr(rstats, "MOMENTS_CHUNK", chunk)  # rstats' own binding of it
         assert _same_moments(list(group_moments(x, groups)), want), chunk
         assert _same_moments(list(group_moments(x, groups, 4)), want), chunk
 

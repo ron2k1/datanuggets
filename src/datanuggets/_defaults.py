@@ -10,6 +10,8 @@ DN_NUM2 = 2000
 CENTER_METHODS = ("mean", "random", "original")
 DIST_METRICS = ("euclidean", "manhattan")
 
+MOMENTS_CHUNK = 1 << 22  # covariance entries group_moments holds at once (32 MB)
+
 # Rows per block when computing distances, so no n x k or n x n temporary exceeds memory.
 DIST_BLOCK_ROWS = 1024
 ASSIGN_BLOCK_ROWS = 1024  # 1024 x 2000 centers = 16 MB per temporary

@@ -21,7 +21,7 @@ from scipy.linalg import LinAlgError, lapack
 
 from datanuggets import _ldjit
 from datanuggets import _ldouble as ld
-from datanuggets._defaults import MAD_CONSTANT
+from datanuggets._defaults import MAD_CONSTANT, MOMENTS_CHUNK
 from datanuggets._rcompat import r_mean
 
 
@@ -132,7 +132,6 @@ def _r_cov_py(x: np.ndarray) -> np.ndarray:
     return out
 
 
-_MOMENTS_CHUNK = 1 << 22  # covariance entries group_moments holds at once (32 MB)
 _THREADS = threading.Lock()
 
 
@@ -146,7 +145,7 @@ def group_moments(
     x = np.ascontiguousarray(x, dtype=np.float64)
     bits = x.view(np.uint64)
     p = x.shape[1]
-    per = max(1, _MOMENTS_CHUNK // (p * p))
+    per = max(1, MOMENTS_CHUNK // (p * p))
     for lo in range(0, len(groups), per):
         chunk = groups[lo : lo + per]
         counts = np.array([g.size for g in chunk], dtype=np.int64)
