@@ -50,7 +50,12 @@ for (nm in names(vec_sets)) {
 
 mean_sets <- list(inf = c(Inf, 2), inf_minus_inf = c(Inf, -Inf), neg_inf = c(-Inf, 1),
                   nan = c(NaN, 1), pair = c(1.5, 2.5000000000000004),
-                  overflow_neg_inf = c(1.7e308, 1.7e308, -Inf))  # double sums give NaN here
+                  overflow_neg_inf = c(1.7e308, 1.7e308, -Inf),  # double sums give NaN here
+                  # the sum overflows a double, so the correction pass divides each residual by n
+                  overflow_careful = from_bits(c("7fe0000000000000", "7feffffffffffffd",
+                                                 "fc00000000000000", "7c80000000000000",
+                                                 "7fefffffffffffff", "fbd0000000000000",
+                                                 "fca0000000000000")))
 # Which NaN a sum or mean gives: Inf - Inf, NA's payload, and each order of two NaNs
 nan_sets <- list(na = c(NA, 1), inf_minus_inf_na = c(Inf, -Inf, NA), na_inf_minus_inf = c(NA, Inf, -Inf),
                  na_pay = c(NA, nan_pay), pay_na = c(nan_pay, NA), pos_neg = c(nan_pos, nan_neg),

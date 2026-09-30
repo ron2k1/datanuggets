@@ -50,22 +50,25 @@ def r_sum(v) -> float:
 
 
 def r_vec_mean(v) -> float:
-    """mean() of a double vector (R's real_mean): the long double sum divided by n, plus the
-    mean of the residuals from a second pass. If the sum overflows double, R sums x / n."""
+    """mean() of a double vector, as R 4.6.1's real_mean: the long double sum divided by n,
+    plus the mean of the residuals from a second pass. If the sum overflows double, R sums
+    x / n instead and divides each residual by n before adding it, so neither pass overflows."""
     v = [float(x) for x in v]
     n = len(v)
     if not all(map(math.isfinite, v)):
         return _non_finite_sum(v, quiet=True)  # R's sum of x / n, and no second pass
     s = _ld_sum(v)
-    if math.isfinite(ld.to_float(s)):
+    finite_s = math.isfinite(ld.to_float(s))
+    if finite_s:
         s = ld.div_int(s, n)
     else:
         s = _ld_sum([x / n for x in v])  # each x / n is rounded to double first, as in R
     if math.isfinite(ld.to_float(s)):
         t = ld.ZERO
         for x in v:
-            t = ld.add(t, ld.sub(ld.from_float(x), s))
-        s = ld.add(s, ld.div_int(t, n))
+            r = ld.sub(ld.from_float(x), s)
+            t = ld.add(t, r if finite_s else ld.div_int(r, n))
+        s = ld.add(s, ld.div_int(t, n) if finite_s else t)
     return ld.to_float(s)
 
 
