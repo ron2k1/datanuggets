@@ -14,6 +14,7 @@ dependencies = [
     "numpy>=2.0",
     "joblib>=1.4",
     "scipy>=1.13",
+    "numba>=0.67",
 ]
 
 [project.optional-dependencies]
@@ -28,7 +29,8 @@ packages = ["src/datanuggets"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra -m 'not slow'"
+markers = ["slow: the long long-double fuzz, 10,000,000 cases per operation (pytest -m slow)"]
 
 [tool.ruff]
 line-length = 100

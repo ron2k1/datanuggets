@@ -22,7 +22,7 @@ Next come the rest of `WCluster`'s building blocks: `wmean`, `wss`, `wwcss`, `di
 
 ## Install
 
-Requires Python 3.12 or newer, `numpy >= 2.0`, `scipy >= 1.13` and `joblib >= 1.4`.
+Requires Python 3.12 or newer, `numpy >= 2.0`, `scipy >= 1.13`, `joblib >= 1.4` and `numba >= 0.67`.
 
 It isn't on PyPI. `pip install datanugget`, without the s, gets an unrelated package of code snippets.
 
