@@ -310,3 +310,22 @@ def cov_rows(bits, rows, out):
             out[a, b] = to_double(qs, qm, qe)
             out[b, a] = out[a, b]
     return True
+
+
+@njit(cache=True)
+def line_means(bits):
+    """rowMeans of a finite matrix given as bit patterns: each row summed in long double from the
+    left, divided by its length, then rounded to double once."""
+    k, n = bits.shape
+    out = np.empty(k)
+    if n == 0:
+        out[:] = np.nan
+        return out
+    for r in range(k):
+        s, m, e = 0, Z64, 0
+        for i in range(n):
+            vs, vm, ve = from_bits(bits[r, i])
+            s, m, e = add(s, m, e, vs, vm, ve)
+        qs, qm, qe = div_count(s, m, e, n)
+        out[r] = to_double(qs, qm, qe)
+    return out

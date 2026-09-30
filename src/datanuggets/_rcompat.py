@@ -6,6 +6,8 @@ import math
 
 import numpy as np
 
+from datanuggets import _ldjit
+
 
 def _r_seq_length_out(start: float, stop: float, n: int) -> np.ndarray:
     """R's seq(start, stop, length.out = n): start + i * by, with the last value set to stop."""
@@ -82,10 +84,29 @@ def r_mean(a: np.ndarray, axis: int) -> np.ndarray:
     64-bit significand, divides in long double, and only then rounds to double. numpy's
     pairwise double mean differs by several ulps, and on columns that cancel to nearly zero
     (standardized data) even a correctly rounded mean differs, because R's own running sum
-    rounds. This replays R's arithmetic exactly with Python integers, about 0.4 s per million
-    values. Platforms whose long double is plain double (arm64 macOS, MSVC builds) give R
-    different means; fixture manifests record longdouble_digits for that reason.
+    rounds. Finite lines run that arithmetic compiled, in _ldjit. A line with Inf or NaN gets
+    numpy's mean: R propagates those silently, and the answer doesn't depend on precision.
+    Platforms whose long double is plain double (arm64 macOS, MSVC builds) give R different
+    means. Fixture manifests record longdouble_digits for that reason.
     """
+    lines = np.moveaxis(np.asarray(a, dtype=np.float64), axis, -1)
+    shape, width = lines.shape[:-1], lines.shape[-1]
+    if width == 0:
+        return np.full(shape, np.nan)  # R's 0 / 0
+    flat = np.ascontiguousarray(lines).reshape(-1, width)
+    finite = np.isfinite(flat).all(axis=1)
+    out = np.empty(flat.shape[0])
+    done = flat if finite.all() else flat[finite]
+    out[finite] = _ldjit.line_means(done.view(np.uint64))
+    with np.errstate(invalid="ignore"):
+        for i in np.flatnonzero(~finite).tolist():
+            out[i] = np.mean(flat[i])
+    return out.reshape(shape)
+
+
+def _r_mean_py(a: np.ndarray, axis: int) -> np.ndarray:
+    """r_mean replayed with Python integers, about 0.4 s per million values. It's the
+    reference the compiled path is tested against."""
     lines = np.moveaxis(np.asarray(a, dtype=np.float64), axis, -1)
     out = np.empty(lines.shape[:-1])
     for idx in np.ndindex(out.shape):
