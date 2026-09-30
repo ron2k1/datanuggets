@@ -109,7 +109,7 @@ def r_mean(a: np.ndarray, axis: int) -> np.ndarray:
     finite = np.isfinite(flat).all(axis=1)
     out = np.empty(flat.shape[0])
     done = flat if finite.all() else flat[finite]
-    out[finite] = _ldjit.line_means(done.view(np.uint64))
+    out[finite] = _ldjit.line_means(_ldjit.as_bits(done))
     for i in np.flatnonzero(~finite).tolist():
         out[i] = _non_finite_sum(flat[i])
     return out.reshape(shape)

@@ -106,7 +106,7 @@ def r_cov(x: np.ndarray) -> np.ndarray:
         raise ValueError("cov needs at least two rows")
     out = np.empty((p, p))
     rows = np.arange(n, dtype=np.int64)
-    if np.isfinite(x).all() and _ldjit.cov_rows(x.view(np.uint64), rows, out):
+    if np.isfinite(x).all() and _ldjit.cov_rows(_ldjit.as_bits(x), rows, out):
         return out
     return _r_cov_py(x)
 
@@ -156,7 +156,7 @@ def group_moments(
     IndexError. A child forked after a GNU OpenMP launch runs serially at any n_jobs, since numba
     can't launch threads there."""
     x = np.ascontiguousarray(x, dtype=np.float64)
-    bits = x.view(np.uint64)
+    bits = _ldjit.as_bits(x)
     p = x.shape[1]
     per = max(1, MOMENTS_CHUNK // (p * p))
     rows = np.arange(x.shape[0])

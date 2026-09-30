@@ -10,10 +10,11 @@ from types import SimpleNamespace
 import numba
 import numpy as np
 import pytest
+from numba.core.registry import CPUDispatcher
 from numba.np import ufunc as numba_ufunc
 
 import datanuggets._rstats as rstats
-from datanuggets._rcompat import _r_mean_py, unique_first
+from datanuggets._rcompat import _r_mean_py, r_mean, unique_first
 from datanuggets._rstats import (
     _r_cov_py,
     group_moments,
@@ -180,6 +181,24 @@ def test_group_moments_uses_the_compiled_path_for_finite_data(monkeypatch, n_job
     x, sets = DATA[BIGGEST]
     groups = _nuggets(sets[0])
     assert len(list(group_moments(x, groups, n_jobs))) == len(groups)
+
+
+def _all_outputs(x, groups):
+    moments = [a for m in group_moments(x, groups) for a in m if a is not None]
+    return [r_mean(x, 0), r_mean(x, 1), r_cov(x), *moments]
+
+
+def test_read_only_input_runs_the_same_compiled_kernels():
+    x, sets = DATA[BIGGEST]
+    groups = _nuggets(sets[0])
+    want = _all_outputs(x, groups)
+    kernels = [k for k in vars(rstats._ldjit).values() if isinstance(k, CPUDispatcher)]
+    compiled = [len(k.signatures) for k in kernels]
+    frozen = x.copy()
+    frozen.setflags(write=False)
+    got = _all_outputs(frozen, groups)
+    assert all(same_bits(g, w) for g, w in zip(got, want, strict=True))
+    assert [len(k.signatures) for k in kernels] == compiled  # no second signature to compile
 
 
 def test_group_moments_chunking_gives_the_same_result(monkeypatch):

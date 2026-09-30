@@ -15,9 +15,9 @@ numba has hazards Python integers don't, so every kernel follows four rules:
   collapse into one sticky bit. That makes the truncated value odd, and every rounding boundary
   at that width is even, so it can't change the rounding direction.
 
-Kernels take finite doubles as their bit patterns (a float64 array viewed as uint64). The first
-call compiles them, and _compiled keeps the machine code on disk for later runs wherever numba
-has a writable cache location.
+Kernels take finite doubles as their bit patterns, a float64 array viewed as uint64 by as_bits.
+The first call compiles them, and _compiled keeps the machine code on disk for later runs
+wherever numba has a writable cache location.
 """
 
 from __future__ import annotations
@@ -52,6 +52,15 @@ SH4 = np.uint64(4)
 SH2 = np.uint64(2)
 MAX_EXP = 960  # a triple with a larger e is at least 2**1024, past DBL_MAX
 EXP_BITS = np.uint64(0x7FF << 52)  # a double's exponent field, all ones for Inf and NaN
+
+
+def as_bits(a: np.ndarray) -> np.ndarray:
+    """a's float64 bits as a read-only uint64 view. numba compiles a separate kernel for read-only
+    arrays, so making every input read-only keeps one compiled kernel for writable and read-only
+    callers alike."""
+    bits = a.view(np.uint64)
+    bits.flags.writeable = False
+    return bits
 
 
 @compiled()
