@@ -78,6 +78,15 @@ Codex's full-suite run ended `4 failed, 1090 passed, 1 skipped, 140 deselected, 
 
 Each of the six commits, 1110370 through 99f2b7e, ran the full suite on the mini, and none failed. `ruff check` and `ruff format --check` pass. The fixtures come only from the laptop's R 4.6.1 (x86-64, 64-bit long double significand), as their manifests record.
 
+## Checks after the fixes
+
+The companion's revised report arrived after these commits, with the same findings. Two wider checks then ran against the fixed code on the mini, with 63fa1bd as the control.
+
+- Finite inputs against exact models of R 4.6.1, which round to a 64-bit significand after every operation. `real_mean` is modeled from summary.c with both correction branches. The inputs are the companion's case pool plus three more seeds, 36,513 finite vectors of 2 to 7 values at and around DBL_MAX, and 7,366 of them have an exact sum past DBL_MAX. `r_vec_mean`, `r_sum`, `r_mean` and `_r_mean_py` show 0 mismatches. 63fa1bd shows 17 for `r_vec_mean`, the first being the `mean_overflow_careful` vector.
+- NaN inputs against R 4.6.1 on the laptop. Every 3-vector over 11 values runs through sum, mean, colMeans and rowMeans, 1,331 cases. The values are NA, R's NaN, quiet and signaling NaNs of both signs with payloads below, between and above NA's, Inf, -Inf and 1. R gives 10 distinct results for each function. The fixed code shows 0 mismatches on every path, compiled and Python. 63fa1bd shows 1,044 for sum, colMeans and rowMeans, and 570 for mean.
+
+Neither sweep is a fixture. The 19 new NaN fixture cases already reach every rule in `_non_finite_sum`.
+
 ## Unverified
 
 - Codex found no R fixture for the prototype's zero-column or empty-center cases, and didn't classify their behavior as a parity defect.
