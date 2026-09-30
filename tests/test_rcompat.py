@@ -36,3 +36,10 @@ def test_r_mean_handles_sums_beyond_the_double_range():
     )
     got = r_mean(np.array([[math.inf, 1.0], [math.inf, -math.inf]]), axis=1)
     assert got[0] == math.inf and math.isnan(got[1])
+
+
+def test_r_mean_of_no_values_is_nan_like_r():
+    # R's colMeans of a 0-row matrix divides 0 by 0
+    got = r_mean(np.empty((0, 3)), axis=0)
+    assert got.shape == (3,) and np.isnan(got).all()
+    assert np.isnan(r_mean(np.empty((2, 0)), axis=1)).all()

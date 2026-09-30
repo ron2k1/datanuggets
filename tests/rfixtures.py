@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
+from fractions import Fraction
 from pathlib import Path
 
 import numpy as np
@@ -81,3 +83,38 @@ def refine_inputs(case: Case) -> tuple[np.ndarray, DataNuggets, dict]:
         assignments=case.array("in_assignments") - 1,
     )
     return case.array("x"), dn, {py: case.args[r] for r, py in REFINE_ARGS.items()}
+
+
+def means_inputs(means: Case, name: str) -> tuple[np.ndarray, DataNuggets]:
+    """x and the nugget set a get_dn_means fixture holds R's means for under `name`, read from
+    the create_dn or refine_dn case it came from (assignments made 0-based)."""
+    path = FIXTURE_ROOT / means.args["source"] / name
+    case = Case(path, json.loads((path / "manifest.json").read_text(encoding="utf-8")))
+    pre = means.args["prefix"]
+    dn = DataNuggets(
+        centers=case.array(pre + "centers"),
+        weights=case.array(pre + "weights"),
+        scales=case.array(pre + "scales"),
+        assignments=case.array(pre + "assignments") - 1,
+    )
+    return case.array("x"), dn
+
+
+def exact_ac_count(value, target, delete_percent) -> int:
+    """One of AC's while loops run in exact rational arithmetic, returning R's counter. It's
+    what the code says without double rounding. Where it disagrees with R's count, only a port
+    doing R's double operations in R's order can match."""
+    value, target, dp = Fraction(value), Fraction(target), Fraction(delete_percent)
+    count = 1
+    while value != target:
+        if count > 100_000:
+            raise AssertionError("the exact loop did not end")
+        cut = math.floor(dp * value)
+        if value - cut < target:
+            value = target
+        elif cut == 0:
+            value -= 1
+        else:
+            value -= cut
+        count += 1
+    return count
