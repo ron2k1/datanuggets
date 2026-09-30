@@ -15,8 +15,9 @@ def get_dn_means(x, dn: DataNuggets) -> np.ndarray:
     Row i is the mean of the rows assigned to nugget i, whatever center method built dn. An
     empty nugget gets a row of NaN, as in R. Each mean is R's colMeans, summed in long double,
     so the result matches R bit for bit. R returns a data frame, transposed when x has one
-    column. This returns k rows either way. x must have exactly the rows dn assigns: R ignores
-    extra rows, and this raises ValueError.
+    column. This returns k rows either way. x must have exactly the rows dn assigns, each to a
+    nugget id in [0, k). R ignores extra rows and skips a row whose id is out of range or
+    fractional. This raises ValueError for both.
     """
     x = as_matrix(x)
     if not isinstance(dn, DataNuggets):
