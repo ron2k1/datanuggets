@@ -11,7 +11,8 @@ import datanuggets.refine as refine_module
 from datanuggets import DataNuggets, DataNuggetWarning, refine_dn
 from datanuggets._draws import NumpyDraws, ReplayDraws
 from datanuggets._hartigan_wong import KMeansError, KMeansResult
-from datanuggets.refine import _split_nugget, nugget_features
+from datanuggets._validate import check_assignments
+from datanuggets.refine import _Nuggets, _split_nugget
 from rfixtures import ATOL, RTOL, load_group, refine_inputs
 
 CASES = load_group("refine_dn")
@@ -129,19 +130,20 @@ def _first_case_per_input():
     return list(first.values())
 
 
+@pytest.mark.parametrize("n_jobs", [1, 4])
 @pytest.mark.parametrize("case", _first_case_per_input(), ids=lambda c: c.id)
-def test_initial_nugget_features_match_r(case):
+def test_initial_nugget_features_match_r(case, n_jobs):
     x, dn, _ = refine_inputs(case)
-    feats = [nugget_features(x[dn.assignments == i]) for i in range(dn.n_nuggets)]
-    np.testing.assert_array_equal(np.array([f[0] for f in feats]), case.array("init_centers"))
-    np.testing.assert_array_equal([f[2] for f in feats], case.array("init_scale"))
-    ev1, ev2 = [f[3] for f in feats], [f[4] for f in feats]
+    state = _Nuggets(x, check_assignments(dn, *x.shape), dn.centers.shape[0], n_jobs)
+    state.refresh(range(state.size), state.members())
+    np.testing.assert_array_equal(state.centers, case.array("init_centers"))
+    np.testing.assert_array_equal(state.scales, case.array("init_scale"))
     if x.shape[1] == 1:  # EV1 = EV2 = the variance, which is exact
-        np.testing.assert_array_equal(ev1, case.array("init_ev1"))
-        np.testing.assert_array_equal(ev2, case.array("init_ev2"))
+        np.testing.assert_array_equal(state.ev1, case.array("init_ev1"))
+        np.testing.assert_array_equal(state.ev2, case.array("init_ev2"))
     else:
-        np.testing.assert_allclose(ev1, case.array("init_ev1"), rtol=RTOL, atol=ATOL)
-        np.testing.assert_allclose(ev2, case.array("init_ev2"), rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(state.ev1, case.array("init_ev1"), rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(state.ev2, case.array("init_ev2"), rtol=RTOL, atol=ATOL)
 
 
 @pytest.mark.parametrize(
@@ -153,8 +155,9 @@ def test_n_jobs_does_not_change_the_result(make_seed):
         warnings.simplefilter("ignore", DataNuggetWarning)
         one = refine_dn(x, dn, seed=make_seed(), n_jobs=1, **kwargs)
         two = refine_dn(x, dn, seed=make_seed(), n_jobs=2, **kwargs)
+        four = refine_dn(x, dn, seed=make_seed(), n_jobs=4, **kwargs)
     assert one.n_nuggets > np.count_nonzero(dn.weights)  # something was split
-    assert one == two
+    assert one == two == four
 
 
 def test_split_warnings_reach_the_caller_in_candidate_order(monkeypatch, caplog):

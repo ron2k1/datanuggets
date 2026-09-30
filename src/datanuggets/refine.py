@@ -29,8 +29,8 @@ from datanuggets._defaults import (
 )
 from datanuggets._draws import Draws, NumpyDraws, as_draws
 from datanuggets._hartigan_wong import KMeansError, kmeans
-from datanuggets._rcompat import r_mean
 from datanuggets._rstats import (
+    group_moments,
     r_cov,
     r_eigen_sym,
     r_mad,
@@ -75,7 +75,9 @@ def refine_dn(
 
     R re-seeds before every split, so each split draws from a fresh copy of seed's stream
     (Draws.fork) and the result is the same for any n_jobs. n_jobs other than 1 runs each
-    round's splits in joblib worker processes. progress=True shows a tqdm bar per round.
+    round's splits in joblib worker processes and computes the nuggets' centers and
+    covariances on that many numba threads (all cores for -1). progress=True shows a tqdm bar
+    per round.
     """
     x = as_matrix(x)
     if not isinstance(dn, DataNuggets):
@@ -113,7 +115,7 @@ def refine_dn(
     n, p = x.shape
     if n == 0:
         raise ValueError("x must contain at least one observation")
-    state = _Nuggets(x, check_assignments(dn, n, p), dn.centers.shape[0])
+    state = _Nuggets(x, check_assignments(dn, n, p), dn.centers.shape[0], n_jobs)
     state.refresh(range(state.size), state.members())
     max_splits = math.floor(max_splits)
     mns = math.floor(min_nugget_size) if math.isfinite(min_nugget_size) else min_nugget_size
@@ -181,22 +183,6 @@ def refine_dn(
     return result
 
 
-def nugget_features(obs: np.ndarray) -> tuple[np.ndarray, int, float, float, float]:
-    """refine.DN's get_nugget_features for one nugget's rows: center (colMeans), weight, scale
-    (the trace of the sample covariance over p) and the two largest eigenvalues. An empty nugget
-    has a NaN center, a single row has scale and eigenvalues 0, and with one column EV2 = EV1."""
-    m, p = obs.shape
-    if m == 0:
-        return np.full(p, np.nan), 0, 0.0, 0.0, 0.0
-    center = r_mean(obs, axis=0)
-    if m == 1:
-        return center, 1, 0.0, 0.0, 0.0
-    s = r_cov(obs)
-    scale = r_sum(np.diag(s)) / p
-    ev = s.ravel() if p == 1 else r_eigen_sym(s)
-    return center, m, scale, float(ev[0]), float(ev[1] if ev.size > 1 else ev[0])
-
-
 @dataclass(frozen=True)
 class _Outcome:
     """One split attempt's answer to the main process: each row's child (0 or 1), or None and
@@ -261,8 +247,9 @@ class _Nuggets:
     """refine.DN's working state, one entry per position (R's id minus 1). A split appends its
     new nugget at the end, so positions stay stable until finalize() renumbers them."""
 
-    def __init__(self, x: np.ndarray, assignments: np.ndarray, k: int):
+    def __init__(self, x: np.ndarray, assignments: np.ndarray, k: int, n_jobs: int = 1):
         self.x = x
+        self.n_jobs = n_jobs
         self.assignments = assignments.copy()
         self.centers = np.full((k, x.shape[1]), np.nan)
         self.weights = np.zeros(k, dtype=np.int64)
@@ -282,14 +269,23 @@ class _Nuggets:
         return np.split(order, np.cumsum(counts)[:-1])
 
     def refresh(self, positions, members: list[np.ndarray]) -> None:
-        """refresh_nuggets_info: recompute these positions' stats from their rows."""
-        for c in positions:
-            center, weight, scale, ev1, ev2 = nugget_features(self.x[members[c]])
+        """refresh_nuggets_info: recompute these positions' center (colMeans), weight, scale
+        (the trace of the sample covariance over p) and two largest eigenvalues from their rows.
+        An empty nugget has a NaN center, a single row has scale and eigenvalues 0, and with one
+        column EV2 = EV1."""
+        positions = list(positions)
+        p = self.x.shape[1]
+        moments = group_moments(self.x, [members[c] for c in positions], self.n_jobs)
+        for c, (center, cov) in zip(positions, moments, strict=True):
             self.centers[c] = center
-            self.weights[c] = weight
-            self.scales[c] = scale
-            self.ev1[c] = ev1
-            self.ev2[c] = ev2
+            self.weights[c] = members[c].size
+            if cov is None:
+                self.scales[c] = self.ev1[c] = self.ev2[c] = 0.0
+                continue
+            self.scales[c] = r_sum(np.diag(cov)) / p
+            ev = cov.ravel() if p == 1 else r_eigen_sym(cov)
+            self.ev1[c] = float(ev[0])
+            self.ev2[c] = float(ev[1] if ev.size > 1 else ev[0])
 
     def apply(self, splits: list[tuple[int, np.ndarray, np.ndarray]]) -> list[int]:
         """apply_splits: each split's rows in child 1 (R's cluster 2) move to a new position,

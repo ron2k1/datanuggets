@@ -24,7 +24,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from numba import njit
+from numba import njit, prange
 
 Z64 = np.uint64(0)
 ONE = np.uint64(1)
@@ -48,6 +48,7 @@ SH8 = np.uint64(8)
 SH4 = np.uint64(4)
 SH2 = np.uint64(2)
 MAX_EXP = 960  # a triple with a larger e is at least 2**1024, past DBL_MAX
+EXP_BITS = np.uint64(0x7FF << 52)  # a double's exponent field, all ones for Inf and NaN
 
 
 @njit(cache=True)
@@ -329,3 +330,46 @@ def line_means(bits):
         qs, qm, qe = div_count(s, m, e, n)
         out[r] = to_double(qs, qm, qe)
     return out
+
+
+@njit(cache=True)
+def _group(bits, rows, center, cov):
+    """One group's colMeans into center (NaN for no rows) and, for 2 or more rows, its cov()
+    into cov. False, leaving both unfinished, where a value is Inf or NaN or cov_rows gives
+    False: the caller redoes that group in Python."""
+    n = rows.size
+    p = bits.shape[1]
+    if n == 0:
+        center[:] = np.nan
+        return True
+    for i in range(n):
+        for j in range(p):
+            if (bits[rows[i], j] & EXP_BITS) == EXP_BITS:
+                return False
+    for j in range(p):
+        s, m, e = 0, Z64, 0
+        for i in range(n):
+            vs, vm, ve = from_bits(bits[rows[i], j])
+            s, m, e = add(s, m, e, vs, vm, ve)
+        qs, qm, qe = div_count(s, m, e, n)
+        center[j] = to_double(qs, qm, qe)
+    if n < 2:
+        return True
+    return cov_rows(bits, rows, cov)
+
+
+@njit(cache=True)
+def group_moments_serial(bits, order, starts, counts, centers, covs, ok):
+    """_group for each group in turn. Group g's rows are order[starts[g]:starts[g] + counts[g]]."""
+    for g in range(starts.size):
+        rows = order[starts[g] : starts[g] + counts[g]]
+        ok[g] = _group(bits, rows, centers[g], covs[g])
+
+
+@njit(cache=True, parallel=True)
+def group_moments_parallel(bits, order, starts, counts, centers, covs, ok):
+    """group_moments_serial with the groups spread over numba's threads. Each group runs the
+    same serial arithmetic, so the result doesn't depend on the thread count."""
+    for g in prange(starts.size):
+        rows = order[starts[g] : starts[g] + counts[g]]
+        ok[g] = _group(bits, rows, centers[g], covs[g])

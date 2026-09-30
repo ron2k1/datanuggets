@@ -1,23 +1,28 @@
 """R's summary statistics as refine.DN uses them.
 
 sum, mean, median, mad, type-7 quantile, cov and %*% are replayed bit for bit. R accumulates
-sums in long double (x87 extended precision on x86-64). cov runs that arithmetic compiled, in
-_ldjit. sum and mean replay it with Python integers through _ldouble, which is also the reference
-the compiled code is tested against. eigen() calls LAPACK's dsyevr with R's arguments, so
-eigenvalues agree with R's to rounding on the scale of the largest one, not bit for bit: LAPACK
-builds differ in their kernels. A second eigenvalue near zero can be far off relative to itself.
+sums in long double (x87 extended precision on x86-64). cov and group_moments, which gives
+every nugget's colMeans and cov in one call, run that arithmetic compiled, in _ldjit. sum and
+mean replay it with Python integers through _ldouble, which is also the reference the compiled
+code is tested against. eigen() calls LAPACK's dsyevr with R's arguments, so eigenvalues agree
+with R's to rounding on the scale of the largest one, not bit for bit: LAPACK builds differ in
+their kernels. A second eigenvalue near zero can be far off relative to itself.
 """
 
 from __future__ import annotations
 
 import math
+import threading
+from collections.abc import Iterator
 
+import numba
 import numpy as np
 from scipy.linalg import LinAlgError, lapack
 
 from datanuggets import _ldjit
 from datanuggets import _ldouble as ld
 from datanuggets._defaults import MAD_CONSTANT
+from datanuggets._rcompat import r_mean
 
 
 def _ld_sum(v: list[float]) -> tuple[int, int]:
@@ -125,6 +130,56 @@ def _r_cov_py(x: np.ndarray) -> np.ndarray:
                 s = ld.add(s, ld.mul(a, b))
             out[i, j] = out[j, i] = ld.to_float(ld.div_int(s, n - 1))
     return out
+
+
+_MOMENTS_CHUNK = 1 << 22  # covariance entries group_moments holds at once (32 MB)
+_THREADS = threading.Lock()
+
+
+def group_moments(
+    x: np.ndarray, groups: list[np.ndarray], n_jobs: int = 1
+) -> Iterator[tuple[np.ndarray, np.ndarray | None]]:
+    """(colMeans, cov) of x[g] for each g in groups, in order, bit for bit r_mean(x[g], 0) and
+    r_cov(x[g]), with cov None below 2 rows. A group with no rows has a NaN center. Groups run
+    compiled, a chunk at a time, and n_jobs other than 1 spreads each chunk over numba threads
+    (all of them for -1). A group with Inf or NaN is redone through r_mean and r_cov."""
+    x = np.ascontiguousarray(x, dtype=np.float64)
+    bits = x.view(np.uint64)
+    p = x.shape[1]
+    per = max(1, _MOMENTS_CHUNK // (p * p))
+    for lo in range(0, len(groups), per):
+        chunk = groups[lo : lo + per]
+        counts = np.array([g.size for g in chunk], dtype=np.int64)
+        starts = np.concatenate(([0], np.cumsum(counts)[:-1])).astype(np.int64)
+        order = np.concatenate(chunk).astype(np.int64)
+        centers = np.empty((len(chunk), p))
+        covs = np.empty((len(chunk), p, p))
+        ok = np.empty(len(chunk), dtype=np.bool_)
+        args = (bits, order, starts, counts, centers, covs, ok)
+        if n_jobs == 1:
+            _ldjit.group_moments_serial(*args)
+        else:
+            _run_threaded(_ldjit.group_moments_parallel, args, n_jobs)
+        for i, g in enumerate(chunk):
+            if ok[i]:
+                yield centers[i], (covs[i] if g.size >= 2 else None)
+            else:
+                yield r_mean(x[g], 0), (r_cov(x[g]) if g.size >= 2 else None)
+
+
+def _run_threaded(kernel, args, n_jobs: int) -> None:
+    """kernel(*args) on min(n_jobs, NUMBA_NUM_THREADS) numba threads, or all of them for -1.
+    One parallel launch at a time: numba's workqueue threading layer aborts the process on
+    concurrent launches. The caller's thread count is restored afterwards."""
+    cap = numba.config.NUMBA_NUM_THREADS
+    threads = cap if n_jobs == -1 else min(n_jobs, cap)
+    with _THREADS:
+        before = numba.get_num_threads()
+        numba.set_num_threads(threads)
+        try:
+            kernel(*args)
+        finally:
+            numba.set_num_threads(before)
 
 
 def r_matvec(a: np.ndarray, v: np.ndarray) -> np.ndarray:
