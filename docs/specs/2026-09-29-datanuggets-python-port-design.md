@@ -225,12 +225,73 @@ Implementation plans are written per milestone so each stays reviewable: plan 1 
 
 The first version copies R's algorithms, including their memory cost. Optimizations land only after parity is green, and each one must keep every fixture passing.
 
-- `create_dn_centers`: stage 2 builds a `dn_num1` x `dn_num1` float64 matrix (800 MB at 1e4), as R does. Later optimization: track remaining rows with a mask instead of copying the submatrix every pass, and vectorize the row minimum over the active set. The greedy marking loop is inherently sequential and is fine in Python at these sizes; numba is an option only if profiling shows it matters.
-- `create_dn`'s global column mean replays R's long-double `colMeans` in pure Python, about 0.4 s per million values (about 4 s at n = 1e6, p = 10). A later fast path can use `np.add.accumulate` over `np.longdouble` where numpy's long double is x87 extended (Linux x86-64), keeping the integer replay as the reference everywhere else.
+### 9.1 Where the time goes
+
+Measured on the laptop (i7-13650HX, Windows 11, Python 3.14.3, R 4.6.1) with `benchmarks/covertype.py` and cProfile, replaying R's draws on real UCI Covertype:
+
+- `refine_dn` at n = 100,000 takes 29.95 s against R's 0.53 s. `r_cov` accounts for 25.4 s of it (cumulative), spread over 15.9M calls to `_ldouble._rounded`, 10.2M to `add` and 5.9M to `mul`. The first pass alone (every nugget's features) takes 8.68 s. Hartigan-Wong takes about 2 s.
+- At all 581,012 rows the README reports `refine_dn` at 50.0 s against R's 0.9 s, and `create_dn` at 239.6 s against R's 202.1 s.
+
+The cost is the long double. R on x86-64 sums in x87 extended precision in hardware. numpy's `longdouble` is a plain double on Windows (MSVC) and on arm64 macOS, so the port replays the 64-bit significand with Python integers, which are exact but slow.
+
+### 9.2 Compiled long double
+
+The integer replay moves into numba-compiled kernels that do the same arithmetic on fixed-width integers.
+
+- A long double is a triple (sign, magnitude, exponent) standing for (-1)^sign x magnitude x 2^exponent. The magnitude is a uint64 with its top bit set, and zero is all zeros. Every result rounds to 64 significant bits with ties to even, the rule `_ldouble.py` follows.
+- Operations: add (subtraction is add with the sign flipped), multiply, divide by a positive count, from a double (exact, from its bit pattern), and to a double (one rounding to nearest even, into the subnormal range, and to +-inf past `DBL_MAX`).
+- Kernels compile whole loops, not single operations: `r_cov` (both mean passes, the deviations, the product sums, the final division), the line mean behind `r_mean` (R's `colMeans`/`rowMeans`), and `r_sum`/`r_vec_mean` if the profile shows they matter. Each loop runs its operations in the same order as the Python code it replaces.
+- The kernels live in `src/datanuggets/_ldjit.py`. `_rstats` and `_rcompat` keep their function signatures and call the kernels, so no caller changes, including the WCluster leaves being ported in parallel. Their non-finite branches (Inf or NaN in the input) stay in Python, so a kernel only ever sees finite doubles.
+- `_ldouble.py` and today's pure-Python paths stay in the package as the reference the tests compare against. They no longer run in normal use.
+
+Rules the kernels follow, each learned from a hazard numba has and Python ints don't:
+
+- numba turns a uint64 mixed with an int64 into a float64. Every constant in unsigned arithmetic is a `np.uint64`, never a bare Python int.
+- LLVM leaves a shift of 64 bits or more undefined. Every shift amount stays in 0..63, with the edge cases branched explicitly.
+- numba has no 128-bit integer. The 64 x 64 bit product is assembled from 32-bit halves, and division by a count is a 128-by-64 bit shift-subtract loop (it runs once per column, not per element).
+- When two exponents differ by more than 63 bits, the bits that fall off the smaller operand collapse into one sticky bit ORed into the lowest bit. That makes the truncated value odd, and every rounding boundary at that width is even, so the truncation can't change the rounding direction.
+
+A throwaway spike checked this design before the spec (kernels for add, multiply and conversion from double only):
+
+| Check | Mac mini (M4, macOS, arm64) | Laptop (Windows, x86-64) |
+|---|---|---|
+| add against `_ldouble.add` | 10,000,000 cases, 1,484,154 of them exact ties, 0 mismatches | 1,000,000 cases, 0 mismatches |
+| multiply against `_ldouble.mul` | 10,000,000 cases, 780,345 exact ties, 0 mismatches | 1,000,000 cases, 0 mismatches |
+| double to long double | 1,000,000 doubles (a tenth zero or subnormal), 0 mismatches | same |
+| `r_cov`'s product sums, every nugget of Covertype 100k | 109,670 sums, 0 mismatches, 2.72 s to 0.098 s | 109,670 sums, 0 mismatches, 5.32 s to 0.154 s |
+
+The kernel cost 15.5 ns per long double operation on the mini and 2.8 us per call, so calling it once per nugget adds little. The first call compiles the kernels (2.86 s on the laptop), and `cache=True` keeps the compiled code on disk for later runs. The README says so.
+
+numba becomes a runtime dependency, `numba >= 0.67`. Version 0.67.0 installs on Python 3.12, 3.13 and 3.14, and the spike ran on Windows x86-64 and macOS arm64. There's no fallback to the slow path when numba is missing.
+
+Tests:
+
+- `tests/test_ldjit.py` checks every kernel operation against `_ldouble.py` bit for bit on a fixed-seed fuzz of 200,000 cases per operation, which keeps the suite fast. The generator is the spike's: full random, double-like and sparse magnitudes, random trailing zeros, exponent gaps of 62 to 67 and 126 to 129 bits, constructed exact ties, and near cancellation. Divide-by-count and conversion to double get their own cases at the subnormal and overflow edges.
+- The same fuzz at 10,000,000 cases per operation runs under a `slow` marker, on the Mac mini.
+- The compiled `r_cov` and `r_mean` match the pure-Python ones on every fixture's data, including the 8 real volcano sets whose means actually round.
+- Every R fixture still passes unchanged, and the Covertype replays stay bit-identical to R at 1e4, 1e5 and all 581,012 rows.
+
+### 9.3 Parallelism
+
 - `create_dn` stage 1 chunks run under joblib (loky) when `n_jobs > 1`. Chunk results are stacked in chunk order, so output does not depend on `n_jobs`.
-- `refine_dn` splits within a round run under joblib; per-split reseeding keeps results identical for any `n_jobs`.
+- `refine_dn` splits within a round run under joblib. Per-split reseeding keeps results identical for any `n_jobs`.
+- `refine_dn`'s first pass computes every nugget's center and covariance in one compiled call, spread over nuggets with numba threads (`prange`, capped at `n_jobs`). Each nugget's own arithmetic stays serial and in R's order, so the result can't depend on `n_jobs`, and a test compares `n_jobs = 1` against `n_jobs = 4`. The eigen decompositions stay per nugget in SciPy's LAPACK.
+- Kernels called inside joblib workers run serially, so worker processes don't oversubscribe the cores.
+
+### 9.4 Other planned optimizations
+
+- `create_dn_centers`: stage 2 builds a `dn_num1` x `dn_num1` float64 matrix (800 MB at 1e4), as R does. A later optimization tracks the remaining rows with a mask instead of copying the submatrix every pass and vectorizes the row minimum over the active set. The greedy marking loop is sequential. It gets compiled only if the profile flags it.
 - `whclust`: R recomputes WSS from raw rows for every pair, O(n^3) with a large constant. The closed-form weighted Ward cost `W_A W_B / (W_A + W_B) * ||mu_A - mu_B||^2` is algebraically equal to R's `wss(A+B) - wss(A) - wss(B)` and ships only if merge order matches R on every fixture. Ties are broken column-major, like R's `which.min` on a matrix.
-- **Benchmarks:** `create_dn` and `refine_dn` first, on real UCI Covertype at n in {1e4, 1e5, 581k}, R vs Python, single-core and all-core, reporting wall time and peak RSS.
+
+The earlier plan for a `np.longdouble` fast path on Linux x86-64 is dropped. The compiled kernels are exact on every platform, so there's one code path.
+
+### 9.5 When to stop
+
+The work is profile-driven. After each change, `create_dn` and `refine_dn` are profiled on Covertype 100k with `n_jobs = 1`, and the largest remaining Python cost is compiled or restructured next. Hartigan-Wong's loops are the expected second target.
+
+It stops when no function written in Python in `src/datanuggets` has a cProfile `tottime` above 10% of the run's wall time, for both `create_dn` and `refine_dn` on Covertype 100k. The time left is then in compiled code (the numba kernels, numpy, SciPy and LAPACK) or spread thin across glue.
+
+Benchmarks then confirm it: `create_dn` and `refine_dn` on Covertype at n in {1e4, 1e5, 581,012}, R against Python, single-core and all-core, reporting wall time and peak RSS, with outputs bit-identical to R. A published table runs R and Python on the same machine, the laptop, because its R has the x87 long double the fixtures come from. The Mac mini runs the Python suite, the long fuzz and timings used while iterating. Its R has a 64-bit long double, so it never records fixtures.
 
 ## 10. R behaviors kept, fixed, or documented
 
@@ -255,7 +316,7 @@ The first version copies R's algorithms, including their memory cost. Optimizati
 
 - Location `OneDrive\Desktop\Rutgers Research\datanuggets\`; private GitHub repo `ron2k1/datanuggets` until the advisor approves making it public.
 - `uv` for environments and builds (hatchling backend); `ruff` for lint and format; `pytest` with `pytest-xdist`; GitHub Actions matrix (ubuntu, windows, macos) x (3.12, 3.13, 3.14). No R in CI.
-- Runtime deps: numpy >= 2.0, scipy >= 1.13, joblib, pygam. Extras: `plot` (matplotlib), `frame` (pandas), `progress` (tqdm).
+- Runtime deps: numpy >= 2.0, scipy >= 1.13, joblib, numba >= 0.67 (section 9.2), pygam. Extras: `plot` (matplotlib), `frame` (pandas), `progress` (tqdm).
 - License: GPL-2.0-only, same as upstream, with credit to the original authors in `LICENSE`, `README`, and `CITATION.cff`. Relicensing (e.g. BSD-3) is possible only with the authors' consent and is an advisor question.
 
 ## 12. Open questions for the advisor
