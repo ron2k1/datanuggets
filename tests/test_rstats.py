@@ -215,3 +215,17 @@ def test_group_moments_leaves_non_finite_groups_to_the_replay():
     assert np.isnan(c2).all() and v2 is None
     with pytest.raises(OverflowError):
         list(group_moments(x, [np.array([0, 1])]))
+
+
+def test_group_moments_rejects_rows_past_the_end():
+    x = np.arange(12.0).reshape(4, 3)
+    with pytest.raises(IndexError):
+        list(group_moments(x, [np.array([2, 4])]))
+
+
+@pytest.mark.parametrize("rows", [[True, False, True, False], [-4, -2]], ids=["mask", "negative"])
+def test_group_moments_reads_rows_the_way_numpy_does(rows):
+    x = np.arange(12.0).reshape(4, 3)
+    rows = np.array(rows)
+    ((center, cov),) = group_moments(x, [rows])
+    assert same_bits(center, [3.0, 4.0, 5.0]) and same_bits(cov, _r_cov_py(x[rows]))

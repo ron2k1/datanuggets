@@ -141,13 +141,16 @@ def group_moments(
     """(colMeans, cov) of x[g] for each g in groups, in order, bit for bit r_mean(x[g], 0) and
     r_cov(x[g]), with cov None below 2 rows. A group with no rows has a NaN center. Groups run
     compiled, a chunk at a time, and n_jobs other than 1 spreads each chunk over numba threads
-    (all of them for -1). A group with Inf or NaN is redone through r_mean and r_cov."""
+    (all of them for -1). A group with Inf or NaN is redone through r_mean and r_cov. Each g
+    indexes rows as x[g] would, so a mask or negative index works and a row past the end raises
+    IndexError."""
     x = np.ascontiguousarray(x, dtype=np.float64)
     bits = x.view(np.uint64)
     p = x.shape[1]
     per = max(1, MOMENTS_CHUNK // (p * p))
+    rows = np.arange(x.shape[0])
     for lo in range(0, len(groups), per):
-        chunk = groups[lo : lo + per]
+        chunk = [rows[g] for g in groups[lo : lo + per]]  # numpy reads masks, negatives, bounds
         counts = np.array([g.size for g in chunk], dtype=np.int64)
         starts = np.concatenate(([0], np.cumsum(counts)[:-1])).astype(np.int64)
         order = np.concatenate(chunk).astype(np.int64)
