@@ -200,7 +200,7 @@ def _run_threaded(kernel, args, n_jobs: int) -> None:
 
 def _layer_forbids_fork() -> bool:
     """True when this process has launched numba threads on GNU OpenMP, the one layer numba
-    can't launch again in a forked child (numba's parallel.py says so and aborts the child)."""
+    can't launch again in a forked child (numba's omppool.cpp raises SIGTERM in the child)."""
     try:
         layer = numba.threading_layer()
     except ValueError:  # no parallel launch yet, so a child inherits nothing
@@ -213,7 +213,10 @@ def _layer_forbids_fork() -> bool:
 
 
 def _after_fork_in_child() -> None:
-    global _FORKED_UNSAFE
+    """A fork copies _THREADS as it was, held if another thread was launching, but not that
+    thread, so nothing in the child would ever release it. The child gets a fresh lock."""
+    global _FORKED_UNSAFE, _THREADS
+    _THREADS = threading.Lock()
     _FORKED_UNSAFE = _layer_forbids_fork()
 
 

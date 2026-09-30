@@ -1,10 +1,12 @@
 """R's long-double statistics, unique() and %*% replayed bit for bit; eigen() to Numeric tier."""
 
 import os
+import signal
 import subprocess
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import numba
@@ -325,6 +327,50 @@ def _moment_bytes(moments) -> bytes:
     return b"".join(c.tobytes() + (b"" if v is None else v.tobytes()) for c, v in moments)
 
 
+def _forked_child_moments(x, groups, n_jobs) -> tuple[int, bytes]:
+    """group_moments in a forked child: its exit code and the bytes it sent. A child still
+    running after 60 s dies of SIGALRM, so a deadlock fails the test instead of hanging it."""
+    read, write = os.pipe()
+    pid = os.fork()
+    if pid == 0:  # the child sends its bits and exits without returning into pytest
+        code = 1
+        try:
+            signal.alarm(60)
+            with os.fdopen(write, "wb") as pipe:
+                pipe.write(_moment_bytes(group_moments(x, groups, n_jobs)))
+            code = 0
+        except BaseException as e:
+            os.write(2, f"child: {e!r}\n".encode())
+            raise  # the finally exits first, so this only satisfies the linter
+        finally:
+            os._exit(code)
+    os.close(write)
+    with os.fdopen(read, "rb") as pipe:
+        sent = pipe.read()
+    _, status = os.waitpid(pid, 0)
+    return os.waitstatus_to_exitcode(status), sent
+
+
+@contextmanager
+def _launch_in_progress():
+    """Another thread inside a launch, holding _THREADS, until the block ends."""
+    held, done = threading.Event(), threading.Event()
+
+    def launch():
+        with rstats._THREADS:
+            held.set()
+            done.wait()
+
+    thread = threading.Thread(target=launch)
+    thread.start()
+    held.wait()
+    try:
+        yield
+    finally:
+        done.set()
+        thread.join()
+
+
 @pytest.mark.skipif(not hasattr(os, "fork"), reason="needs os.fork")
 @pytest.mark.filterwarnings("ignore::DeprecationWarning")  # fork() from a process with threads
 def test_group_moments_runs_serially_in_a_child_forked_after_gnu_openmp(monkeypatch):
@@ -337,24 +383,26 @@ def test_group_moments_runs_serially_in_a_child_forked_after_gnu_openmp(monkeypa
 
     monkeypatch.setattr(rstats, "_layer_forbids_fork", lambda: True)
     monkeypatch.setattr(rstats._ldjit, "group_moments_parallel", launch)
-    read, write = os.pipe()
-    pid = os.fork()
-    if pid == 0:  # the child sends its bits and exits without returning into pytest
-        code = 1
-        try:
-            with os.fdopen(write, "wb") as pipe:
-                pipe.write(_moment_bytes(group_moments(x, groups, 2)))
-            code = 0
-        except BaseException as e:
-            os.write(2, f"child: {e!r}\n".encode())
-            raise  # the finally exits first, so this only satisfies the linter
-        finally:
-            os._exit(code)
-    os.close(write)
-    with os.fdopen(read, "rb") as pipe:
-        sent = pipe.read()
-    _, status = os.waitpid(pid, 0)
-    assert os.waitstatus_to_exitcode(status) == 0
-    assert sent == want
+    assert _forked_child_moments(x, groups, 2) == (0, want)
     with pytest.raises(AssertionError, match="numba threads launched"):  # only the child is serial
         list(group_moments(x, groups, 2))
+
+
+def test_a_child_forked_during_a_launch_gets_a_free_lock(monkeypatch):
+    # the fork copies _THREADS held, but not the thread that would release it
+    monkeypatch.setattr(rstats, "_THREADS", rstats._THREADS)  # restored after the test
+    monkeypatch.setattr(rstats, "_FORKED_UNSAFE", rstats._FORKED_UNSAFE)
+    with _launch_in_progress():
+        rstats._after_fork_in_child()  # what os.register_at_fork runs in the child
+        assert not rstats._THREADS.locked()
+
+
+@pytest.mark.skipif(not hasattr(os, "fork"), reason="needs os.fork")
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")  # fork() from a process with threads
+def test_group_moments_runs_in_a_child_forked_during_another_threads_launch():
+    x, sets = DATA[BIGGEST]
+    groups = _nuggets(sets[0])
+    want = _moment_bytes(group_moments(x, groups))
+    with _launch_in_progress():
+        got = _forked_child_moments(x, groups, 2)
+    assert got == (0, want)
