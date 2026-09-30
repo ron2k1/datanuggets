@@ -16,12 +16,12 @@
 
 - The gate profile this plan answers, plan 1 Task 6 Step 5 on the mini at 100,000 rows, commit 58cefb1. `create_dn` took 15.49 s, and the largest Python costs were `_rfast.py`'s `term` (39.2% of wall, 6.07 s), `centers.select_centers` (34.5%, 5.35 s) and `_rfast._arma_accumulate` (11.6%, 1.79 s). `refine_dn` took 0.91 s, with Hartigan-Wong's `_qtran` at 17.4%, `_optra` 13.6%, `_final_centers_and_wss` 12.3%, `_initial_assignment` 12.1%, `_initial_centers` 4.5% and `_transfer` 3.5%. cProfile books numpy work done through operators (`-`, `*`, fancy indexing) to the Python function that runs it, so `term` is really numpy streaming an m x k temporary per feature, and `select_centers` is mostly `d[np.ix_(keep, keep)]` copying the matrix every round.
 - numba 0.67.0 doesn't fuse `a * a + c` into one FMA rounding without fastmath, on the laptop (AMD64) or the mini (arm64), in a scalar function, a loop or a prange loop (probe with a = 1 + 2^-30, c = -1). So a compiled `s += d * d` rounds the product, then the sum, as numpy and R's C do.
-- The prototype is this plan's code. On the mini the full suite passed, 1194 tests. `tests/test_rfast.py` went from 45 collected to 129, `tests/test_centers.py` from 141 to 175, `tests/test_hartigan_wong.py` from 31 to 38, and `tests/test_create.py` stayed at 96.
-- Its profile on the mini at 100,000 rows: `create_dn` 2.21 s wall and `refine_dn` 0.31 s, both matching R on every output, and both passing the stopping rule. The largest Python function was 0.2% of wall in `create_dn` (`create.py` `stage1`) and 2.9% in `refine_dn` (`_rstats.r_eigen_sym`). Kernel time in `create_dn`: `compiled_dist` 0.94 s, `compiled_nearest` 0.77 s, `compiled_delete_rounds` 0.40 s, `compiled_line_means` 0.01 s. In `refine_dn`: `compiled_group_moments_serial` 0.17 s, `compiled_hartigan_wong` 0.01 s.
+- The prototype is this plan's code. On the mini the full suite passed, 1225 tests. `tests/test_rfast.py` went from 45 collected to 131, `tests/test_centers.py` from 141 to 175, `tests/test_hartigan_wong.py` from 31 to 40, and `tests/test_create.py` stayed at 96.
+- Its profile on the mini at 100,000 rows, run twice with the same times: `create_dn` 2.23 s wall and `refine_dn` 0.32 s, both matching R on every output, and both passing the stopping rule. The largest Python function was 0.2% of wall in `create_dn` (`create.py` `stage1`) and 2.9% in `refine_dn` (`_rstats.r_eigen_sym`). Kernel time in `create_dn`: `compiled_dist` 0.95 s, `compiled_nearest` 0.77 s, `compiled_delete_rounds` 0.40 s, `compiled_line_means` 0.01 s. In `refine_dn`: `compiled_group_moments_serial` 0.17 s, `compiled_hartigan_wong` 0.01 s.
 - The deletion rounds' row minimum, on one 5,000-row Covertype chunk on the mini: a plain scan took 22.7 ms for the first round and 41.0 ms for all rounds down to 500 rows. The four-lane scan in Task 2 took 7.0 ms and 16.3 ms. numpy's `argmin(axis=1)` over the same 5,000 x 5,000 matrix took 12.6 ms, and computing the matrix took 39.5 ms. With the plain scan, the whole 100k profile had `create_dn` at 2.85 s.
 - Memory: under tracemalloc, R's copy-every-round version peaked at 2.59 times one 1,500 x 1,500 matrix. The compiled rounds stay under 1.1 times.
 - The kmns fuzz in Task 3 ran 1,800 random problems against `_HW` with 0 mismatches. Each of its six cases reaches all five fault codes. For example, 1-D grid data gave 83 converged runs, 174 empty clusters, 9 out of iterations, 10 bad k and 24 out of quick-transfer steps.
-- First-call compile of the new kernels on the laptop (Python 3.12.13, cold cache): `cross` 0.68 s, `nearest` 0.24 s, `dist` with `delete_rounds` 2.74 s, `hartigan_wong` 3.84 s. Loading them from the cache, imports included, took 0.84 s.
+- First-call compile of the new kernels on the laptop (Python 3.12.13, cold cache): `cross` 0.84 s, `nearest` 0.24 s, `dist` with `delete_rounds` 2.27 s, `hartigan_wong` 2.54 s. Loading them from the cache, imports included, took 0.88 s.
 
 **Where this plan goes past the spec's text** (RON2K rules on these with the plan):
 
@@ -37,8 +37,8 @@ Out of scope: numba threads inside `nearest_index` or `dist_matrix` (spec 9.3 do
 
 - Branch `feat/speed`, tracking `origin/feat/speed`. `main` advances only by PR, and merging is RON2K's call.
 - Parity: every existing fixture test passes unchanged. Compiled results equal the kept Python references bit for bit. Compare floats with `same_bits` (`.view(np.uint64)`), so -0.0 and 0.0 count as different.
-- Every kernel is `@njit(cache=True, nogil=True)`, with no `fastmath` and no `parallel`. Each loop runs its floating-point operations in the same order as the Python code it replaces. Loops may be reordered only where no sum or compare changes order, like looping over centers innermost.
-- Kernels see only finite float64 data, which `as_matrix` guarantees for every public entry point. The Python wrappers make every array C-contiguous float64 before a kernel reads it, because numba indexes raw memory without bounds checks.
+- Every kernel is `@compiled(nogil=True)` from `datanuggets._compiled`, with no `fastmath` and no `parallel`. `compiled` is numba's `njit(cache=True)`, falling back to plain `njit` where numba has nowhere to write its cache. `tests/test_compiled.py` finds every `*jit` module by itself and checks both, so a kernel written with `njit` directly fails there. Each loop runs its floating-point operations in the same order as the Python code it replaces. Loops may be reordered only where no sum or compare changes order, like looping over centers innermost.
+- Kernels see only finite float64 data, which `as_matrix` guarantees for every public entry point. The Python wrappers make every array C-contiguous float64 before a kernel reads it, because numba indexes raw memory without bounds checks. For the same reason a wrapper whose two inputs must have the same number of columns checks that and raises `ValueError`. Every array a kernel only reads goes through `_compiled.frozen`, a read-only view, because numba compiles a separate kernel for read-only arrays and one kernel should serve every caller.
 - `_cross_distances_py`, `arma_sum_last`, `_select_centers_py` and `_kmns_py` (with `_HW`) stay in the package as test references and don't run in normal use.
 - Callers reach kernels through the module, `from datanuggets import _rfastjit` then `_rfastjit.name(...)`, never `from datanuggets._rfastjit import name`. Kernel names are unique across the `*jit` modules, because the profiler books each one as `compiled_<name>`.
 - Real data only: every timing written into docs or commits comes from a run made in this plan or the plan-time evidence above. No invented numbers.
@@ -53,7 +53,7 @@ Out of scope: numba threads inside `nearest_index` or `dist_matrix` (spec 9.3 do
 
 1. Integer-valued data, where many distances tie exactly. Every Covertype column is an integer. A person expects R's picks among ties: `Rfast::rowMins`' first index, `order()`'s stable order and std::sort's head for `dista`. Tests `test_nearest_index_matches_the_numpy_replay` (Task 1), and `test_row_min_is_numpys_first_argmin_over_the_active_rows` and `test_select_centers_matches_the_python_rounds` (Task 2).
 2. Rows far enough apart that a squared difference overflows to inf, or close enough that it's subnormal. A person expects R's bits, inf where R has inf. Tests `test_cross_distances_match_the_numpy_replay` and `test_dist_matrix_matches_the_numpy_replay` (Task 1).
-3. Arrays that aren't C-contiguous float64 reaching a kernel (Fortran order, strided slices, int columns). A kernel reads raw memory, so a wrong layout would silently read the wrong numbers. A person expects the answer for the contiguous float64 copy. Tests `test_distances_take_any_layout_and_dtype` (Task 1) and `test_kmns_takes_any_layout_and_dtype` (Task 3).
+3. Arrays that aren't C-contiguous float64 reaching a kernel (Fortran order, strided slices, int columns, read-only arrays), or two inputs with different column counts. A kernel reads raw memory, so a wrong layout or width would silently read the wrong numbers, and a read-only array would compile a second kernel. A person expects the answer for the contiguous float64 copy, one compile, and a `ValueError` for mismatched widths. Tests `test_distances_take_any_layout_and_dtype`, `test_distances_reject_mismatched_columns` and `test_read_only_inputs_run_the_same_compiled_kernels` (Task 1), and `test_kmns_takes_any_layout_and_dtype`, `test_kmns_rejects_mismatched_columns` and `test_kmns_read_only_data_runs_the_same_compiled_kernels` (Task 3).
 4. `create_dn` with `n_jobs` above 1. Stage 1's thread workers now run kernels outside the GIL at the same time. A person expects the `n_jobs=1` result. Test `test_n_jobs_does_not_change_result`, extended to `n_jobs=4` (Task 2).
 5. Stage 2 at the default `dn_num1 = 10,000`, an 800 MB distance matrix. A person on a laptop expects one matrix in memory, not a second copy each round. Test `test_select_centers_holds_one_distance_matrix` (Task 2).
 
@@ -64,18 +64,23 @@ Out of scope: numba threads inside `nearest_index` or `dist_matrix` (spec 9.3 do
 **Files:**
 - Create: `src/datanuggets/_rfastjit.py`
 - Modify: `src/datanuggets/_rfast.py:11` (module docstring), `:20` (import), `:56-107` (`cross_distances` through `nearest_index`)
-- Modify: `src/datanuggets/_defaults.py:13-15` (drop `DIST_BLOCK_ROWS`, `ASSIGN_BLOCK_ROWS`)
+- Modify: `src/datanuggets/_defaults.py:15-17` (drop `DIST_BLOCK_ROWS`, `ASSIGN_BLOCK_ROWS`)
 - Test: `tests/test_rfast.py`
 
 **Interfaces:**
-- Consumes: `_rfast._arma_accumulate`, `_rfast._sequential_accumulate` and `_rfast.gnu_sort_first`, all unchanged. `rfixtures.same_bits(a, b) -> bool`.
-- Produces: in `datanuggets._rfastjit`, `@njit(cache=True, nogil=True)` kernels `cross(a, bt, manhattan, sequential, out)`, `dist(x, xt, manhattan, out)` and `nearest(points, ct, manhattan, sequential, best)`, plus the helper `_sums`. `a`, `x` and `points` are (rows x p), `bt`, `xt` and `ct` are the other side transposed (p x columns), and `out`/`best` are written in place. In `datanuggets._rfast`: `cross_distances(a, b, metric, *, kernel="dist")` (unchanged signature), `_cross_distances_py(a, b, metric, *, kernel="dist")` (the reference), `_dista_sums_in_order(p, metric, kernel) -> bool`, `dist_matrix(x, metric)` and `nearest_index(points, centers, metric)`. The last two lose `block_rows`. Task 2 calls `dist_matrix(rs, metric)`.
+- Consumes: `_rfast._arma_accumulate`, `_rfast._sequential_accumulate` and `_rfast.gnu_sort_first`, all unchanged. `rfixtures.same_bits(a, b) -> bool`. `_compiled.compiled(**options)` and `_compiled.frozen(a)` (a read-only view), already on the branch.
+- Produces: in `datanuggets._rfastjit`, `@compiled(nogil=True)` kernels `cross(a, bt, manhattan, sequential, out)`, `dist(x, xt, manhattan, out)` and `nearest(points, ct, manhattan, sequential, best)`, plus the helper `_sums`. `a`, `x` and `points` are (rows x p), `bt`, `xt` and `ct` are the other side transposed (p x columns), and `out`/`best` are written in place. In `datanuggets._rfast`: `cross_distances(a, b, metric, *, kernel="dist")` (unchanged signature), `_cross_distances_py(a, b, metric, *, kernel="dist")` (the reference), `_dista_sums_in_order(p, metric, kernel) -> bool`, `dist_matrix(x, metric)` and `nearest_index(points, centers, metric)`. The last two lose `block_rows`. `cross_distances` and `nearest_index` raise `ValueError` when the two sides' column counts differ. Task 2 calls `dist_matrix(rs, metric)`.
 
 - [ ] **Step 1: Write the failing tests**
 
-In `tests/test_rfast.py`, add `_cross_distances_py` as the first name in the `from datanuggets._rfast import (` list:
+In `tests/test_rfast.py`, replace the lines from `import numpy as np` through `    arma_sum_last,` with:
 
 ```python
+import numpy as np
+import pytest
+from numba.core.registry import CPUDispatcher
+
+from datanuggets import _rfastjit
 from datanuggets._rfast import (
     _cross_distances_py,
     arma_sum_last,
@@ -168,12 +173,42 @@ def test_distances_take_any_layout_and_dtype():
         assert same_bits(cross_distances(a, b, metric), _replay(a64, b64, metric))
         assert same_bits(dist_matrix(b, metric), dist_matrix(b64, metric))
         np.testing.assert_array_equal(nearest_index(a, b, metric), nearest_index(a64, b64, metric))
+
+
+def test_distances_reject_mismatched_columns():
+    for a, b in ((np.ones((3, 2)), np.ones((4, 3))), (np.ones((3, 3)), np.ones((4, 2)))):
+        with pytest.raises(ValueError, match="columns"):
+            cross_distances(a, b, "euclidean")
+        with pytest.raises(ValueError, match="columns"):
+            nearest_index(a, b, "euclidean")
+
+
+def _all_distances(a, b):
+    out = []
+    for metric in ("euclidean", "manhattan"):
+        out += [cross_distances(a, b, metric, kernel=k) for k in ("dist", "dista")]
+        out += [dist_matrix(b, metric), nearest_index(a, b, metric)]
+    return out
+
+
+def test_read_only_inputs_run_the_same_compiled_kernels():
+    rng = np.random.default_rng(11)
+    a, b = rng.standard_normal((30, 40)), rng.standard_normal((20, 40))  # 40 > 32: dista in order
+    want = _all_distances(a, b)
+    kernels = [k for k in vars(_rfastjit).values() if isinstance(k, CPUDispatcher)]
+    compiled = [len(k.signatures) for k in kernels]
+    a, b = a.copy(), b.copy()
+    a.setflags(write=False)
+    b.setflags(write=False)
+    got = _all_distances(a, b)
+    assert all(same_bits(g, w) for g, w in zip(got, want, strict=True))
+    assert [len(k.signatures) for k in kernels] == compiled  # no second signature to compile
 ```
 
 - [ ] **Step 2: Run them to see them fail**
 
 Run: `$MR uv run pytest -q -p no:cacheprovider tests/test_rfast.py`
-Expected: `1 error`, collecting `tests/test_rfast.py`: `ImportError: cannot import name '_cross_distances_py' from 'datanuggets._rfast'`.
+Expected: `1 error`, collecting `tests/test_rfast.py`: `ImportError: cannot import name '_rfastjit' from 'datanuggets'`.
 
 - [ ] **Step 3: Write the kernels**
 
@@ -193,10 +228,11 @@ inputs are finite, which as_matrix guarantees upstream.
 import math
 
 import numpy as np
-from numba import njit
+
+from datanuggets._compiled import compiled
 
 
-@njit(cache=True, nogil=True)
+@compiled(nogil=True)
 def _sums(a, bt, manhattan, sequential, out, acc2, k):
     """out[:k] = the distances from a (p,) to the first k columns of bt (p x k)."""
     p = a.shape[0]
@@ -226,7 +262,7 @@ def _sums(a, bt, manhattan, sequential, out, acc2, k):
             out[c] = math.sqrt(out[c])
 
 
-@njit(cache=True, nogil=True)
+@compiled(nogil=True)
 def cross(a, bt, manhattan, sequential, out):
     """out (m x k) = the distances between the rows of a (m x p) and the columns of bt (p x k)."""
     k = bt.shape[1]
@@ -235,7 +271,7 @@ def cross(a, bt, manhattan, sequential, out):
         _sums(a[r], bt, manhattan, sequential, out[r], acc2, k)
 
 
-@njit(cache=True, nogil=True)
+@compiled(nogil=True)
 def dist(x, xt, manhattan, out):
     """out (n x n) = Rfast::Dist(x). Row r computes columns 0..r and mirrors them into column r,
     which is exact: b - a is -(a - b) in IEEE arithmetic, and both metrics drop the sign."""
@@ -248,7 +284,7 @@ def dist(x, xt, manhattan, out):
             out[c, r] = row[c]
 
 
-@njit(cache=True, nogil=True)
+@compiled(nogil=True)
 def nearest(points, ct, manhattan, sequential, best):
     """best[i] = the first center at the smallest distance from points[i], or -1 when a later center
     ties it. The caller settles those rows as std::sort does."""
@@ -281,6 +317,7 @@ Replace `from datanuggets._defaults import ASSIGN_BLOCK_ROWS, DIST_BLOCK_ROWS` w
 
 ```python
 from datanuggets import _rfastjit
+from datanuggets._compiled import frozen
 ```
 
 Replace everything from `def cross_distances(` up to (not including) `def gnu_sort_first(` with the block below, keeping two blank lines before `def gnu_sort_first(`. It adds `_dista_sums_in_order` above `cross_distances`, and the old `cross_distances` body moves into `_cross_distances_py`.
@@ -296,8 +333,10 @@ def cross_distances(
 ) -> np.ndarray:
     """Distances between the rows of a (m x p) and b (k x p), rounded as Rfast::Dist
     (kernel="dist") or Rfast::dista (kernel="dista") rounds them."""
-    a = np.ascontiguousarray(a, dtype=np.float64)
-    bt = np.ascontiguousarray(np.asarray(b, dtype=np.float64).T)
+    a = frozen(np.ascontiguousarray(a, dtype=np.float64))
+    bt = frozen(np.ascontiguousarray(np.asarray(b, dtype=np.float64).T))
+    if bt.shape[0] != a.shape[1]:
+        raise ValueError(f"a has {a.shape[1]} columns but b has {bt.shape[0]}")
     out = np.empty((a.shape[0], bt.shape[1]))
     seq = _dista_sums_in_order(a.shape[1], metric, kernel)
     _rfastjit.cross(a, bt, metric == "manhattan", seq, out)
@@ -332,19 +371,24 @@ def _cross_distances_py(
 
 def dist_matrix(x: np.ndarray, metric: str) -> np.ndarray:
     """Rfast::Dist(x, method = metric): the full n x n matrix."""
-    x = np.ascontiguousarray(x, dtype=np.float64)
+    x = frozen(np.ascontiguousarray(x, dtype=np.float64))
     out = np.empty((x.shape[0], x.shape[0]))
-    _rfastjit.dist(x, np.ascontiguousarray(x.T), metric == "manhattan", out)
+    _rfastjit.dist(x, frozen(np.ascontiguousarray(x.T)), metric == "manhattan", out)
     return out
 
 
 def nearest_index(points: np.ndarray, centers: np.ndarray, metric: str) -> np.ndarray:
     """Rfast::dista(points, centers, type = metric, k = 1, index = TRUE), 0-based."""
-    points = np.ascontiguousarray(points, dtype=np.float64)
-    centers = np.ascontiguousarray(centers, dtype=np.float64)
+    points = frozen(np.ascontiguousarray(points, dtype=np.float64))
+    centers = frozen(np.ascontiguousarray(centers, dtype=np.float64))
+    if centers.shape[1] != points.shape[1]:
+        raise ValueError(
+            f"points have {points.shape[1]} columns but centers have {centers.shape[1]}"
+        )
     seq = _dista_sums_in_order(points.shape[1], metric, "dista")
     best = np.empty(points.shape[0], dtype=np.intp)
-    _rfastjit.nearest(points, np.ascontiguousarray(centers.T), metric == "manhattan", seq, best)
+    ct = frozen(np.ascontiguousarray(centers.T))
+    _rfastjit.nearest(points, ct, metric == "manhattan", seq, best)
     tied = np.flatnonzero(best < 0)
     if tied.size:
         d = cross_distances(points[tied], centers, metric, kernel="dista")
@@ -370,10 +414,10 @@ Run: `$UV run ruff check src tests && $UV run ruff format --check src tests`
 Expected: no errors. If the format check fails, run `$UV run ruff format src tests` and read the diff before keeping it.
 
 Run: `$MR uv run pytest -q -p no:cacheprovider tests/test_rfast.py`
-Expected: `129 passed`. That's the 45 from before, less the deleted block test, plus 28 cross-distance, 28 dist-matrix and 28 nearest-index fuzz cases and the layout test. The first run compiles the kernels, which takes a few seconds.
+Expected: `131 passed`. That's the 45 from before, less the deleted block test, plus 28 cross-distance, 28 dist-matrix and 28 nearest-index fuzz cases, the layout test, the column-count test and the read-only test. The first run compiles the kernels, which takes a few seconds.
 
 Run: `$MR`
-Expected: `1153 passed` (1069 before this plan, plus 84).
+Expected: `1182 passed` (1096 before this plan, plus 86).
 
 - [ ] **Step 6: Commit and push**
 
@@ -395,6 +439,11 @@ nearest_index finds each row's minimum and flags ties in the same
 pass, so only tied rows go through std::sort's replay. The numpy path
 stays as _cross_distances_py, the reference a fuzz compares against.
 The block_rows arguments go: there are no temporaries left to bound.
+
+The wrappers hand the kernels read-only views, so a caller's read-only
+array runs the kernel already compiled instead of compiling a second
+one. And a b whose column count differs from a's is a ValueError now,
+where the kernel would have read past the end of a row.
 ```
 
 ```bash
@@ -413,8 +462,8 @@ git push
 - Test: `tests/test_centers.py`, `tests/test_create.py:78-83`
 
 **Interfaces:**
-- Consumes: `_rfast.dist_matrix(x, metric)` from Task 1.
-- Produces: in `datanuggets._centersjit`, `@njit(cache=True, nogil=True)` kernels `delete_rounds(d, dn_num, delete_percent) -> int64 array` (the kept row numbers, ascending) and `_nearest(d, act, t, a) -> (position, distance)`. In `datanuggets.centers`: `select_centers(rs, dn_num, delete_percent, dist_metric) -> (kept, passthrough)` (unchanged signature) and `_select_centers_py` with the same signature, the reference.
+- Consumes: `_rfast.dist_matrix(x, metric)` from Task 1. `_compiled.frozen(a)`.
+- Produces: in `datanuggets._centersjit`, `@compiled(nogil=True)` kernels `delete_rounds(d, dn_num, delete_percent) -> int64 array` (the kept row numbers, ascending) and `_nearest(d, act, t, a) -> (position, distance)`. In `datanuggets.centers`: `select_centers(rs, dn_num, delete_percent, dist_metric) -> (kept, passthrough)` (unchanged signature) and `_select_centers_py` with the same signature, the reference.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -524,10 +573,11 @@ there before. So after the first round only those rows are searched again.
 import math
 
 import numpy as np
-from numba import njit
+
+from datanuggets._compiled import compiled
 
 
-@njit(cache=True, nogil=True)
+@compiled(nogil=True)
 def _nearest(d, act, t, a):
     """(first position in act[:t] with the smallest d[a, .], that distance): Rfast::rowMins.
 
@@ -572,7 +622,7 @@ def _nearest(d, act, t, a):
     return b, v
 
 
-@njit(cache=True, nogil=True)
+@compiled(nogil=True)
 def delete_rounds(d, dn_num, delete_percent):
     """Row numbers create.DNcenters keeps from d (n x n, diagonal above every distance): each round
     deletes one point of each closest pair, in order of distance, as R does."""
@@ -627,6 +677,7 @@ Replace `from datanuggets._defaults import DELETE_PERCENT, DIST_METRICS` with:
 
 ```python
 from datanuggets import _centersjit
+from datanuggets._compiled import frozen
 from datanuggets._defaults import DELETE_PERCENT, DIST_METRICS
 ```
 
@@ -642,7 +693,8 @@ def select_centers(
         return np.arange(n_obs), True
     d = dist_matrix(rs, dist_metric)
     np.fill_diagonal(d, d.max() + 1)
-    return _centersjit.delete_rounds(d, dn_num, delete_percent).astype(np.intp, copy=False), False
+    kept = _centersjit.delete_rounds(frozen(d), dn_num, delete_percent)
+    return kept.astype(np.intp, copy=False), False
 
 
 def _select_centers_py(
@@ -669,7 +721,7 @@ Run: `$MR uv run pytest -q -p no:cacheprovider tests/test_centers.py tests/test_
 Expected: `176 passed`: 141 from before, 12 round fuzz cases, 21 row-minimum cases, the memory test, and the `n_jobs` test.
 
 Run: `$MR`
-Expected: `1187 passed` (1153 plus 34).
+Expected: `1216 passed` (1182 plus 34).
 
 - [ ] **Step 6: Commit and push**
 
@@ -708,8 +760,8 @@ git push
 - Test: `tests/test_hartigan_wong.py`
 
 **Interfaces:**
-- Consumes: `_hartigan_wong._HW` and `Kmns`, unchanged.
-- Produces: in `datanuggets._kmnsjit`, the constant `BIG` and `@njit(cache=True, nogil=True)` kernels `hartigan_wong(a, c, iter_max, max_qtran, ic1, nc, wss) -> (iter, ifault)` (overwrites `c`, fills `ic1`, `nc`, `wss`) and its stages `_initial_assignment`, `_initial_centers`, `_optra`, `_qtran`, `_transfer`, `_final_centers_and_wss`. In `datanuggets._hartigan_wong`: `kmns(a, c, iter_max, max_qtran) -> Kmns` (unchanged signature and result types: `cluster`, `size` and `withinss` are lists) and `_kmns_py`, same signature, the reference.
+- Consumes: `_hartigan_wong._HW` and `Kmns`, unchanged. `_compiled.frozen(a)`.
+- Produces: in `datanuggets._kmnsjit`, the constant `BIG` and `@compiled(nogil=True)` kernels `hartigan_wong(a, c, iter_max, max_qtran, ic1, nc, wss) -> (iter, ifault)` (overwrites `c`, fills `ic1`, `nc`, `wss`) and its stages `_initial_assignment`, `_initial_centers`, `_optra`, `_qtran`, `_transfer`, `_final_centers_and_wss`. In `datanuggets._hartigan_wong`: `kmns(a, c, iter_max, max_qtran) -> Kmns` (unchanged signature and result types: `cluster`, `size` and `withinss` are lists) and `_kmns_py`, same signature, the reference. `kmns` raises `ValueError` when `c`'s column count differs from `a`'s.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -722,6 +774,8 @@ from datanuggets._hartigan_wong import KMeansError, _kmns_py, kmeans, kmns
 ```python
 from rfixtures import load_group, same_bits
 ```
+
+Add `from numba.core.registry import CPUDispatcher` after `import pytest`, and `from datanuggets import _kmnsjit` above `from datanuggets._draws import ReplayDraws`.
 
 Append:
 
@@ -764,12 +818,30 @@ def test_kmns_takes_any_layout_and_dtype():
     c = np.asfortranarray(a[:4].astype(float))
     want = _kmns_py(a[:, ::2].astype(float), np.ascontiguousarray(c[:, ::2]), 50, 2000)
     _same_kmns(kmns(a[:, ::2], c[:, ::2], 50, 2000), want)
+
+
+def test_kmns_rejects_mismatched_columns():
+    for a, c in ((np.ones((5, 3)), np.ones((2, 4))), (np.ones((5, 4)), np.ones((2, 3)))):
+        with pytest.raises(ValueError, match="columns"):
+            kmns(a, c, 10, 100)
+
+
+def test_kmns_read_only_data_runs_the_same_compiled_kernels():
+    case = max(RUNS, key=lambda c: c.array("x").size)
+    want = _kmns(case)
+    kernels = [k for k in vars(_kmnsjit).values() if isinstance(k, CPUDispatcher)]
+    compiled = [len(k.signatures) for k in kernels]
+    x, c0 = case.array("x"), case.array("c0")
+    x.setflags(write=False)
+    c0.setflags(write=False)
+    _same_kmns(_kmns(case, x, c0), want)
+    assert [len(k.signatures) for k in kernels] == compiled  # no second signature to compile
 ```
 
 - [ ] **Step 2: Run them to see them fail**
 
 Run: `$MR uv run pytest -q -p no:cacheprovider tests/test_hartigan_wong.py`
-Expected: `1 error`, collecting `tests/test_hartigan_wong.py`: `ImportError: cannot import name '_kmns_py' from 'datanuggets._hartigan_wong'`.
+Expected: `1 error`, collecting `tests/test_hartigan_wong.py`: `ImportError: cannot import name '_kmnsjit' from 'datanuggets'`.
 
 - [ ] **Step 3: Write the kernel**
 
@@ -784,12 +856,13 @@ double with no fused multiply-add, so the two agree bit for bit. Cluster and row
 """
 
 import numpy as np
-from numba import njit
+
+from datanuggets._compiled import compiled
 
 BIG = float(np.float32(1e30))  # kmns.f: DATA BIG /1.E30/, a REAL constant widened to double
 
 
-@njit(cache=True, nogil=True)
+@compiled(nogil=True)
 def hartigan_wong(a, c, iter_max, max_qtran, ic1, nc, wss):
     """kmns.f on the rows of a (m x p) from the centers in c (k x p), which it overwrites. Writes
     IC1 into ic1, NC into nc and WSS into wss, all zero on entry. Returns (ITER, IFAULT)."""
@@ -826,7 +899,7 @@ def hartigan_wong(a, c, iter_max, max_qtran, ic1, nc, wss):
     return ij, ifault
 
 
-@njit(cache=True, nogil=True)
+@compiled(nogil=True)
 def _initial_assignment(a, c, ic1, ic2):
     """IC1 and IC2: each point's closest and second closest starting center."""
     m, n = a.shape
@@ -866,7 +939,7 @@ def _initial_assignment(a, c, ic1, ic2):
         ic2[i] = c2
 
 
-@njit(cache=True, nogil=True)
+@compiled(nogil=True)
 def _initial_centers(a, c, ic1, nc, an1, an2, itran, ncp):
     """Centers become the means of the initial clusters. False on an empty cluster."""
     m, n = a.shape
@@ -890,7 +963,7 @@ def _initial_centers(a, c, ic1, nc, an1, an2, itran, ncp):
     return True
 
 
-@njit(cache=True, nogil=True)
+@compiled(nogil=True)
 def _optra(a, c, ic1, ic2, nc, an1, an2, ncp, d, itran, live, indx):
     """Optimal-transfer stage: each point may move to the cluster that most reduces WSS."""
     m, n = a.shape
@@ -950,7 +1023,7 @@ def _optra(a, c, ic1, ic2, nc, an1, an2, ncp, d, itran, live, indx):
     return indx
 
 
-@njit(cache=True, nogil=True)
+@compiled(nogil=True)
 def _qtran(a, c, ic1, ic2, nc, an1, an2, ncp, d, itran, indx, max_qtran):
     """Quick-transfer stage: swap points between their two closest clusters until a full pass
     moves nothing. Returns max_qtran = -1 when the step budget runs out."""
@@ -996,7 +1069,7 @@ def _qtran(a, c, ic1, ic2, nc, an1, an2, ncp, d, itran, indx, max_qtran):
                 return indx, max_qtran
 
 
-@njit(cache=True, nogil=True)
+@compiled(nogil=True)
 def _transfer(a, i0, c, nc, an1, an2, l1, l2):
     """Move point i0 from cluster l1 to l2: both centers and their AN1/AN2 factors."""
     al1 = float(nc[l1])
@@ -1014,7 +1087,7 @@ def _transfer(a, i0, c, nc, an1, an2, l1, l2):
     an2[l2] = alt / (alt + 1.0)
 
 
-@njit(cache=True, nogil=True)
+@compiled(nogil=True)
 def _final_centers_and_wss(a, c, ic1, nc, wss):
     """Recompute the centers from the final clusters, then each cluster's WSS."""
     m, n = a.shape
@@ -1046,7 +1119,7 @@ tested against. kmeans() adds what stats::kmeans does around it: the random star
 restarts, and R's errors and warnings.
 ```
 
-Add `from datanuggets import _kmnsjit` as the first line of the `datanuggets` imports, and replace the `BIG = ...` line with:
+Add `from datanuggets import _kmnsjit` and `from datanuggets._compiled import frozen` as the first two lines of the `datanuggets` imports, and replace the `BIG = ...` line with:
 
 ```python
 BIG = _kmnsjit.BIG  # kmns.f: DATA BIG /1.E30/, a REAL constant widened to double
@@ -1057,8 +1130,10 @@ Replace `kmns` (its body is two lines after the docstring) with `kmns` and `_kmn
 ```python
 def kmns(a: np.ndarray, c: np.ndarray, iter_max: int, max_qtran: int) -> Kmns:
     """R's C_kmns: Hartigan-Wong on the rows of a (m x p) from the starting centers c (k x p)."""
-    a = np.ascontiguousarray(a, dtype=np.float64)
+    a = frozen(np.ascontiguousarray(a, dtype=np.float64))
     c = np.array(c, dtype=np.float64, order="C")  # a copy: the kernel overwrites the centers
+    if c.shape[1] != a.shape[1]:
+        raise ValueError(f"a has {a.shape[1]} columns but c has {c.shape[1]}")
     ic1 = np.zeros(a.shape[0], dtype=np.int64)
     nc = np.zeros(c.shape[0], dtype=np.int64)
     wss = np.zeros(c.shape[0])
@@ -1078,10 +1153,10 @@ Run: `$UV run ruff check src tests && $UV run ruff format --check src tests`
 Expected: no errors.
 
 Run: `$MR uv run pytest -q -p no:cacheprovider tests/test_hartigan_wong.py`
-Expected: `38 passed`: 31 from before, 6 fuzz cases and the layout test. Every R fixture in the file now runs the kernel.
+Expected: `40 passed`: 31 from before, 6 fuzz cases, the layout test, the column-count test and the read-only test. Every R fixture in the file now runs the kernel.
 
 Run: `$MR`
-Expected: `1194 passed` (1187 plus 7).
+Expected: `1225 passed` (1216 plus 9).
 
 - [ ] **Step 6: Commit and push**
 
@@ -1095,7 +1170,8 @@ refine_dn's 2-means splits spent 63% of its wall time on Covertype
 numba, statement for statement, in double with no fused multiply-add.
 So clusters, centers and within-cluster sums still match R bit for
 bit. _HW stays as the reference, and a fuzz that reaches every fault
-code compares the two.
+code compares the two. kmns hands the kernel a read-only view of the
+data, and a c whose column count differs from a's is a ValueError.
 ```
 
 ```bash
@@ -1297,7 +1373,7 @@ Expected: two reports, each saying `outputs match R`. `create_dn` lists `compile
 - [ ] **Step 4: Profile at 100,000 rows**
 
 Run: `$MR uv run python benchmarks/profile_stop.py 100000 | tee "$SCRATCH/speed/profile_100000_next.txt"`
-Expected: both outputs match R, and both runs print `stopping rule: PASS`. The prototype gave `create_dn` 2.21 s and `refine_dn` 0.31 s, with the largest Python function at 0.2% and 2.9% of wall. Write both reports into the session notes as they are, with the machine name.
+Expected: both outputs match R, and both runs print `stopping rule: PASS`. The prototype gave `create_dn` 2.23 s and `refine_dn` 0.32 s, with the largest Python function at 0.2% and 2.9% of wall. Write both reports into the session notes as they are, with the machine name.
 
 - [ ] **Step 5: Commit and push**
 
