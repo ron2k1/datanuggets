@@ -63,6 +63,22 @@ def load_group(group: str) -> list[Case]:
     return [Case(p, json.loads((p / "manifest.json").read_text(encoding="utf-8"))) for p in dirs]
 
 
+# create.DN's argument names in the fixture manifests, and create_dn's
+CREATE_ARGS = {
+    "center.method": "center_method",
+    "R": "r",
+    "delete.percent": "delete_percent",
+    "DN.num1": "dn_num1",
+    "DN.num2": "dn_num2",
+    "dist.metric": "dist_metric",
+}
+
+
+def create_args(case: Case) -> dict:
+    """create_dn's keyword arguments for a create_dn fixture, seed aside."""
+    return {py: case.args[r] for r, py in CREATE_ARGS.items()}
+
+
 # refine.DN's argument names in the fixture manifests, and refine_dn's
 REFINE_ARGS = {
     "EV.tol": "ev_tol",

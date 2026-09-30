@@ -8,20 +8,9 @@ import datanuggets.create as create_mod
 from datanuggets import DataNuggetWarning, create_dn
 from datanuggets._draws import ReplayDraws
 from datanuggets.create import _allocate
-from rfixtures import load_group
+from rfixtures import create_args, load_group
 
 CASES = load_group("create_dn")
-
-
-def py_args(args: dict) -> dict:
-    return {
-        "center_method": args["center.method"],
-        "r": args["R"],
-        "delete_percent": args["delete.percent"],
-        "dn_num1": args["DN.num1"],
-        "dn_num2": args["DN.num2"],
-        "dist_metric": args["dist.metric"],
-    }
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
@@ -29,7 +18,7 @@ def test_create_dn_matches_r(case):
     draws = ReplayDraws(case.draws())
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        dn = create_dn(case.array("x"), **py_args(case.args), seed=draws)
+        dn = create_dn(case.array("x"), **create_args(case), seed=draws)
     draws.assert_exhausted()
     np.testing.assert_array_equal(dn.assignments + 1, case.array("assignments"))
     np.testing.assert_array_equal(dn.weights, case.array("weights"))
@@ -51,7 +40,7 @@ def test_create_dn_hands_select_centers_what_r_hands_create_dncenters(case, monk
     monkeypatch.setattr(create_mod, "select_centers", spy)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DataNuggetWarning)
-        create_dn(case.array("x"), **py_args(case.args), seed=ReplayDraws(case.draws()))
+        create_dn(case.array("x"), **create_args(case), seed=ReplayDraws(case.draws()))
     assert len(calls) == case.manifest["n_calls"]
     for i, (rs, dn_num) in enumerate(calls, start=1):
         np.testing.assert_array_equal(rs, case.array(f"call{i:02d}_rs"), err_msg=f"call {i}")
