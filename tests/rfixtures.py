@@ -17,6 +17,54 @@ from datanuggets.result import DataNuggets
 FIXTURE_ROOT = Path(__file__).parent / "fixtures"
 RTOL = 1e-8
 ATOL = 1e-10
+EIG_FLOOR, EIG_C, EIG_K, EIG_TIE = 1e-10, 256.0, 1024.0, 1e-12
+
+
+def eigen_mismatches(s, values_r, vectors_r, scores_r, x0, sdev, vectors, scores) -> list[str]:
+    """Where a port's eigen output differs from R's by more than two correct LAPACK builds can.
+    Eigenvalues within EIG_TIE of each other form a cluster, and only a cluster's subspace is
+    determined, so vectors are compared through their projectors. R1 orthonormal vectors. R2
+    each vector's residual against R's eigenvalue. R3 sdev squared against R's eigenvalue (a
+    NaN sdev needs a value at most the band above zero). R4 each cluster's projector against
+    R's, within max(EIG_FLOOR, EIG_C eps / gap). R5 the same for the scores, row by row."""
+    eps = float(np.finfo(float).eps)
+    p = values_r.size
+    for name, a in (("sdev", sdev), ("rotation", vectors), ("scores", scores)):
+        if a.shape[-1] != p:
+            raise ValueError(f"{name} has {a.shape[-1]} columns, R has {p}")
+    norm = max(float(np.max(np.abs(values_r))), 1e-300)
+    band = EIG_K * eps * norm
+    lower = np.tril(s) + np.tril(s, -1).T
+    out = []
+    orth = float(np.max(np.abs(vectors.T @ vectors - np.eye(p))))
+    if orth > EIG_FLOOR:
+        out.append(f"R1 rotation is not orthonormal: {orth:.3e}")
+    res = np.linalg.norm(lower @ vectors - vectors * values_r, axis=0)
+    bad = np.flatnonzero(res > band)
+    out += [f"R2 column {i}: residual {res[i]:.3e} > {band:.3e}" for i in bad]
+    for i in range(p):
+        if np.isnan(sdev[i]):
+            if values_r[i] > band:
+                out.append(f"R3 sdev {i} is NaN but R's eigenvalue is {values_r[i]:.3e}")
+        elif abs(sdev[i] ** 2 - values_r[i]) > band:
+            out.append(f"R3 sdev {i}: {sdev[i] ** 2:.17g} against {values_r[i]:.17g}")
+    cid = np.concatenate(([0], np.cumsum(np.abs(np.diff(values_r)) > EIG_TIE * norm)))
+    rows = np.linalg.norm(x0, axis=1)
+    for c in range(int(cid[-1]) + 1):
+        idx, rest = np.flatnonzero(cid == c), np.flatnonzero(cid != c)
+        gap = np.inf
+        if rest.size:
+            gap = float(np.min(np.abs(values_r[idx][:, None] - values_r[rest][None, :]))) / norm
+        tol = max(EIG_FLOOR, EIG_C * eps / gap)
+        v, vr = vectors[:, idx], vectors_r[:, idx]
+        sin = float(np.linalg.norm(v @ v.T - vr @ vr.T, 2))
+        if sin > tol:
+            out.append(f"R4 columns {idx[0]}..{idx[-1]}: subspace off by {sin:.3e} > {tol:.3e}")
+        d = np.linalg.norm(scores[:, idx] @ v.T - scores_r[:, idx] @ vr.T, axis=1)
+        off = d > (tol + 8 * p * eps) * rows
+        if off.any():
+            out.append(f"R5 columns {idx[0]}..{idx[-1]}: scores off in {int(off.sum())} rows")
+    return out
 
 
 @dataclass(frozen=True)
