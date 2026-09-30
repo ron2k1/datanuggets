@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
 
@@ -43,7 +45,10 @@ def _round_half_even(a: int, shift: int, sticky: bool = False) -> int:
 
 def _ldouble_mean(v: list[float]) -> float:
     """sum(v) / len(v) the way R computes it: every partial sum and the quotient are rounded to
-    a 64-bit significand (ties to even), then the quotient is rounded to double."""
+    a 64-bit significand (ties to even), then the quotient is rounded to double. No values give
+    NaN, R's 0 / 0."""
+    if not v:
+        return math.nan
     m = e = 0  # the running sum is exactly m * 2**e
     for x in v:
         xm, d = x.as_integer_ratio()
