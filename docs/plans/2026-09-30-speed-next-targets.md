@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Paths:** this plan was written before the package layout in `docs/architecture.md`, and its file paths are the old flat ones. `_rfast.py` is now `_compat/rfast.py`, `_ldjit.py` is `_compat/ldjit.py`, `_compiled.py` is `_compat/_compiled.py`, `centers.py` is `nuggets/centers.py`, `_hartigan_wong.py` is `_clustering/hartigan_wong.py`, and `_rstats.py` is split across `_compat/`. The tests moved into `tests/compat/`, `tests/nuggets/` and `tests/clustering/`. Update the paths before executing any task.
+
 **Goal:** Compile the three costs that fail spec section 9.5's stopping rule on Covertype 100k, Rfast's distance replay, create.DNcenters' deletion rounds and Hartigan-Wong, with every output still bit-identical to R. Then profile again.
 
 **Architecture:** Three new kernel modules, each compiled with numba and reached through its module the way `_ldjit` is. `_rfastjit.py` computes Rfast's `Dist` and `dista` one output row at a time, with the centers innermost, adding each feature's term in Armadillo's order. `_centersjit.py` runs all of create.DNcenters' deletion rounds over one distance matrix. `_kmnsjit.py` is `_HW`'s kmns.f port, statement for statement. `_rfast`, `centers` and `_hartigan_wong` keep their function signatures (minus the unused `block_rows`) and call the kernels. Today's bodies stay as `_cross_distances_py`, `_select_centers_py` and `_kmns_py`, the references the tests compare against. `benchmarks/profile_stop.py` books every kernel module, not only `_ldjit`.
