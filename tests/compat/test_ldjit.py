@@ -1,4 +1,4 @@
-"""The compiled long double kernels in _ldjit against the Python-int reference in _ldouble, bit for
+"""The compiled long double kernels in ldjit against the Python-int reference in ldouble, bit for
 bit, on a fixed-seed fuzz built to hit exact ties, sticky bits and exponent-gap edges."""
 
 import math
