@@ -1,4 +1,6 @@
 import importlib
+import subprocess
+import sys
 from dataclasses import FrozenInstanceError, fields
 
 import numpy as np
@@ -58,6 +60,23 @@ def test_nugget_functions_are_exported_and_their_old_paths_forward():
         assert getattr(old, name) is defined, name
         assert old.__all__ == [name], name
     assert nuggets.__all__ == sorted(NUGGET_FUNCTIONS)
+
+
+# The old module paths stay attributes of the package after a bare `import datanuggets`, as they
+# were when its __init__ imported them, so `datanuggets.create.create_dn` still resolves. It runs
+# in a fresh interpreter, because here any test that imported an old path has already bound it.
+OLD_MODULES = [*sorted(NUGGET_FUNCTIONS.values()), "_draws"]
+
+
+def test_a_bare_import_binds_the_old_module_paths():
+    code = (
+        "import sys\n"
+        "import datanuggets\n"
+        f"for name in {OLD_MODULES!r}:\n"
+        "    assert getattr(datanuggets, name) is sys.modules['datanuggets.' + name], name\n"
+    )
+    run = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
+    assert run.returncode == 0, run.stderr[-2000:]
 
 
 def _dn(**over):
