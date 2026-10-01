@@ -6,7 +6,7 @@ import warnings
 
 import numpy as np
 
-from datanuggets._rstats import r_eigen_sym, r_matmul, r_matvec, r_sum
+from datanuggets._compat.rstats import r_eigen_sym, r_matmul, r_matvec, r_sum
 from datanuggets._validate import as_matrix, as_weights
 from datanuggets.exceptions import DataNuggetWarning
 from datanuggets.result import WpcaResult

@@ -12,9 +12,9 @@ from numba.core.caching import FunctionCache
 from numba.core.registry import CPUDispatcher
 
 import datanuggets
-from datanuggets._compiled import frozen
-from datanuggets._rcompat import r_mean
-from datanuggets._rstats import group_moments, r_cov
+from datanuggets._compat._compiled import frozen
+from datanuggets._compat.rcompat import r_mean
+from datanuggets._compat.rstats import group_moments, r_cov
 from rfixtures import fixture_data
 
 # every module of compiled kernels, at any depth, so one added later is checked without editing
@@ -38,8 +38,8 @@ import numpy as np
 numba.core.caching.CacheImpl._locator_classes = []
 for name in sys.argv[2:]:
     importlib.import_module(name)
-from datanuggets._rcompat import r_mean
-from datanuggets._rstats import group_moments, r_cov
+from datanuggets._compat.rcompat import r_mean
+from datanuggets._compat.rstats import group_moments, r_cov
 
 x = np.load(sys.argv[1])
 ((center, cov),) = group_moments(x, [np.arange(x.shape[0])], 2)
@@ -55,7 +55,7 @@ def test_frozen_is_a_read_only_view_of_the_same_memory():
 
 
 def test_jit_modules_are_found():
-    assert "datanuggets._ldjit" in JIT_MODULES
+    assert "datanuggets._compat.ldjit" in JIT_MODULES
 
 
 def _kernel_makers(tree: ast.Module) -> tuple[set[str], bool]:

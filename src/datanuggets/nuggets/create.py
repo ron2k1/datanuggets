@@ -9,6 +9,8 @@ import warnings
 import numpy as np
 from joblib import Parallel, delayed
 
+from datanuggets._compat.rcompat import r_mean, split_indices
+from datanuggets._compat.rfast import nearest_index
 from datanuggets._defaults import (
     CENTER_METHODS,
     DELETE_PERCENT,
@@ -21,8 +23,6 @@ from datanuggets._defaults import (
     SEED,
 )
 from datanuggets._draws import Draws, as_draws
-from datanuggets._rcompat import r_mean, split_indices
-from datanuggets._rfast import nearest_index
 from datanuggets._validate import (
     as_count,
     as_matrix,

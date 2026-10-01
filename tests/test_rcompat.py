@@ -4,8 +4,8 @@ from fractions import Fraction
 import numpy as np
 import pytest
 
-import datanuggets._rcompat as rcompat
-from datanuggets._rcompat import _r_mean_py, r_mean, split_indices
+from datanuggets._compat import rcompat
+from datanuggets._compat.rcompat import _r_mean_py, r_mean, split_indices
 from rfixtures import fixture_data, hex_bits, load_group, same_bits
 
 

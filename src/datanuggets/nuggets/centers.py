@@ -7,8 +7,8 @@ import warnings
 
 import numpy as np
 
+from datanuggets._compat.rfast import dist_matrix
 from datanuggets._defaults import DELETE_PERCENT, DIST_METRICS
-from datanuggets._rfast import dist_matrix
 from datanuggets._validate import as_count, as_matrix, check_choice, check_delete_percent
 from datanuggets.exceptions import DataNuggetWarning
 from datanuggets.result import CentersResult

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import math
 
-from datanuggets._rcompat import _LDOUBLE_DIGITS as DIGITS
+from datanuggets._compat.rcompat import _LDOUBLE_DIGITS as DIGITS
 
 ZERO = (0, 0)
 

@@ -6,7 +6,7 @@ import struct
 
 import numpy as np
 
-from datanuggets import _ldjit
+from datanuggets._compat import ldjit as _ldjit
 
 
 def _r_seq_length_out(start: float, stop: float, n: int) -> np.ndarray:

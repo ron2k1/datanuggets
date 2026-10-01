@@ -18,6 +18,17 @@ import numpy as np
 from joblib import Parallel, delayed
 
 from datanuggets._clustering.hartigan_wong import KMeansError, kmeans
+from datanuggets._compat.rstats import (
+    group_moments,
+    r_cov,
+    r_eigen_sym,
+    r_mad,
+    r_matvec,
+    r_median,
+    r_quantile7,
+    r_sum,
+    r_vec_mean,
+)
 from datanuggets._defaults import (
     DELTA,
     EV_TOL,
@@ -29,17 +40,6 @@ from datanuggets._defaults import (
     SEED,
 )
 from datanuggets._draws import Draws, NumpyDraws, RDraws, as_draws
-from datanuggets._rstats import (
-    group_moments,
-    r_cov,
-    r_eigen_sym,
-    r_mad,
-    r_matvec,
-    r_median,
-    r_quantile7,
-    r_sum,
-    r_vec_mean,
-)
 from datanuggets._validate import as_matrix, as_real, check_assignments, check_n_jobs
 from datanuggets.exceptions import DataNuggetWarning
 from datanuggets.nuggets.create import _progress_bar

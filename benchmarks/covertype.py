@@ -16,7 +16,9 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 
-from datanuggets import DataNuggets, DataNuggetWarning, _rcompat, _rstats, create_dn, refine_dn
+from datanuggets import DataNuggets, DataNuggetWarning, create_dn, refine_dn
+from datanuggets._compat import rcompat as _rcompat
+from datanuggets._compat import rstats as _rstats
 from datanuggets._draws import ReplayDraws
 from rfixtures import Case
 

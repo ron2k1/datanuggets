@@ -16,9 +16,9 @@ import pytest
 from numba.core.registry import CPUDispatcher
 from numba.np import ufunc as numba_ufunc
 
-import datanuggets._rstats as rstats
-from datanuggets._rcompat import _r_mean_py, r_mean, unique_first
-from datanuggets._rstats import (
+from datanuggets._compat import rstats
+from datanuggets._compat.rcompat import _r_mean_py, r_mean, unique_first
+from datanuggets._compat.rstats import (
     _r_cov_py,
     group_moments,
     r_cov,

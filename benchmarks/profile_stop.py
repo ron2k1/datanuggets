@@ -20,10 +20,14 @@ from pathlib import Path
 
 from numba.core.dispatcher import Dispatcher
 
+import datanuggets
 from covertype import compare, load, run, stage_lines, warm_up
-from datanuggets import DataNuggets, _ldjit, _rcompat, _rstats, create_dn, refine_dn
+from datanuggets import DataNuggets, create_dn, refine_dn
+from datanuggets._compat import ldjit as _ldjit
+from datanuggets._compat import rcompat as _rcompat
+from datanuggets._compat import rstats as _rstats
 
-SRC = os.path.normcase(str(Path(_ldjit.__file__).resolve().parent))
+SRC = os.path.normcase(str(Path(datanuggets.__file__).resolve().parent))
 LIMIT = 0.10
 TOP = 8
 

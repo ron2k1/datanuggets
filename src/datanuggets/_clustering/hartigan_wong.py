@@ -14,9 +14,9 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 
+from datanuggets._compat.rcompat import unique_first
+from datanuggets._compat.rstats import r_sum
 from datanuggets._draws import Draws
-from datanuggets._rcompat import unique_first
-from datanuggets._rstats import r_sum
 
 BIG = float(np.float32(1e30))  # kmns.f: DATA BIG /1.E30/, a REAL constant widened to double
 _INT_MAX = 2**31 - 1

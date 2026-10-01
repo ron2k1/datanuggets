@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from datanuggets._rfast import (
+from datanuggets._compat.rfast import (
     arma_sum_last,
     cross_distances,
     dist_matrix,

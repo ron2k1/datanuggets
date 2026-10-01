@@ -21,10 +21,10 @@ import numba
 import numpy as np
 from scipy.linalg import LinAlgError, lapack
 
-from datanuggets import _ldjit
-from datanuggets import _ldouble as ld
+from datanuggets._compat import ldjit as _ldjit
+from datanuggets._compat import ldouble as ld
+from datanuggets._compat.rcompat import _R_NAN, _non_finite_sum, r_mean
 from datanuggets._defaults import MAD_CONSTANT, MOMENTS_CHUNK
-from datanuggets._rcompat import _R_NAN, _non_finite_sum, r_mean
 
 
 def _ld_sum(v: list[float]) -> tuple[int, int]:

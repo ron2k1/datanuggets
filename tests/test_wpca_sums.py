@@ -17,8 +17,8 @@ import math
 import numpy as np
 import pytest
 
-from datanuggets import _ldouble as ld
-from datanuggets._rstats import r_sum
+from datanuggets._compat import ldouble as ld
+from datanuggets._compat.rstats import r_sum
 from datanuggets.wcluster.wpca import _wpca_parts, wpca
 from rfixtures import assert_same_values, hex_bits, load_group, same_bits
 

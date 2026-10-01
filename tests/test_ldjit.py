@@ -7,8 +7,8 @@ import numpy as np
 import pytest
 from numba import njit
 
-from datanuggets import _ldjit as J
-from datanuggets import _ldouble as ld
+from datanuggets._compat import ldjit as J
+from datanuggets._compat import ldouble as ld
 
 U = np.uint64
 ONE, TOP, ALL = U(1), U(1 << 63), U((1 << 64) - 1)

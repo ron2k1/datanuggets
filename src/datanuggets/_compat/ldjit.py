@@ -27,7 +27,7 @@ import math
 import numpy as np
 from numba import prange
 
-from datanuggets._compiled import compiled, frozen
+from datanuggets._compat._compiled import compiled, frozen
 
 Z64 = np.uint64(0)
 ONE = np.uint64(1)
