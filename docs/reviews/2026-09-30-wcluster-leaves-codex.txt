@@ -1,0 +1,653 @@
+| Scope | Verified value |
+|---|---|
+| Branch | `feat/wcluster-leaves` |
+| HEAD | `fc9ffe23790e910efba1a167930f9ab9b35fa659` |
+| Range | `4de33ae..fc9ffe2` |
+| Execution workaround | `tempfile.TMP_MAX=1` bounds unsuccessful cache-directory probing; pytest uses `--capture=sys` because file-descriptor capture requires writable temporary storage. |
+
+```text
+PART A — DID EACH CLAIM HOLD?
+```
+
+| claim_id | holds? | Test case run: command + inputs | Verbatim result line |
+|---|---|---|---|
+| F1 | yes | `.venv\Scripts\python.exe -B -c "import tempfile; tempfile.TMP_MAX=1; import pytest; raise SystemExit(pytest.main(['-q','-p','no:cacheprovider','--capture=sys','tests/test_rstats.py','-k','rcompat_wstats or r_matmul or r_weighted_mean or r_sum_boundaries']))"` — recorded matrix products, weighted means and summation boundaries | `45 passed, 231 deselected in 1.45s` |
+| F2 | yes | `.venv\Scripts\python.exe -B -c "import tempfile; tempfile.TMP_MAX=1; import pytest; raise SystemExit(pytest.main(['-q','-p','no:cacheprovider','--capture=sys','tests/test_wstats.py','tests/test_validate.py']))"` — validation and statistics parametrizations | `543 passed in 17.50s` |
+| F3 | partial | Raw replay command S below: all 49 `wstats` and 17 `wstats_constructed` cases, both layouts, warnings promoted to errors. B3 separately executes cancellation weights `[1.,-1.]`. | `comparisons 784 array_equal_failures 0 warnings 0` / B3: `[[-inf]]` |
+| F4 | yes | `.venv\Scripts\python.exe -B -c "import tempfile; tempfile.TMP_MAX=1; import pytest; raise SystemExit(pytest.main(['-q','-p','no:cacheprovider','--capture=sys','tests/test_predict.py']))"` — overflow, midpoint ties, negative labels, unusable distances and argument order | `221 passed in 2.40s` |
+| F5 | yes | `.venv\Scripts\python.exe -B -c "import tempfile; tempfile.TMP_MAX=1; import pytest; raise SystemExit(pytest.main(['-q','-p','no:cacheprovider','--capture=sys','tests/test_wpca.py']))"`; command E below executes the requested edge cases and eigen mutations. | `154 passed in 1.48s` / `F5 eigen mutants: 19 rejected` |
+| F6 | no | `.venv\Scripts\python.exe -B -c "import tempfile; tempfile.TMP_MAX=1; import datanuggets as d; import datanuggets.wcluster as w; print([(n,hasattr(d,n),hasattr(w,n)) for n in ('WpcaResult','WwcssResult')])"`; report commands R1–R3 below | `[('WpcaResult', True, False), ('WwcssResult', True, False)]` |
+| F7 | partial | Command D below executes the README examples and compares their output line by line. B4 executes the documented “no finite distance” condition. | `README_WCLUSTER_MATCH True` / B4: `ANY_FINITE False` and `PREDICTION [0]` |
+
+| F6 qualification | Evidence |
+|---|---|
+| The two result classes are absent from `datanuggets.wcluster`; this contradicts F6, but follows the implementation plan. | `docs/plans/2026-09-30-feature4-wcluster-leaves.md:627` requires six functions in `wcluster` and the result classes at top level. |
+| Numerical mutations are detected by every affected report row. | `wmean mutation: 49 rows, 49 NO, 0 yes`; `wpca rotation mutation: 22 rows, 22 NO, 0 all-yes` |
+| All ten generated reports equal committed HEAD bytes. | R1 output below |
+| Version disagreement in a reported prediction case raises. | `mutated case: faithful1d`; `ValueError the wstats manifests were recorded under different versions` |
+
+```powershell
+# E — executed wpca edge cases and eigen-rule mutations
+@'
+import tempfile; tempfile.TMP_MAX=1
+import sys
+sys.path.insert(0,'tests')
+import test_wpca as t
+import rfixtures as r
+for fn in (t.test_weight_rules,t.test_weights_summing_to_one_raise,t.test_one_row,t.test_constant_column_with_corr_raises,t.test_one_column_corr_departs_from_r,t.test_overflow_is_quiet_as_in_r):fn()
+for c in t.BELOW:t.test_weights_summing_below_one_warn_once(c)
+for cid in t.DEN_IRIS:t.test_corr_with_weights_summing_below_one_raise(cid)
+print('F5 edge probes: PASS')
+for kind,cid in t.MUTANTS:t.test_eigen_rule_rejects_wrong_outputs(kind,cid)
+print('F5 eigen mutants:',len(t.MUTANTS),'rejected')
+r.EIG_C=1024.; r.EIG_K=4096.
+for kind,cid in [('band','iris'),('turn','volcano_scaled')]:
+ try:t.test_eigen_rule_rejects_wrong_outputs(kind,cid)
+ except AssertionError:print('loosened constants:',kind,cid,'FAIL as required')
+ else:print('loosened constants:',kind,cid,'SURVIVED')
+'@ | .venv\Scripts\python.exe -B -
+```
+
+```text
+F5 edge probes: PASS
+F5 eigen mutants: 19 rejected
+loosened constants: band iris FAIL as required
+loosened constants: turn volcano_scaled FAIL as required
+```
+
+| E input | Exact values or fixture |
+|---|---|
+| Negative row weight | `wpca/iris/x`; ones with row-weight index 3 set to `-1.0` |
+| Total exactly one | `wpca/one_iris_first5_petalwidth/{x,wrow,wcol_in}` |
+| Zero total and one row | `x=[[1.,2.,3.]]`; `wrow` separately `[0.]`, `[1.]`, `[0.5]`, `[2.]` |
+| Constant column under correlation | `wpca/mtcars_cyl8_constant/x`, default weights, `corr=True` |
+| One column under correlation | `wpca/petalwidth_1d_corr` |
+| Correlation overflow | `x=[[1e300,1.],[-1e300,2.],[0.,3.]]`, default weights, `corr=True` |
+| Overflow in a zero-weight row | `x=[[1.5e308,1.5e308],[1.,2.],[3.,1.],[2.,2.]]`, `wrow=[0.,1.,1.,1.]` |
+| Totals below one | `wpca/den_iris_first{2,3,4}_petalwidth`; correlation variants retain nonconstant columns |
+| Eigen mutations | All 19 entries of `tests/test_wpca.py::MUTANTS`; loosened constants rerun `band/iris` and `turn/volcano_scaled` |
+
+```powershell
+# R1 — executed report-byte comparison
+@'
+import tempfile; tempfile.TMP_MAX=1
+import sys, subprocess
+sys.path.insert(0, 'scripts')
+import parity_report as p
+reports = [('create_dn',p.create_report),('refine_dn',p.refine_report),('get_dn_means',p.means_report),('arithmetic_complexity',p.ac_report),('wmean',p.wmean_report),('wss',p.wss_report),('wwcss',p.wwcss_report),('distw',p.distw_report),('cluster_predict',p.predict_report),('wpca',p.wpca_report)]
+for name, fn in reports:
+    got = fn().encode('utf-8')
+    want = subprocess.check_output(['git','show',f'HEAD:docs/validation/{name}.md'])
+    print(f'{name}: identical={got == want}, generated_bytes={len(got)}, committed_bytes={len(want)}, NO_rows={got.count(b"**NO**")}', flush=True)
+    if got != want:
+        import difflib
+        print(''.join(difflib.unified_diff(want.decode().splitlines(True),got.decode().splitlines(True)))[:5000], flush=True)
+'@ | .venv\Scripts\python.exe -B -
+```
+
+```text
+create_dn: identical=True, generated_bytes=2978, committed_bytes=2978, NO_rows=0
+refine_dn: identical=True, generated_bytes=11392, committed_bytes=11392, NO_rows=0
+get_dn_means: identical=True, generated_bytes=23160, committed_bytes=23160, NO_rows=0
+arithmetic_complexity: identical=True, generated_bytes=1551, committed_bytes=1551, NO_rows=0
+wmean: identical=True, generated_bytes=2818, committed_bytes=2818, NO_rows=0
+wss: identical=True, generated_bytes=2537, committed_bytes=2537, NO_rows=0
+wwcss: identical=True, generated_bytes=3662, committed_bytes=3662, NO_rows=0
+distw: identical=True, generated_bytes=2779, committed_bytes=2779, NO_rows=0
+cluster_predict: identical=True, generated_bytes=2973, committed_bytes=2973, NO_rows=0
+wpca: identical=True, generated_bytes=4132, committed_bytes=4132, NO_rows=0
+```
+
+```powershell
+# R2 — executed numerical mutations and manifest-version mutation
+@'
+import tempfile; tempfile.TMP_MAX=1
+import sys, importlib, copy, warnings
+from dataclasses import replace
+import numpy as np
+sys.path[:0] = ['scripts','tests']
+import parity_report as p
+import test_wstats as tw
+import test_wpca as tp
+wm = importlib.import_module('datanuggets.wcluster.wstats')
+pm = importlib.import_module('datanuggets.wcluster.wpca')
+original = wm.wmean
+def bad_mean(*a, **k):
+    return np.nextafter(original(*a, **k), np.inf)
+wm.wmean = p.wmean = tw.wmean = bad_mean
+rows = [l for l in p.wmean_report().splitlines() if l.startswith('| ')][1:]
+print('wmean mutation:',len(rows),'rows,',sum('**NO**' in l for l in rows),'NO,',sum(' yes ' in l for l in rows),'yes', flush=True)
+c = tw.REAL['iris_species_petallength_k3']
+try: tw.test_wmean_matches_r(c, 'C')
+except AssertionError as e: print('mutated test_wmean_matches_r:',type(e).__name__,str(e).splitlines()[1:5], flush=True)
+wm.wmean = p.wmean = tw.wmean = original
+original_pca = pm.wpca
+def bad_pca(*a, **k):
+    out = original_pca(*a, **k)
+    rotation = out.rotation.copy(); rotation[:,0] *= 1 + 1e-9
+    return replace(out, rotation=rotation)
+pm.wpca = p.wpca = tp.wpca = bad_pca
+rows = [l for l in p.wpca_report().splitlines() if l.startswith('| ')][1:]
+print('wpca rotation mutation:',len(rows),'rows,',sum('**NO**' in l for l in rows),'NO,',sum('**NO**' not in l for l in rows),'all-yes', flush=True)
+try: tp.test_wpca_matches_r(tp.BY_ID['iris'])
+except AssertionError as e: print('mutated test_wpca_matches_r:',type(e).__name__,str(e).splitlines()[1:5], flush=True)
+pm.wpca = p.wpca = tp.wpca = original_pca
+loader = p.load_group
+def changed(group):
+    cases = loader(group)
+    if len(cases) > 1:
+        manifest = copy.deepcopy(cases[1].manifest); manifest['versions']['R'] = 'ADVERSARIAL VERSION'
+        cases[1] = replace(cases[1], manifest=manifest)
+    return cases
+p.load_group = changed
+for fn in (p.wmean_report,p.wss_report,p.wwcss_report,p.distw_report,p.predict_report,p.wpca_report):
+    try: fn(); print(fn.__name__, 'DID NOT RAISE', flush=True)
+    except ValueError as e: print(fn.__name__,type(e).__name__,str(e), flush=True)
+'@ | .venv\Scripts\python.exe -B -
+```
+
+```text
+wmean mutation: 49 rows, 49 NO, 0 yes
+mutated test_wmean_matches_r: AssertionError ['Arrays are not equal', '', 'Mismatched elements: 12 / 12 (100%)', 'First 5 mismatches are at indices:']
+wpca rotation mutation: 22 rows, 22 NO, 0 all-yes
+mutated test_wpca_matches_r: AssertionError ['Arrays are not equal', '', 'Mismatched elements: 150 / 600 (25%)', 'First 5 mismatches are at indices:']
+wmean_report ValueError the wstats manifests were recorded under different versions
+wss_report ValueError the wstats manifests were recorded under different versions
+wwcss_report ValueError the wstats manifests were recorded under different versions
+distw_report ValueError the wstats manifests were recorded under different versions
+predict_report DID NOT RAISE
+wpca_report ValueError the wpca manifests were recorded under different versions
+```
+
+| R2 exception | Executed follow-up |
+|---|---|
+| The initially changed prediction manifest lacked predictions and was omitted from that report. | R3 changes a reported case instead. |
+
+```powershell
+# R3 — executed version mutation in a reported prediction case
+@'
+import tempfile; tempfile.TMP_MAX=1
+import sys, copy
+from dataclasses import replace
+sys.path.insert(0,'scripts')
+import parity_report as p
+loader=p.load_group
+cases=loader('wstats')
+selected=[c.id for c in cases if c.has('pred')][1]
+def changed(group):
+    cases=loader(group)
+    for i,c in enumerate(cases):
+        if c.id == selected:
+            m=copy.deepcopy(c.manifest); m['versions']['R']='ADVERSARIAL VERSION'
+            cases[i]=replace(c,manifest=m)
+    return cases
+p.load_group=changed
+print('mutated case:',selected)
+try: p.predict_report()
+except ValueError as e: print(type(e).__name__,str(e))
+'@ | .venv\Scripts\python.exe -B -
+```
+
+```text
+mutated case: faithful1d
+ValueError the wstats manifests were recorded under different versions
+```
+
+```powershell
+# D — executed README example comparison
+@'
+import tempfile; tempfile.TMP_MAX = 1
+from pathlib import Path
+import re, io, contextlib, difflib
+readme = Path('README.md').read_text(encoding='utf-8')
+blocks = re.findall(r'```(python|text)\n(.*?)```', readme, re.S)
+ns = {}
+with contextlib.redirect_stdout(io.StringIO()):
+    exec(blocks[0][1], ns)
+out = io.StringIO()
+with contextlib.redirect_stdout(out):
+    exec(blocks[2][1], ns)
+actual = out.getvalue().splitlines()
+expected = blocks[3][1].splitlines()
+print('README_WCLUSTER_MATCH', actual == expected)
+print('\n'.join(actual))
+print('\n'.join(difflib.unified_diff(expected, actual, fromfile='README', tofile='executed', lineterm='')))
+'@ | .venv\Scripts\python.exe -B -
+```
+
+```text
+README_WCLUSTER_MATCH True
+[0.95152184 0.94524503 0.94031221]
+[[-0.7682159  -0.02598546  0.21580461]
+ [ 0.71713231  0.01851018 -0.19804108]]
+208903.8865164328
+[0 1 1 0 0]
+```
+
+```powershell
+# Executed default-weight, public-function-count and empty-result probes
+@'
+import tempfile; tempfile.TMP_MAX = 1
+from pathlib import Path
+import re
+import numpy as np
+import datanuggets as dn
+names = re.findall(r'^- `(\w+)`, from R', Path('README.md').read_text(), re.M)
+print('PUBLIC_FUNCTIONS', len(names), all(callable(getattr(dn, n)) for n in names))
+for f in (dn.wmean, dn.wwcss):
+    a, b = f([[0.], [2.]], [0, 0]), f([[0.], [2.]], [0, 0], [1., 1.])
+    print(f.__name__, 'NONE_EQUALS_ONES', np.array_equal(a, b, equal_nan=True), repr(a))
+a = dn.distw([[0., 0.], [2., 2.]], [0, 1])
+b = dn.distw([[0., 0.], [2., 2.]], [0, 1], [1., 1.])
+print('distw NONE_EQUALS_ONES', np.array_equal(a, b, equal_nan=True), repr(a))
+try:
+    dn.cluster_predict([[0.]], [0], [[0.]], w=[0.])
+except Exception as e:
+    print('ALL_DEAD', type(e).__name__, str(e))
+'@ | .venv\Scripts\python.exe -B -
+```
+
+```text
+PUBLIC_FUNCTIONS 11 True
+wmean NONE_EQUALS_ONES True array([[1.]])
+wwcss NONE_EQUALS_ONES True 2.0
+distw NONE_EQUALS_ONES True array([[nan, nan],
+       [ 4., nan]])
+ALL_DEAD ValueError a row of newx has no usable distance to any cluster center: every center is NaN (its weights sum to zero) or another row of newx overflows
+```
+
+```powershell
+rg -n 'assert_allclose|eigen_mismatches|EIG_FLOOR|RTOL =|ATOL =' tests/test_refine.py tests/test_wpca.py tests/rfixtures.py
+```
+
+```text
+tests/rfixtures.py:18:RTOL = 1e-8
+tests/rfixtures.py:19:ATOL = 1e-10
+tests/rfixtures.py:20:EIG_FLOOR, EIG_C, EIG_K, EIG_TIE = 1e-10, 256.0, 1024.0, 1e-12
+tests/test_refine.py:145:        np.testing.assert_allclose(state.ev1, case.array("init_ev1"), rtol=RTOL, atol=ATOL)
+tests/test_refine.py:146:        np.testing.assert_allclose(state.ev2, case.array("init_ev2"), rtol=RTOL, atol=ATOL)
+tests/test_wpca.py:136:    wrong = eigen_mismatches(
+tests/test_wpca.py:235:    assert (EIG_FLOOR, EIG_C, EIG_K, EIG_TIE) == (PLAN_FLOOR, PLAN_C, PLAN_K, PLAN_TIE)
+```
+
+| Requested numerical-documentation check | Measured result | Range disposition |
+|---|---|---|
+| `docs/specs/2026-09-29-datanuggets-python-port-design.md:159`: “a pinned real subsample of UCI Covertype (20,000 x 10 continuous columns)” | All 410 manifests scanned; no array with shape `[20000,10]` | Same sentence exists at `4de33ae`; excluded from Part B. |
+
+```powershell
+@'
+from pathlib import Path
+import json, subprocess
+manifests = list(Path('tests/fixtures').glob('**/manifest.json'))
+hits = []
+for p in manifests:
+    c = json.loads(p.read_text())
+    for key, a in c.get('arrays', {}).items():
+        if a.get('shape') == [20000, 10]:
+            hits.append(str(p) + ':' + key)
+print('MANIFESTS_SCANNED', len(manifests))
+print('ARRAYS_SHAPE_20000_10', hits)
+path = 'docs/specs/2026-09-29-datanuggets-python-port-design.md'
+base = subprocess.check_output(['git', 'show', '4de33ae:' + path], text=True)
+line = '- a pinned real subsample of UCI Covertype (20,000 x 10 continuous columns)'
+print('COVERTYPE_STATEMENT_IN_BASE', line in base)
+'@ | .venv\Scripts\python.exe -B -
+```
+
+```text
+MANIFESTS_SCANNED 410
+ARRAYS_SHAPE_20000_10 []
+COVERTYPE_STATEMENT_IN_BASE True
+```
+
+```text
+PART B — DEFECTS IN 4de33ae..fc9ffe2
+```
+
+```text
+ID: B1
+Severity: MINOR
+Location: tests/rfixtures.py:49
+Command:
+@'
+import tempfile; tempfile.TMP_MAX=1
+import sys, dataclasses, numpy as np
+sys.path.insert(0,'tests')
+import test_wpca as t
+real=t.wpca
+def wrong(*args,**kwargs):
+ r=real(*args,**kwargs)
+ return dataclasses.replace(r,sdev=-r.sdev)
+t.wpca=wrong
+c=t.BY_ID['iris']
+print('R sdev:',c.array('sdev'))
+print('mutant sdev:',t.wpca(*t.inputs(c)).sdev)
+t.test_wpca_matches_r(c)
+print('test_wpca_matches_r[iris]: PASSED with negative sdev')
+'@ | .venv\Scripts\python.exe -B -
+Input: tests/fixtures/wpca/iris/x.bin, wrow.bin and wcol_in.bin; corr=False. Negate every returned sdev, preserving every other result field.
+Expected: Reject negative standard deviations. tests/fixtures/wpca/iris/sdev.bin contains positive values; src/datanuggets/wcluster/wpca.py:60 defines sdev as the square roots of the eigenvalues.
+Actual:
+R sdev: [2.05626888 0.49261623 0.27965961 0.15438618]
+mutant sdev: [-2.05626888 -0.49261623 -0.27965961 -0.15438618]
+test_wpca_matches_r[iris]: PASSED with negative sdev
+```
+
+```text
+ID: B2
+Severity: MINOR
+Location: tests/test_rstats.py:158
+Command:
+@'
+import tempfile; tempfile.TMP_MAX=1
+import sys,math,numpy as np
+sys.path.insert(0,'tests')
+import test_rstats as t
+from rfixtures import hex_bits
+original=t.r_weighted_mean
+def compensated(v,w):
+ with np.errstate(all='ignore'):
+  return float(np.divide(math.fsum((v*w)[w != 0]),math.fsum(w)))
+t.r_weighted_mean=compensated
+for c in t.WMEAN:t.test_r_weighted_mean_matches_r(c)
+print('weighted_mean fixture tests passed with math.fsum:',len(t.WMEAN))
+c=next(c for c in t.WSUM if c.id=='sum_one_powm53_powm64')
+v=c.array('v'); w=np.ones(v.size)
+expected=c.array('sum')[0]/3
+print('v:',v.tolist(),'w:',w.tolist())
+print('R sum / 3:',repr(float(expected)),hex_bits(expected))
+print('original:',repr(original(v,w)),hex_bits(original(v,w)))
+print('math.fsum mutant:',repr(compensated(v,w)),hex_bits(compensated(v,w)))
+'@ | .venv\Scripts\python.exe -B -
+Input: All seven rcompat_wstats weighted-mean fixtures; then v=[1.0, 1.1102230246251565e-16, 5.421010862427522e-20], w=[1.0,1.0,1.0].
+Expected: 0.3333333333333333, bits 3fd5555555555555. tests/fixtures/rcompat_wstats/sum_one_powm53_powm64/sum.bin records R's numerator as 1.0. C:\Users\thegr\AppData\Local\Temp\claude\C--Users-thegr\25ee381d-b280-4d5f-83df-1350491cb8e9\scratchpad\f4\rsrcc\weighted.mean.R:31 divides sum((x*w)[w != 0]) by sum(w), here 3.0. docs/plans/2026-09-30-feature4-wcluster-leaves.md:29 forbids math.fsum; :32 requires same_bits for this helper.
+Actual:
+weighted_mean fixture tests passed with math.fsum: 7
+v: [1.0, 1.1102230246251565e-16, 5.421010862427522e-20] w: [1.0, 1.0, 1.0]
+R sum / 3: 0.3333333333333333 ['3fd5555555555555']
+original: 0.3333333333333333 ['3fd5555555555555']
+math.fsum mutant: 0.3333333333333334 ['3fd5555555555557']
+```
+
+```text
+ID: B3
+Severity: MINOR
+Location: src/datanuggets/wcluster/wstats.py:31
+Command:
+.venv\Scripts\python.exe -B -c "import tempfile; tempfile.TMP_MAX=1; import warnings; from datanuggets import wmean; warnings.simplefilter('error'); print(wmean([[1.],[2.]],[0,0],[1.,-1.]).tolist())"
+Input: x=[[1.],[2.]], cl=[0,0], w=[1.,-1.]; sum(w)=0.
+Expected: The docstring at src/datanuggets/wcluster/wstats.py:31–32 promises a NaN row whenever cluster weights sum to zero; docs/plans/2026-09-30-feature4-wcluster-leaves.md:27 repeats it. This documentation is false for cancellation weights: R's weighted.mean formula at C:\Users\thegr\AppData\Local\Temp\claude\C--Users-thegr\25ee381d-b280-4d5f-83df-1350491cb8e9\scratchpad\f4\rsrcc\weighted.mean.R:31 gives -1/+0 = -Inf for this input.
+Actual:
+[[-inf]]
+```
+
+```text
+ID: B4
+Severity: MINOR
+Location: README.md:166
+Command:
+@'
+import tempfile; tempfile.TMP_MAX = 1
+import numpy as np
+from datanuggets import cluster_predict
+from datanuggets.wcluster.predict import _wdist_mat
+x = np.array([[0.]])
+newx = np.array([[1e200]])
+d = _wdist_mat(newx, x)
+print('DISTANCES', d)
+print('ANY_FINITE', np.isfinite(d).any())
+print('PREDICTION', cluster_predict(x, [0], newx))
+'@ | .venv\Scripts\python.exe -B -
+Input: x=[[0.]], cl=[0], newx=[[1e200]], omitted w.
+Expected: README.md:166 documents ValueError for “a row with no finite distance”; docs/plans/2026-09-30-feature4-wcluster-leaves.md:646 repeats that condition. The actual intended rule accepts a live Inf distance, as required by the same plan at :266.
+Actual:
+DISTANCES [[inf]]
+ANY_FINITE False
+PREDICTION [0]
+```
+
+```text
+PART C — R PARITY AND SUITE RE-CHECK
+```
+
+| Suite execution | Result |
+|---|---|
+| Requested command: `.venv\Scripts\python.exe -B -m pytest -q -p no:cacheprovider` | Failed before collection because pytest capture could not create temporary storage. |
+| Execution deviation | The completed fallback run was repeated with `--tb=short` because the first tool result truncated its final summary. |
+| Completed command | `.venv\Scripts\python.exe -B -c "import tempfile; tempfile.TMP_MAX=1; import pytest; raise SystemExit(pytest.main(['-q','-p','no:cacheprovider','--capture=sys','--tb=short']))"` |
+
+```text
+___ ERROR at setup of test_kernels_compile_where_numba_has_nowhere_to_cache ___
+___________________ test_every_kernel_caches_when_numba_can ___________________
+_________________ test_n_jobs_does_not_change_the_result[int] _________________
+______________ test_n_jobs_does_not_change_the_result[generator] ______________
+_____________ test_group_moments_from_two_threads_under_workqueue _____________
+
+4 failed, 2080 passed, 2 skipped, 140 deselected, 1 error in 55.95s
+```
+
+| Failure or exclusion | Classification and executed traceback location |
+|---|---|
+| `test_every_kernel_caches_when_numba_can` | Expected sandbox cache failure. `tests/test_compiled.py:107`: `AssertionError: datanuggets._ldjit`; the assertion requires `FunctionCache`. |
+| Setup of `test_kernels_compile_where_numba_has_nowhere_to_cache` | Sandbox temporary-storage failure while setting up `tmp_path` for `tests/test_compiled.py:110`; test body never ran. |
+| `test_n_jobs_does_not_change_the_result[int]` | Sandbox temporary-storage failure. `tests/test_refine.py:157` → `src/datanuggets/refine.py:133` → joblib temporary-folder discovery → `FileNotFoundError`. |
+| `test_n_jobs_does_not_change_the_result[generator]` | Same executed traceback and cause. |
+| `test_group_moments_from_two_threads_under_workqueue` | Its child pytest invocation uses file-descriptor capture and fails before executing its test. Parent assertion: `tests/test_rstats.py:342`; subprocess construction begins at `:333`. |
+| Two skips | `tests/test_rstats.py:443` and `:469`: `needs os.fork`. |
+| 140 deselections | `pyproject.toml:32` selects `not slow` by default. |
+
+```powershell
+# S — executed independent statistics replay
+@'
+import tempfile; tempfile.TMP_MAX=1
+import sys,warnings,collections,numpy as np
+sys.path.insert(0,'tests')
+from rfixtures import load_group
+from datanuggets import wmean,wss,wwcss,distw
+counts=collections.Counter(); bad=[]; bits=[]
+with warnings.catch_warnings():
+ warnings.simplefilter('error')
+ for group in ('wstats','wstats_constructed'):
+  for c in load_group(group):
+   for order in ('C','F'):
+    x=np.array(c.array('x'),order=order); cl=c.array('cl'); w=c.array('w')
+    g=wwcss(x,cl,w,group_sum=True)
+    pairs=[('wmean',wmean(x,cl,w),c.array('wmean').T),('wss',wss(x,w),c.array('wss')[0]),('wwcss_group',g.per_cluster,c.array('wwcss_group')),('wwcss_total',g.total,c.array('wwcss_total')[0]),('wwcss_false',wwcss(x,cl,w),c.array('wwcss_total')[0])]
+    if c.has('distw'): pairs.append(('distw',distw(x,cl,w),c.array('distw')))
+    for name,a,b in pairs:
+     counts[(group,name)]+=1
+     a=np.asarray(a,dtype='f8'); b=np.asarray(b,dtype='f8')
+     try:np.testing.assert_array_equal(a,b)
+     except AssertionError:bad.append((group,c.id,order,name))
+     aa=a.ravel().view('u8'); bb=b.ravel().view('u8'); mask=aa!=bb
+     if mask.any():
+      differences=sorted(set(zip(aa[mask].tolist(),bb[mask].tolist())))
+      bits.append((group,c.id,order,name,int(mask.sum()),[(f'{u:016x}',f'{v:016x}') for u,v in differences]))
+print('comparisons',sum(counts.values()),'array_equal_failures',len(bad),'warnings',0)
+for k,v in sorted(counts.items()):print('COUNT',*k,v)
+for row in bad:print('ARRAY_FAIL',row)
+for row in bits:
+ if row[2]=='C':print('BITS',row)
+print('raw_mismatching_comparisons',len(bits))
+'@ | .venv\Scripts\python.exe -B -
+```
+
+```text
+comparisons 784 array_equal_failures 0 warnings 0
+raw_mismatching_comparisons 124
+```
+
+```powershell
+# Executed independent wpca raw-bit replay
+@'
+import tempfile; tempfile.TMP_MAX=1
+import sys, warnings, numpy as np
+sys.path.insert(0,'tests')
+import test_wpca as t
+from datanuggets.wcluster.wpca import _wpca_parts, wpca
+counts=0; diffs=[]
+for c in t.MATCHED:
+ for order in ('C','F'):
+  x,wr,wc,corr=t.inputs(c); x=np.asarray(x,order=order)
+  z=_wpca_parts(x,wr,wc,corr)
+  pairs=list(zip(('center','wcol','cap_x_0','scale','cap_s'),z,(c.array('center'),c.array('wcol'),c.array('cap_x_0'),t.r_scale(c),c.array('cap_s'))))
+  if corr:pairs.append(('cap_cov',_wpca_parts(x,wr,wc,False)[4],c.array('cap_cov')))
+  with warnings.catch_warnings():
+   warnings.simplefilter('ignore'); out=wpca(x,wr,wc,corr)
+  pairs.append(('wrow',out.wrow,c.array('wrow')))
+  for name,a,b in pairs:
+   counts+=1; aa=np.asarray(a).view(np.uint64).ravel(); bb=np.asarray(b).view(np.uint64).ravel(); ids=np.flatnonzero(aa!=bb)
+   if ids.size:diffs.append((c.id,order,name,ids.size,[(int(i),f'{int(aa[i]):016x}',f'{int(bb[i]):016x}') for i in ids[:3]]))
+print('wpca raw comparisons',counts,'mismatches',len(diffs))
+for d in diffs:print(d)
+'@ | .venv\Scripts\python.exe -B -
+```
+
+```text
+wpca raw comparisons 272 mismatches 0
+```
+
+```powershell
+@'
+import tempfile; tempfile.TMP_MAX=1
+import sys, numpy as np
+sys.path.insert(0,'tests')
+from rfixtures import load_group
+from datanuggets._rstats import r_matmul
+n=0; bad=[]
+for c in load_group('wpca'):
+ if not all(c.has(k) for k in ('cap_x_0','rotation','scores')): continue
+ a=r_matmul(c.array('cap_x_0'),c.array('rotation')); b=c.array('scores')
+ n+=1
+ if not np.array_equal(a.view('u8'),b.view('u8')): bad.append(c.id)
+print('wpca R-rotation score products:',n,'raw-bit mismatches:',bad)
+'@ | .venv\Scripts\python.exe -B -
+```
+
+```text
+wpca R-rotation score products: 23 raw-bit mismatches: []
+```
+
+| `assert_array_equal` location | Every comparison at those locations |
+|---|---|
+| `tests/test_wstats.py:46`, `:58` | `wmean` versus transposed fixture; `wss` versus fixture scalar |
+| `tests/test_wstats.py:72`, `:74`, `:75` | Plain `wwcss` total; grouped per-cluster values; grouped total |
+| `tests/test_wstats.py:91`, `:92` | `distw` lower triangle; entire matrix |
+| `tests/test_wstats.py:167`, `:168`, `:169` | Dead-cluster means, per-cluster sums and pair distances |
+| `tests/test_wstats.py:178`, `:180`, `:181` | Label-recoding equivalence for means and distances; recoded means versus fixture |
+| `tests/test_wstats.py:192`, `:193`, `:194`, `:195` | Default-weight means, sums, within-cluster sums and distances versus fixtures |
+| `tests/test_wstats.py:198`, `:201` | Omitted weights versus explicit ones for means and distances |
+| `tests/test_wstats.py:283`, `:286` | pandas means versus array means; pandas distances versus fixture |
+| `tests/test_wstats.py:297`, `:298` | Long-double total regression, plain and structured results |
+| `tests/test_predict.py:64`, `:130` | Distance matrix versus R, general and overflow cases |
+| `tests/test_predict.py:73`, `:108`, `:141`, `:149` | Prediction positions, dead centers, overflow and first live column |
+| `tests/test_predict.py:158`, `:160`, `:161` | Fixture tie positions, returned tie positions and complete predictions |
+| `tests/test_predict.py:171`, `:172` | Negative-distance boolean mask and corresponding predictions |
+| `tests/test_predict.py:183`, `:192`, `:197` | Label-recoding predictions; duplicate fixture rows; negative-label tie predictions |
+| `tests/test_wpca.py:111`, `:112`, `:113`, `:114`, `:115`, `:118` | Internal center, normalized column weights, centered data, eigen input, scale and covariance |
+| `tests/test_wpca.py:124` | R-centered data multiplied by R rotation versus R scores |
+| `tests/test_wpca.py:130`, `:131`, `:132`, `:133`, `:135` | Public center, scale, column weights, row weights and scores product |
+| `tests/test_wpca.py:285`, `:289`, `:290` | One-column correlation fixture sdev/scale relation; public scale and center |
+| `tests/test_wpca.py:381`, `:382`, `:383` | One-row sdev, center and scores |
+| `tests/test_wpca.py:433`, `:434` | Default row and column weights |
+
+| Comparison property | Observed result |
+|---|---|
+| Floating-point `assert_array_equal` | Checks NaN positions but ignores NaN sign/payload and zero sign. |
+| Integer prediction positions and boolean masks | No floating-point zero-sign or NaN-payload issue. |
+| Statistics, both layouts | No finite-value or signed-zero mismatch; 62 `distw` cases differ only in unfilled NaN/NA cells, giving 124 mismatching matrix comparisons. |
+| wpca preparation and row weights | Zero raw-bit mismatches in 272 comparisons. |
+| wpca scores computed with R rotation | Zero raw-bit mismatches in 23 comparisons. |
+| Contract classification | `docs/plans/2026-09-30-feature4-wcluster-leaves.md:31` uses NaN-equal array comparison; `README.md:161` explicitly maps unfilled R `NA` cells to Python `NaN`. These observed NaN differences are not Part B defects. |
+
+| Group and field | Python bits | R bits | Affected cases |
+|---|---|---|---|
+| `wstats`, `distw` unfilled diagonal/upper triangle; C and F | `7ff8000000000000` | `7ff00000000007a2` | All 45 IDs in the following block |
+| `wstats_constructed`, same field; C and F | `7ff8000000000000` | `7ff00000000007a2` | All 17 IDs in the following block |
+
+```text
+wstats:
+chick_diettime_time
+eustock_dax_low88_k2
+faithful1d
+faithful1d_by_waiting
+faithful_waiting
+faithful_ward10_erupt
+infert_stratum_parity
+iris124_singletons_pl
+iris12_singletons_pl
+iris150_singletons_pw
+iris1_singletons_pw
+iris3_singletons_pw
+iris50_singletons
+iris_singletons_neg_pw
+iris_species_ones
+iris_species_petallength_k3
+iris_species_petalwidth
+iris_species_pw_row150
+lcs_ward5_dpi
+mtcars_carb_am
+mtcars_carb_wt
+mtcars_cyl1d_gear
+mtcars_cyl_carb
+mtcars_cyl_carb_row15
+mtcars_cyl_qsec_k3
+mtcars_cyl_vs
+mtcars_gear_am
+mtcars_gear_am_row01
+mtcars_gear_vs
+mtcars_singletons_vs
+nug_iris_passthrough
+nug_iris_passthrough_singletons
+nug_quakes
+nug_volcano_scaled
+plantgrowth_group_k3
+quakes200_singletons_st
+quakes_depth_stations
+quakes_int2_mag5
+quakes_int_by_mag
+quakes_ward100_stations
+rock_perm_shape
+usarrests_regions123_pop_k3
+usarrests_scaled_ward2_col1
+volcano_ward30_col1
+volcano_ward4
+
+wstats_constructed:
+hv_chick_by_chick_w2pow
+hv_eustock_year_wdax_1e296
+hv_faithful_by_waiting_wsubnormal
+hv_quakes_by_mag_w2pow
+hv_quakes_by_stations_w2pow
+lcs_scaled_ward2_ones
+mtcars_scaled_ward6_col1
+ovf_dead_first_nan_inf
+ovf_newx_row
+ovf_one_row
+ovf_two_rows
+swiss_scaled_ward4_col1
+ties_faithful
+ties_iris
+ties_mtcars
+ties_quakes
+ties_volcano
+```
+
+| Group / case: `_wdist_mat` NaNs | Differing cells | Python bits | R bits |
+|---|---:|---|---|
+| `wstats/chick_diettime_time` | 2312 | `7ff8000000000000` | `fff8000000000000` |
+| `wstats/mtcars_carb_am` | 32 | `7ff8000000000000` | `fff8000000000000` |
+| `wstats/mtcars_cyl_vs` | 32 | `7ff8000000000000` | `fff8000000000000` |
+| `wstats/mtcars_gear_am` | 32 | `7ff8000000000000` | `fff8000000000000` |
+| `wstats/mtcars_gear_am_row01` | 1 | `7ff8000000000000` | `fff8000000000000` |
+| `wstats/mtcars_singletons_vs` | 576 | `7ff8000000000000` | `fff8000000000000` |
+| `wstats_constructed/ovf_dead_first_nan_inf` | 1 | `7ff8000000000000` | `fff8000000000000` |
+| `wstats_constructed/ovf_newx_row` | 4 | `7ff8000000000000` | `fff8000000000000` |
+| `wstats_constructed/ovf_two_rows` | 2 | `7ff8000000000000` | `fff8000000000000` |
+
+```text
+PART D — FINAL VERDICT
+
+REJECT
+B3, B4
+```

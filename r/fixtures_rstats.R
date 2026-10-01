@@ -49,10 +49,35 @@ for (nm in names(vec_sets)) {
 }
 
 mean_sets <- list(inf = c(Inf, 2), inf_minus_inf = c(Inf, -Inf), neg_inf = c(-Inf, 1),
-                  nan = c(NaN, 1), pair = c(1.5, 2.5000000000000004))
+                  nan = c(NaN, 1), pair = c(1.5, 2.5000000000000004),
+                  overflow_neg_inf = c(1.7e308, 1.7e308, -Inf),  # double sums give NaN here
+                  # the sum overflows a double, so the correction pass divides each residual by n
+                  overflow_careful = from_bits(c("7fe0000000000000", "7feffffffffffffd",
+                                                 "fc00000000000000", "7c80000000000000",
+                                                 "7fefffffffffffff", "fbd0000000000000",
+                                                 "fca0000000000000")))
+# Which NaN a sum or mean gives: Inf - Inf, NA's payload, and each order of two NaNs
+nan_sets <- list(na = c(NA, 1), inf_minus_inf_na = c(Inf, -Inf, NA), na_inf_minus_inf = c(NA, Inf, -Inf),
+                 na_pay = c(NA, nan_pay), pay_na = c(nan_pay, NA), pos_neg = c(nan_pos, nan_neg),
+                 neg_pos = c(nan_neg, nan_pos), na_snan = c(NA, snan_big), snan_na = c(snan_big, NA))
+names(nan_sets) <- paste0("nanbits_", names(nan_sets))
+mean_sets <- c(mean_sets, nan_sets)
 for (nm in names(mean_sets)) {
   v <- mean_sets[[nm]]
   write_case("rcompat_stats", paste0("mean_", nm), list(kind = "mean"), list(v = v, mean = mean(v)))
+}
+
+# sum() is R's rsum: a long double running sum that is +-Inf once it passes +-DBL_MAX, even where
+# rounding would give DBL_MAX back. With Inf or NaN present only those decide.
+big <- .Machine$double.xmax
+sum_sets <- list(past_max = c(big, 2^960), past_neg_max = c(-big, -2^960), at_max = c(big, 0),
+                 overflow_neg_inf = c(1.7e308, 1.7e308, -Inf),
+                 overflow_inf = c(-1.7e308, -1.7e308, Inf),
+                 inf_minus_inf = c(Inf, -Inf, 1), nan_inf = c(NaN, Inf))
+sum_sets <- c(sum_sets, nan_sets)
+for (nm in names(sum_sets)) {
+  v <- sum_sets[[nm]]
+  write_case("rcompat_stats", paste0("sum_", nm), list(kind = "sum"), list(v = v, sum = sum(v)))
 }
 
 # R 4.x compares matrix rows exactly (0 == -0), not by a 15-digit paste
@@ -67,4 +92,5 @@ for (nm in names(unique_sets)) {
   write_case("rcompat_stats", paste0("unique_", nm), list(kind = "unique"),
              list(x = x, first = which(!duplicated(x))))
 }
-cat(length(cov_sets) + length(vec_sets) + length(mean_sets) + length(unique_sets), "cases\n")
+cat(length(cov_sets) + length(vec_sets) + length(mean_sets) + length(sum_sets) +
+    length(unique_sets), "cases\n")

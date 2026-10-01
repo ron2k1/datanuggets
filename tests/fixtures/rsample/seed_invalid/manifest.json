@@ -1,0 +1,37 @@
+{
+  "group": "rsample",
+  "case": "seed_invalid",
+  "args": {},
+  "arrays": {
+    "seeds": {
+      "file": "seeds.bin",
+      "dtype": "<f8",
+      "shape": [
+        6
+      ]
+    }
+  },
+  "versions": {
+    "R": "R version 4.6.1 (2026-06-24 ucrt)",
+    "platform": "x86_64-w64-mingw32",
+    "datanugget": "1.5.0",
+    "Rfast": "2.1.5.2",
+    "lapack": "3.12.1",
+    "blas": "Rblas.dll md5 5fe8258e86d8a1a52a6c3db05faa0225",
+    "longdouble_digits": 64
+  },
+  "rng": {
+    "kind": ["Mersenne-Twister", "Inversion", "Rejection"],
+    "use_hash": "(n > 1e+07 && !replace && is.null(prob) && size <= n/2)",
+    "sample_int": ["{", "    stopifnot(length(n) == 1L)", "    if (useHash) {", "        stopifnot(is.null(prob), !replace)", "        .Internal(sample2(n, size))", "    }", "    else .Internal(sample(n, size, replace, prob))", "}"]
+  },
+  "errors": ["supplied seed is not a valid integer", "supplied seed is not a valid integer", "supplied seed is not a valid integer", "supplied seed is not a valid integer", "supplied seed is not a valid integer", "supplied seed is not a valid integer"],
+  "warnings": [
+    [],
+    [],
+    ["NAs introduced by coercion to integer range"],
+    ["NAs introduced by coercion to integer range"],
+    ["NAs introduced by coercion to integer range"],
+    ["NAs introduced by coercion to integer range"]
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "group": "rcompat_stats",
+  "case": "mean_nanbits_inf_minus_inf_na",
+  "args": {
+    "kind": "mean"
+  },
+  "arrays": {
+    "v": {
+      "file": "v.bin",
+      "dtype": "<f8",
+      "shape": [
+        3
+      ]
+    },
+    "mean": {
+      "file": "mean.bin",
+      "dtype": "<f8",
+      "shape": [
+        1
+      ]
+    }
+  },
+  "versions": {
+    "R": "R version 4.6.1 (2026-06-24 ucrt)",
+    "platform": "x86_64-w64-mingw32",
+    "datanugget": "1.5.0",
+    "Rfast": "2.1.5.2",
+    "lapack": "3.12.1",
+    "blas": "Rblas.dll md5 5fe8258e86d8a1a52a6c3db05faa0225",
+    "longdouble_digits": 64
+  }
+}

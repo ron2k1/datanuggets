@@ -1,0 +1,92 @@
+{
+  "group": "compat",
+  "case": "labels_gear_factor_5_3_4",
+  "args": {
+    "kind": "labels",
+    "levels": ["5", "3", "4"],
+    "pred_kind": "vector",
+    "distw_error": "'max' not meaningful for factors",
+    "cl_kind": "factor",
+    "cl_categories": ["5", "3", "4"],
+    "cl_categories_numeric": true
+  },
+  "arrays": {
+    "x": {
+      "file": "x.bin",
+      "dtype": "<f8",
+      "shape": [
+        32,
+        11
+      ]
+    },
+    "w": {
+      "file": "w.bin",
+      "dtype": "<f8",
+      "shape": [
+        32
+      ]
+    },
+    "newx": {
+      "file": "newx.bin",
+      "dtype": "<f8",
+      "shape": [
+        10,
+        11
+      ]
+    },
+    "codes": {
+      "file": "codes.bin",
+      "dtype": "<i4",
+      "shape": [
+        32
+      ]
+    },
+    "wmean": {
+      "file": "wmean.bin",
+      "dtype": "<f8",
+      "shape": [
+        11,
+        3
+      ]
+    },
+    "wwcss_group": {
+      "file": "wwcss_group.bin",
+      "dtype": "<f8",
+      "shape": [
+        3
+      ]
+    },
+    "wwcss_total": {
+      "file": "wwcss_total.bin",
+      "dtype": "<f8",
+      "shape": [
+        1
+      ]
+    },
+    "cl_codes": {
+      "file": "cl_codes.bin",
+      "dtype": "<i4",
+      "shape": [
+        32
+      ]
+    },
+    "pred": {
+      "file": "pred.bin",
+      "dtype": "<i4",
+      "shape": [
+        10
+      ]
+    }
+  },
+  "versions": {
+    "R": "R version 4.6.1 (2026-06-24 ucrt)",
+    "platform": "x86_64-w64-mingw32",
+    "datanugget": "1.5.0",
+    "Rfast": "2.1.5.2",
+    "WCluster": "1.3.0",
+    "matprod": "default",
+    "lapack": "3.12.1",
+    "blas": "Rblas.dll md5 5fe8258e86d8a1a52a6c3db05faa0225",
+    "longdouble_digits": 64
+  }
+}

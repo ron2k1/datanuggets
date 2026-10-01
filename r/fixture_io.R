@@ -9,6 +9,8 @@ suppressPackageStartupMessages({
   library(datanugget)
 })
 stopifnot(packageVersion("datanugget") == "1.5.0")
+# WCluster stays unattached: the generators call WCluster:: and WCluster::: by name.
+stopifnot(packageVersion("WCluster") == "1.3.0")
 
 # R's arithmetic order depends on the build: Rfast::dista's Euclidean sums go through BLAS ddot
 # for more than 32 features, and colMeans/rowMeans accumulate in long double. Record both, so a
@@ -25,6 +27,8 @@ versions <- function() list(
   platform = R.version$platform,
   datanugget = as.character(packageVersion("datanugget")),
   Rfast = as.character(packageVersion("Rfast")),
+  WCluster = as.character(packageVersion("WCluster")),
+  matprod = getOption("matprod"),
   lapack = La_version(),
   blas = blas_id(),
   longdouble_digits = .Machine$longdouble.digits
@@ -91,6 +95,20 @@ local({
 })
 
 no_args <- setNames(list(), character(0))
+
+# Doubles from their 16 hex digits, bit for bit, so a NaN's sign and payload are what the case says.
+from_bits <- function(h) vapply(h, function(s) readBin(
+  as.raw(strtoi(substring(s, seq(15, 1, -2), seq(16, 2, -2)), 16L)), "double", n = 1L), 0,
+  USE.NAMES = FALSE)
+local(stopifnot(identical(writeBin(from_bits("7ff00000000007a2"), raw(), endian = "little"),
+                          as.raw(c(0xa2, 0x07, 0, 0, 0, 0, 0xf0, 0x7f)))))  # R's NA, unchanged
+
+# NaNs that tell the FPU's rules apart: payload 123 is below NA's 7a2, and the signaling one's
+# significand is above NA's once quieted.
+nan_pay <- from_bits("7ff8000000000123")
+nan_pos <- from_bits("7ff8000000000000")
+nan_neg <- from_bits("fff8000000000000")
+snan_big <- from_bits("7ff4000000000000")
 
 # trace() hooks record what the packages actually do, without modifying them.
 .capture <- new.env()

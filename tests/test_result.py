@@ -1,7 +1,82 @@
+import importlib
+import subprocess
+import sys
+from dataclasses import FrozenInstanceError, fields
+
 import numpy as np
 import pytest
 
+import datanuggets
+import datanuggets.wcluster
 from datanuggets import CentersResult, DataNuggets
+from datanuggets.result import WpcaResult, WwcssResult
+
+# Each WCluster leaf and the module that defines it. The modules are reached through importlib,
+# because the exported function wpca shadows its module as an attribute of datanuggets.wcluster.
+WCLUSTER_LEAVES = {
+    "cluster_predict": "datanuggets.wcluster.predict",
+    "distw": "datanuggets.wcluster.wstats",
+    "wmean": "datanuggets.wcluster.wstats",
+    "wpca": "datanuggets.wcluster.wpca",
+    "wss": "datanuggets.wcluster.wstats",
+    "wwcss": "datanuggets.wcluster.wstats",
+}
+
+
+def test_wcluster_leaves_are_exported_from_both_packages():
+    for name, module in WCLUSTER_LEAVES.items():
+        defined = getattr(importlib.import_module(module), name)
+        assert getattr(datanuggets.wcluster, name, None) is defined, name
+        assert getattr(datanuggets, name, None) is defined, name
+    assert datanuggets.wcluster.__all__ == sorted(WCLUSTER_LEAVES)
+    assert datanuggets.WpcaResult is WpcaResult
+    assert datanuggets.WwcssResult is WwcssResult
+    top = set(WCLUSTER_LEAVES) | {"WpcaResult", "WwcssResult"}
+    assert top <= set(datanuggets.__all__)
+    assert datanuggets.__all__ == sorted(datanuggets.__all__)
+    for name in datanuggets.__all__:
+        assert hasattr(datanuggets, name), name
+
+
+# Each datanugget function and its module in datanuggets.nuggets. The module of the same name at
+# the package root is its old import path, which forwards to it.
+NUGGET_FUNCTIONS = {
+    "arithmetic_complexity": "complexity",
+    "create_dn": "create",
+    "create_dn_centers": "centers",
+    "get_dn_means": "means",
+    "refine_dn": "refine",
+}
+
+
+def test_nugget_functions_are_exported_and_their_old_paths_forward():
+    nuggets = importlib.import_module("datanuggets.nuggets")
+    for name, module in NUGGET_FUNCTIONS.items():
+        defined = getattr(importlib.import_module(f"datanuggets.nuggets.{module}"), name)
+        assert defined.__module__ == f"datanuggets.nuggets.{module}", name
+        assert getattr(nuggets, name) is defined, name
+        assert getattr(datanuggets, name) is defined, name
+        old = importlib.import_module(f"datanuggets.{module}")
+        assert getattr(old, name) is defined, name
+        assert old.__all__ == [name], name
+    assert nuggets.__all__ == sorted(NUGGET_FUNCTIONS)
+
+
+# The old module paths stay attributes of the package after a bare `import datanuggets`, as they
+# were when its __init__ imported them, so `datanuggets.create.create_dn` still resolves. It runs
+# in a fresh interpreter, because here any test that imported an old path has already bound it.
+OLD_MODULES = [*sorted(NUGGET_FUNCTIONS.values()), "_draws"]
+
+
+def test_a_bare_import_binds_the_old_module_paths():
+    code = (
+        "import sys\n"
+        "import datanuggets\n"
+        f"for name in {OLD_MODULES!r}:\n"
+        "    assert getattr(datanuggets, name) is sys.modules['datanuggets.' + name], name\n"
+    )
+    run = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
+    assert run.returncode == 0, run.stderr[-2000:]
 
 
 def _dn(**over):
@@ -54,3 +129,63 @@ def test_centers_result_equality():
     a = CentersResult(centers=np.eye(2), kept=np.array([0, 1]))
     assert a == CentersResult(centers=np.eye(2), kept=np.array([0, 1]))
     assert a != CentersResult(centers=np.eye(2), kept=np.array([1, 0]))
+
+
+def _wwcss(**over):
+    values = {"per_cluster": np.array([1.5, np.nan]), "total": np.float64(np.nan)}
+    values.update(over)
+    return WwcssResult(**values)
+
+
+def _wpca(**over):
+    values = {
+        "sdev": np.array([2.0, np.nan]),
+        "rotation": np.eye(2),
+        "x": np.array([[1.0, 0.0], [0.0, -1.0], [-1.0, 1.0]]),
+        "center": np.array([0.5, 0.25]),
+        "scale": np.ones(2),
+        "wrow": np.array([1.0, 2.0, 1.0]),
+        "wcol": np.ones(2),
+    }
+    values.update(over)
+    return WpcaResult(**values)
+
+
+def test_wcluster_result_fields_follow_the_spec():
+    assert [f.name for f in fields(WwcssResult)] == ["per_cluster", "total"]
+    assert [f.name for f in fields(WpcaResult)] == [
+        "sdev",
+        "rotation",
+        "x",
+        "center",
+        "scale",
+        "wrow",
+        "wcol",
+    ]
+
+
+def test_wcluster_results_are_read_only_copies():
+    per = np.array([1.5, 2.5])
+    rotation = np.eye(2)
+    ww, pc = _wwcss(per_cluster=per), _wpca(rotation=rotation)
+    per[0] = rotation[0, 0] = 99.0
+    assert ww.per_cluster[0] == 1.5 and pc.rotation[0, 0] == 1.0
+    assert ww.total.shape == () and ww.total.dtype == np.float64
+    for arr in (ww.per_cluster, ww.total, *(getattr(pc, f.name) for f in fields(pc))):
+        assert not arr.flags.writeable
+    with pytest.raises(ValueError):
+        ww.per_cluster[0] = 5.0
+    with pytest.raises(FrozenInstanceError):
+        pc.sdev = np.zeros(2)
+
+
+def test_wcluster_results_equal_by_value_with_nan():
+    assert _wwcss() == _wwcss()
+    assert _wwcss() != _wwcss(total=np.float64(1.5))
+    assert _wwcss() != _wwcss(per_cluster=np.array([1.5, 2.5]))
+    assert _wpca() == _wpca()
+    assert _wpca() != _wpca(rotation=-np.eye(2))
+    assert _wpca() != _wpca(wcol=np.array([0.5, 1.5]))
+    assert _wwcss() != _wpca()
+    with pytest.raises(TypeError):
+        hash(_wpca())
