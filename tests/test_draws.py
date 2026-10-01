@@ -1,14 +1,13 @@
+import importlib
+import pickle
+
 import numpy as np
 import pytest
 
-from datanuggets._draws import (
-    DrawRecord,
-    Draws,
-    NumpyDraws,
-    ReplayDraws,
-    ReplayMismatch,
-    as_draws,
-)
+from datanuggets._random.interfaces import Draws
+from datanuggets._random.numpy_draws import NumpyDraws
+from datanuggets._random.replay import DrawRecord, ReplayDraws, ReplayMismatch
+from datanuggets._random.seeds import as_draws
 from rfixtures import load_group
 
 
@@ -104,3 +103,38 @@ def test_replay_fork_shares_the_recorded_stream():
 def test_both_implementations_satisfy_the_protocol():
     assert isinstance(NumpyDraws(1), Draws)
     assert isinstance(ReplayDraws([]), Draws)
+
+
+# Each draw source and its module in datanuggets._random. datanuggets._draws, their old import
+# path, forwards to the same objects, so scripts that import it keep working, and so do pickles
+# that name it, since unpickling looks a class up by module and name.
+RANDOM_NAMES = {
+    "Draws": "interfaces",
+    "NumpyDraws": "numpy_draws",
+    "RDraws": "r_draws",
+    "r_use_hash": "r_draws",
+    "DrawRecord": "replay",
+    "ReplayDraws": "replay",
+    "ReplayMismatch": "replay",
+    "as_draws": "seeds",
+}
+
+
+def test_draw_sources_live_in_random_and_their_old_path_forwards():
+    old = importlib.import_module("datanuggets._draws")
+    for name, module in RANDOM_NAMES.items():
+        defined = getattr(importlib.import_module(f"datanuggets._random.{module}"), name)
+        assert defined.__module__ == f"datanuggets._random.{module}", name
+        assert getattr(old, name) is defined, name
+    assert sorted(old.__all__) == sorted(RANDOM_NAMES)
+
+
+def test_a_pickle_naming_the_old_path_loads():
+    # protocol 0 writes each class as "module\nname" text, so the old path can be put back in.
+    # The bytes loaded are the ones this test just made.
+    draws = NumpyDraws(7)
+    new = pickle.dumps(draws, protocol=0)
+    assert b"datanuggets._random.numpy_draws\nNumpyDraws" in new
+    restored = pickle.loads(new.replace(b"datanuggets._random.numpy_draws", b"datanuggets._draws"))
+    assert type(restored) is NumpyDraws
+    np.testing.assert_array_equal(restored.permutation(20), NumpyDraws(7).permutation(20))

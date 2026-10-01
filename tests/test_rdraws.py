@@ -10,7 +10,10 @@ import numpy as np
 import pytest
 
 from datanuggets import DataNuggetWarning, create_dn, refine_dn
-from datanuggets._draws import NumpyDraws, RDraws, ReplayDraws, as_draws, r_use_hash
+from datanuggets._random.numpy_draws import NumpyDraws
+from datanuggets._random.r_draws import RDraws, r_use_hash
+from datanuggets._random.replay import ReplayDraws
+from datanuggets._random.seeds import as_draws
 from rfixtures import create_args, load_group, refine_inputs
 
 GROUP = {c.id: c for c in load_group("rsample")}

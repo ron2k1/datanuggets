@@ -23,7 +23,8 @@ from datanuggets._defaults import (
     R_MIN,
     SEED,
 )
-from datanuggets._draws import Draws, as_draws
+from datanuggets._random.interfaces import Draws
+from datanuggets._random.seeds import as_draws
 from datanuggets._validate import (
     as_count,
     as_matrix,

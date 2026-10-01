@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from datanuggets._clustering.hartigan_wong import KMeansError, kmeans, kmns
-from datanuggets._draws import ReplayDraws
+from datanuggets._random.replay import ReplayDraws
 from rfixtures import load_group
 
 KMNS = load_group("kmns")

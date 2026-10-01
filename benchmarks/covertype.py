@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 from datanuggets import DataNuggets, DataNuggetWarning, create_dn, refine_dn
 from datanuggets._compat import arithmetic, moments
-from datanuggets._draws import ReplayDraws
+from datanuggets._random.replay import ReplayDraws
 from rfixtures import Case
 
 OUT = ROOT / "tmp" / "covertype" / "out"

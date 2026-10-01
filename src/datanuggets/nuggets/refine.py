@@ -38,7 +38,10 @@ from datanuggets._defaults import (
     NSTART,
     SEED,
 )
-from datanuggets._draws import Draws, NumpyDraws, RDraws, as_draws
+from datanuggets._random.interfaces import Draws
+from datanuggets._random.numpy_draws import NumpyDraws
+from datanuggets._random.r_draws import RDraws
+from datanuggets._random.seeds import as_draws
 from datanuggets._validate import as_matrix, as_real, check_assignments, check_n_jobs
 from datanuggets.exceptions import DataNuggetWarning
 from datanuggets.nuggets.create import _progress_bar

@@ -26,7 +26,7 @@ from datanuggets import (
     wwcss,
 )
 from datanuggets._compat.linalg import r_matmul
-from datanuggets._draws import ReplayDraws
+from datanuggets._random.replay import ReplayDraws
 from datanuggets.nuggets.complexity import _ac_state
 from datanuggets.wcluster.predict import _wdist_mat
 from datanuggets.wcluster.wpca import _wpca_parts

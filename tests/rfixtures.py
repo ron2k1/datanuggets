@@ -11,7 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
-from datanuggets._draws import DrawRecord
+from datanuggets._random.replay import DrawRecord
 from datanuggets.result import DataNuggets
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures"

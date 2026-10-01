@@ -10,7 +10,8 @@ import pytest
 import datanuggets.nuggets.refine as refine_module
 from datanuggets import DataNuggets, DataNuggetWarning, refine_dn
 from datanuggets._clustering.hartigan_wong import KMeansError, KMeansResult
-from datanuggets._draws import NumpyDraws, ReplayDraws
+from datanuggets._random.numpy_draws import NumpyDraws
+from datanuggets._random.replay import ReplayDraws
 from datanuggets._validate import check_assignments
 from datanuggets.nuggets.refine import _Nuggets, _split_nugget
 from rfixtures import ATOL, RTOL, load_group, refine_inputs

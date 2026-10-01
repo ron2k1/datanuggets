@@ -6,7 +6,7 @@ import pytest
 
 import datanuggets.nuggets.create as create_mod
 from datanuggets import DataNuggetWarning, create_dn
-from datanuggets._draws import ReplayDraws
+from datanuggets._random.replay import ReplayDraws
 from datanuggets.nuggets.create import _allocate
 from rfixtures import create_args, load_group
 
