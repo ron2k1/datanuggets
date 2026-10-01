@@ -24,7 +24,7 @@ Some folders a fuller layout would have aren't here yet, because nothing exists 
 
 ```
 src/datanuggets/
-  __init__.py          the public API: imports and __all__, nothing else
+  __init__.py          the public API: imports, __all__ and the old module paths, nothing else
   exceptions.py        DataNuggetWarning
   result.py            DataNuggets, CentersResult, WpcaResult, WwcssResult
   _validate.py         input coercion and argument checks, mirroring R's stop() conditions
@@ -67,7 +67,7 @@ The public API is `datanuggets.__all__`, imported from `datanuggets` as the READ
 
 A module or package whose name starts with an underscore is private. It can change without notice, and code outside this repo shouldn't import it. `datanuggets._draws` is the one private path kept working on purpose, for the reasons below.
 
-`datanuggets/__init__.py` imports the two workflow packages and the result and warning classes, and does nothing else. Importing the package compiles no kernel, starts no thread or process and draws no random number.
+`datanuggets/__init__.py` imports the two workflow packages, the result and warning classes and the six old module paths, and does nothing else. Importing an old path binds it as an attribute of the package, as the old `__init__` did when it imported those modules directly, so `datanuggets.create.create_dn` works after a bare `import datanuggets`. Importing the package compiles no kernel, starts no thread or process and draws no random number.
 
 ## Dependency direction
 
@@ -79,11 +79,12 @@ Imports run from the workflows down to the R-compatibility layer and never back 
 | `_compat` | `_compat`, `_defaults` |
 | `_random` | `_random`, `exceptions` |
 | `_clustering` | `_compat`, `_random` |
-| `wcluster` | `_compat`, `_validate`, `result`, `exceptions` |
-| `nuggets` | `_clustering`, `_compat`, `_random`, `_defaults`, `_validate`, `result`, `exceptions` |
-| `datanuggets/__init__.py` | `nuggets`, `wcluster`, `result`, `exceptions` |
+| `wcluster` | `wcluster`, `_compat`, `_validate`, `result`, `exceptions` |
+| `nuggets` | `nuggets`, `_clustering`, `_compat`, `_random`, `_defaults`, `_validate`, `result`, `exceptions` |
+| the old paths: `create`, `refine`, `centers`, `means`, `complexity`, `_draws` | `nuggets`, `_random` |
+| `datanuggets/__init__.py` | `nuggets`, `wcluster`, the old paths, `result`, `exceptions` |
 
-So R's arithmetic and the draw sources never import a workflow, and new code in them can't create a cycle. WCluster draws nothing, so `wcluster` imports neither `_random` nor `nuggets`. The table is the import graph of every module at the commit that added this file.
+So R's arithmetic and the draw sources never import a workflow, and new code in them can't create a cycle. WCluster draws nothing, so `wcluster` imports neither `_random` nor `nuggets`. The table is the whole import graph of the package by layer, imports inside a layer and inside functions included.
 
 ## Where new code goes
 
@@ -113,14 +114,14 @@ So R's arithmetic and the draw sources never import a workflow, and new code in 
 A test file holds the R parity cases and the unit cases for the module it covers. Each file mixes both against the same fixtures, so the suite is grouped by area and not into unit and parity folders. The long fuzz cases carry the `slow` mark and run with `pytest -m slow`.
 
 - Test folders have no `__init__.py`, and pytest imports each test file by its file name, so a file name must be unique across all the folders.
-- `tests/conftest.py` puts `tests/` on the import path before any test module loads. That's how a test in any folder imports `rfixtures`. Tests don't change `sys.path` themselves.
+- In its default import mode, prepend, pytest puts the folder of each `conftest.py` on `sys.path` when it loads that file, before it imports any test module. `tests/conftest.py` is there for that, and it's how a test in any folder imports `rfixtures`. So the suite runs in the default mode and not with `--noconftest`, and `--import-mode=importlib` doesn't work with it, before the reorganization or after. Tests don't change `sys.path` themselves.
 - A test that patches a name patches the module that looks it up when the code runs. `group_moments` looks up `r_mean` and `r_cov` in `moments`, for example, so a test patches `moments.r_cov`, not `arithmetic.r_cov`.
 
 ## Fixtures
 
 - Each case lives in `tests/fixtures/<group>/<case>/`: a `manifest.json` and its arrays as `.bin` files.
 - Tests read them through `rfixtures.py`, and `rfixtures.FIXTURE_ROOT` is the one place that names the location.
-- `r/fixtures_<group>.R` records a group through `r/fixture_io.R`, in the pinned R environment `r/README.md` describes.
+- The `r/fixtures_*.R` scripts record the groups, each case through `write_case` in `r/fixture_io.R`, in the pinned R environment `r/README.md` describes. Most groups come from the script of the same name, and nine don't. `fixtures_rcompat.R` writes `rcompat_split_indices`, `rcompat_dist`, `rcompat_dista`, `rcompat_rowmins` and `rcompat_means`. `fixtures_rstats.R` writes `rcompat_stats` and `fixtures_rwstats.R` writes `rcompat_wstats`. `fixtures_kmeans.R` also writes `kmns`, and `fixtures_wstats.R` also writes `wstats_constructed`. To find the script for any group, search `r/` for its name. A script that reads another group's cases back names that group too, so `create_dn`, `kmeans` and `refine_dn` turn up in more than one script, and the one that records the group is the one whose cases go to `write_case` under that name.
 - Fixtures are evidence of what R did. They're never regenerated to make a test pass, and the reorganization left every fixture byte where it was.
 
 ## Retained import paths
@@ -131,6 +132,8 @@ A test file holds the R parity cases and the unit cases for the module it covers
 | `datanuggets._draws` | the eight public names now in `datanuggets._random` | scripts outside the repo import it, and a pickle of a draw source made before the split names it | `tests/randomness/test_draws.py`, the last two tests |
 
 A forwarding module imports the names and lists them in `__all__`, so each name keeps one implementation. Only those names forward. A private helper is reachable only at its new path.
+
+`datanuggets/__init__.py` imports all six old paths, so after a bare `import datanuggets` each is an attribute of the package, as it was before. `tests/test_result.py::test_a_bare_import_binds_the_old_module_paths` checks that in a fresh interpreter. None of the six is in `__all__`, so `from datanuggets import *` gives the same names as before.
 
 The other moved private modules (`_rcompat`, `_rstats`, `_ldjit`, `_ldouble`, `_rfast`, `_compiled`, `_hartigan_wong`) don't forward. Nothing outside the repo imports them, and none defines a class that gets pickled.
 
