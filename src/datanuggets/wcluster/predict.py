@@ -44,9 +44,9 @@ def cluster_predict(x, cl, newx, *, w=None) -> np.ndarray:
     R's default too. newx must have the columns of x, and None raises TypeError where R stops
     with "newdata should be a data frame."
     """
-    x = as_matrix(x)
+    x = as_matrix(x, logical=True)
     w = as_weights(w, x.shape[0])
-    newx = as_matrix(newx, "newx")
+    newx = as_matrix(newx, "newx", logical=True)
     if newx.shape[1] != x.shape[1]:
         raise ValueError(f"newx must have the {x.shape[1]} columns of x, got {newx.shape[1]}")
     z = _wdist_mat(newx, wmean(x, cl, w))

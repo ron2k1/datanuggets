@@ -64,7 +64,7 @@ def wpca(x, wrow=None, wcol=None, corr=False) -> WpcaResult:
     once. With one column and corr=True the port returns an sdev of 1 where R returns the
     unscaled value or stops.
     """
-    x = as_matrix(x)
+    x = as_matrix(x, logical=True)
     n, p = x.shape
     if n == 0:
         raise ValueError("x must have at least one row")

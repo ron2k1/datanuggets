@@ -20,7 +20,7 @@ def get_dn_means(x, dn: DataNuggets) -> np.ndarray:
     each to a nugget id in [0, k). R ignores extra rows and skips a row whose id is out of range
     or fractional. This raises ValueError for both.
     """
-    x = as_matrix(x)
+    x = as_matrix(x, logical=True)
     if not isinstance(dn, DataNuggets):
         raise TypeError(
             f"dn must be a DataNuggets from create_dn or refine_dn, not {type(dn).__name__}"

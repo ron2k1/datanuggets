@@ -7,8 +7,27 @@ import numbers
 import numpy as np
 
 
-def as_matrix(x, name: str = "x") -> np.ndarray:
-    arr = np.asarray(x)
+def _frame_kinds(x) -> list[str] | None:
+    """Each column's dtype kind when x is a pandas-style data frame, else None."""
+    dtypes = getattr(x, "dtypes", None)
+    if dtypes is None or getattr(x, "ndim", None) != 2:
+        return None
+    return [getattr(d, "kind", "O") for d in dtypes]
+
+
+def as_matrix(x, name: str = "x", *, logical: bool = False) -> np.ndarray:
+    """x as a float64 matrix, read the way R's as.matrix() reads it. A data frame mixing bool
+    and numeric columns is the numeric matrix, with True as 1 and False as 0. An all-bool x is a
+    logical matrix: the WCluster functions and getDN.means do arithmetic on it as 0 and 1
+    (logical=True), and create.DN, create.DNcenters and refine.DN stop with "x must contain
+    only numeric columns" (logical=False)."""
+    kinds = _frame_kinds(x)
+    if kinds and set(kinds) <= set("biuf") and (logical or set(kinds) != {"b"}):
+        arr = np.asarray(x, dtype=np.float64)
+    else:
+        arr = np.asarray(x)
+        if logical and arr.dtype.kind == "b":
+            arr = arr.astype(np.float64)
     if arr.dtype.kind not in "iuf":
         raise TypeError(f"{name} must contain only numeric columns")
     if arr.ndim != 2:
