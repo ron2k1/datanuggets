@@ -36,6 +36,30 @@ def test_wcluster_leaves_are_exported_from_both_packages():
         assert hasattr(datanuggets, name), name
 
 
+# Each datanugget function and its module in datanuggets.nuggets. The module of the same name at
+# the package root is its old import path, which forwards to it.
+NUGGET_FUNCTIONS = {
+    "arithmetic_complexity": "complexity",
+    "create_dn": "create",
+    "create_dn_centers": "centers",
+    "get_dn_means": "means",
+    "refine_dn": "refine",
+}
+
+
+def test_nugget_functions_are_exported_and_their_old_paths_forward():
+    nuggets = importlib.import_module("datanuggets.nuggets")
+    for name, module in NUGGET_FUNCTIONS.items():
+        defined = getattr(importlib.import_module(f"datanuggets.nuggets.{module}"), name)
+        assert defined.__module__ == f"datanuggets.nuggets.{module}", name
+        assert getattr(nuggets, name) is defined, name
+        assert getattr(datanuggets, name) is defined, name
+        old = importlib.import_module(f"datanuggets.{module}")
+        assert getattr(old, name) is defined, name
+        assert old.__all__ == [name], name
+    assert nuggets.__all__ == sorted(NUGGET_FUNCTIONS)
+
+
 def _dn(**over):
     fields = {
         "centers": np.array([[0.0, 1.0], [np.nan, np.nan]]),
