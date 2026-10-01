@@ -414,6 +414,8 @@ def wpca_report() -> str:
             f" {verdict(got.x, r_matmul(case.array('cap_x_0'), got.rotation))} |"
             f" {_eigen_verdict(case, got)} |"
         )
+    names = [f"`{c}`" for c in stops]
+    stopped = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
     header = (
         "# wpca parity with R\n\n"
         f"{_wcluster_source('wpca', group)} Everything up to the matrix handed to eigen() is"
@@ -438,7 +440,7 @@ def wpca_report() -> str:
         " that tolerance plus 8 p machine epsilons, times the length of the row of centered"
         " data. Each check passes only a value shown to be within its bound, so a NaN or an"
         " infinity in the port's output fails.\n\n"
-        f"Not reported: {', '.join(f'`{c}`' for c in stops)} holds only inputs because R stops"
+        f"Not reported: {stopped} {'holds' if len(names) == 1 else 'hold'} only inputs because R stops"
         f" in eigen() there, and `{WPCA_QUIRK}` has one column with corr TRUE, where R's diag()"
         " builds an identity and returns the unscaled standard deviation. The port returns 1"
         " to rounding there on purpose.\n\n"
