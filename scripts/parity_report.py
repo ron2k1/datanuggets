@@ -27,7 +27,7 @@ from datanuggets import (
 )
 from datanuggets._draws import ReplayDraws
 from datanuggets._rstats import r_matmul
-from datanuggets.complexity import _ac_state
+from datanuggets.nuggets.complexity import _ac_state
 from datanuggets.wcluster.predict import _wdist_mat
 from datanuggets.wcluster.wpca import _wpca_parts
 from rfixtures import (

@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 
 from datanuggets import DataNuggetWarning, arithmetic_complexity
-from datanuggets.complexity import _ac_state
+from datanuggets.nuggets.complexity import _ac_state
 from rfixtures import ATOL, RTOL, exact_ac_count, load_group
 
 (GRID,) = load_group("ac")

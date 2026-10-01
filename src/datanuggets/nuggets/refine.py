@@ -41,8 +41,8 @@ from datanuggets._rstats import (
     r_vec_mean,
 )
 from datanuggets._validate import as_matrix, as_real, check_assignments, check_n_jobs
-from datanuggets.create import _progress_bar
 from datanuggets.exceptions import DataNuggetWarning
+from datanuggets.nuggets.create import _progress_bar
 from datanuggets.result import DataNuggets
 
 log = logging.getLogger("datanuggets")

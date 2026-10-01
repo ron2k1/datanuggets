@@ -31,8 +31,8 @@ from datanuggets._validate import (
     check_delete_percent,
     check_n_jobs,
 )
-from datanuggets.centers import PASSTHROUGH_WARNING, select_centers
 from datanuggets.exceptions import DataNuggetWarning
+from datanuggets.nuggets.centers import PASSTHROUGH_WARNING, select_centers
 from datanuggets.result import DataNuggets
 
 log = logging.getLogger("datanuggets")

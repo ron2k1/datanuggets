@@ -4,10 +4,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import datanuggets.create as create_mod
+import datanuggets.nuggets.create as create_mod
 from datanuggets import DataNuggetWarning, create_dn
 from datanuggets._draws import ReplayDraws
-from datanuggets.create import _allocate
+from datanuggets.nuggets.create import _allocate
 from rfixtures import create_args, load_group
 
 CASES = load_group("create_dn")
