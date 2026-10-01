@@ -17,6 +17,7 @@ from dataclasses import dataclass
 import numpy as np
 from joblib import Parallel, delayed
 
+from datanuggets._clustering.hartigan_wong import KMeansError, kmeans
 from datanuggets._defaults import (
     DELTA,
     EV_TOL,
@@ -28,7 +29,6 @@ from datanuggets._defaults import (
     SEED,
 )
 from datanuggets._draws import Draws, NumpyDraws, RDraws, as_draws
-from datanuggets._hartigan_wong import KMeansError, kmeans
 from datanuggets._rstats import (
     group_moments,
     r_cov,
