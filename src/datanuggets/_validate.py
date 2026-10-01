@@ -15,12 +15,13 @@ def _frame_kinds(x) -> list[str] | None:
     return [getattr(d, "kind", "O") for d in dtypes]
 
 
-def as_matrix(x, name: str = "x", *, logical: bool = False) -> np.ndarray:
+def as_matrix(x, name: str = "x", *, logical: bool = False, vector: bool = False) -> np.ndarray:
     """x as a float64 matrix, read the way R's as.matrix() reads it. A data frame mixing bool
     and numeric columns is the numeric matrix, with True as 1 and False as 0. An all-bool x is a
     logical matrix: the WCluster functions and getDN.means do arithmetic on it as 0 and 1
     (logical=True), and create.DN, create.DNcenters and refine.DN stop with "x must contain
-    only numeric columns" (logical=False)."""
+    only numeric columns" (logical=False). vector=True takes a 1-D x as one column, as the
+    WCluster functions do. getDN.means and cluster.predict's newdata stop on a vector."""
     kinds = _frame_kinds(x)
     if kinds and set(kinds) <= set("biuf") and (logical or set(kinds) != {"b"}):
         arr = np.asarray(x, dtype=np.float64)
@@ -30,6 +31,8 @@ def as_matrix(x, name: str = "x", *, logical: bool = False) -> np.ndarray:
             arr = arr.astype(np.float64)
     if arr.dtype.kind not in "iuf":
         raise TypeError(f"{name} must contain only numeric columns")
+    if vector and arr.ndim == 1:
+        arr = arr[:, None]
     if arr.ndim != 2:
         raise ValueError(f"{name} must be 2-D (a matrix or data frame), got {arr.ndim}-D")
     if arr.shape[1] == 0:

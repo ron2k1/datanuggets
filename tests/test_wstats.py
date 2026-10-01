@@ -6,7 +6,14 @@ import numpy as np
 import pytest
 
 from datanuggets.wcluster.wstats import distw, wmean, wss, wwcss
-from rfixtures import FIXTURE_ROOT, assert_same_values, from_hex, hex_bits, load_group
+from rfixtures import (
+    FIXTURE_ROOT,
+    assert_same_values,
+    from_hex,
+    hex_bits,
+    load_group,
+    same_bits,
+)
 
 CASES = load_group("wstats") + load_group("wstats_constructed")
 REAL = {c.id: c for c in load_group("wstats")}
@@ -300,11 +307,13 @@ def test_weight_and_label_errors(name):
 
 
 @pytest.mark.parametrize("name", list(CALLS))
-def test_rejects_1d_and_non_finite_x(name):
+def test_takes_1d_x_as_one_column_and_rejects_non_finite_x(name):
     call = CALLS[name]
     x, cl, w = _inputs(REAL["iris_species_petalwidth"])
+    # R reads a vector as one column. tests/test_compat_inputs.py checks R's values
+    assert same_bits(np.asarray(call(x[:, 1], cl, w)), np.asarray(call(x[:, 1:2], cl, w)))
     with pytest.raises(ValueError, match="x must be 2-D"):
-        call(x[:, 0], cl, w)
+        call(x[None], cl, w)
     with pytest.raises(TypeError, match="x must contain only numeric columns"):
         call(x.astype(str), cl, w)
     for value in (np.nan, np.inf, -np.inf):

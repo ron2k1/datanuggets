@@ -18,7 +18,7 @@ from datanuggets.result import WwcssResult
 
 
 def _inputs(x, cl, w):
-    x = as_matrix(x, logical=True)
+    x = as_matrix(x, logical=True, vector=True)
     w = as_weights(w, x.shape[0])
     levels, codes = as_labels(cl, x.shape[0])
     return x, w, levels.size, codes
@@ -61,7 +61,7 @@ def wss(x, w=None) -> float:
     columns' values are added in long double. Weights that sum to zero give NaN, as in R. w is
     one weight per row of x, and None means ones, which is R's default here too.
     """
-    x = as_matrix(x, logical=True)
+    x = as_matrix(x, logical=True, vector=True)
     return _wss(x, as_weights(w, x.shape[0]))
 
 

@@ -269,5 +269,10 @@ def test_weight_and_label_errors():
     # observations."
     with pytest.raises(ValueError, match=r"cl must have one label per row \(150\)"):
         cluster_predict(x, cl[:-1], newx, w=w)
-    with pytest.raises(ValueError, match="x must be 2-D"):
+    # a vector x is one column, as in R, so newx needs one column too
+    with pytest.raises(ValueError, match="newx must have the 1 columns of x, got 4"):
         cluster_predict(x[:, 0], cl, newx, w=w)
+    one = cluster_predict(x[:, 0], cl, newx[:, :1], w=w)
+    np.testing.assert_array_equal(one, cluster_predict(x[:, :1], cl, newx[:, :1], w=w))
+    with pytest.raises(ValueError, match="x must be 2-D"):
+        cluster_predict(x[None], cl, newx, w=w)

@@ -62,6 +62,16 @@ def same_nuggets(a: DataNuggets, b: DataNuggets) -> None:
         assert same_bits(getattr(a, name), getattr(b, name)), name
 
 
+def means_dn(case) -> DataNuggets:
+    """The nugget set a get_dn_means fixture recorded, assignments made 0-based."""
+    return DataNuggets(
+        case.array("centers"),
+        case.array("weights"),
+        case.array("scales"),
+        case.array("assignments") - 1,
+    )
+
+
 # ---- logical data: R's arithmetic reads TRUE and FALSE as 1 and 0 ----
 
 
@@ -80,13 +90,8 @@ def test_logical_newx_against_numeric_x():
 
 def test_get_dn_means_on_logical_x():
     case = COMPAT["means_logical"]
-    dn = DataNuggets(
-        case.array("centers"),
-        case.array("weights"),
-        case.array("scales"),
-        case.array("assignments") - 1,
-    )
-    assert same_bits(get_dn_means(case.array("x").astype(bool), dn), case.array("means"))
+    got = get_dn_means(case.array("x").astype(bool), means_dn(case))
+    assert same_bits(got, case.array("means"))
 
 
 def mixed_frame(case) -> pd.DataFrame:
@@ -132,6 +137,36 @@ def test_all_logical_input_stops_where_r_stops():
     assert case.args["all_logical_centers_error"] == "RS must contain only numeric columns"
     with pytest.raises(TypeError, match="^rs must contain only numeric columns$"):
         create_dn_centers(logical, dn_num=10)
+
+
+# ---- one-dimensional x: the WCluster functions take a vector as one column ----
+
+
+def test_vector_x_in_the_wcluster_functions():
+    case = COMPAT["data_faithful_eruptions_vector"]
+    x = case.array("x")
+    assert case.args["x_vector"] and x.ndim == 1
+    check_wcluster(case, x, case.array("newx"))
+
+
+def test_vector_x_in_cluster_predict():
+    case = COMPAT["predict_vector_x"]
+    assert case.array("x").ndim == 1 and case.args["error"] is None
+    got = cluster_predict(case.array("x"), case.array("cl"), case.array("newx"), w=case.array("w"))
+    np.testing.assert_array_equal(got + 1, case.array("pred"))
+
+
+def test_vector_newx_and_a_vector_in_get_dn_means_stop_as_in_r():
+    case = COMPAT["predict_vector_newx"]
+    assert case.args["error"] == "argument is of length zero"
+    with pytest.raises(ValueError, match="^newx must be 2-D"):
+        cluster_predict(
+            case.array("x"), case.array("cl"), case.array("newx_vector"), w=case.array("w")
+        )
+    means = COMPAT["means_logical"]
+    assert means.args["vector_error"].startswith("x must be of class")
+    with pytest.raises(ValueError, match="^x must be 2-D"):
+        get_dn_means(means.array("x")[:, 0].astype(bool), means_dn(means))
 
 
 def test_a_frame_with_a_text_column_is_not_numeric():

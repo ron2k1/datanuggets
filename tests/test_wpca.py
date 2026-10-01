@@ -445,10 +445,12 @@ def test_corr_must_be_a_bool():
     assert wpca(x, corr=np.bool_(True)) == wpca(x, corr=True)
 
 
-def test_rejects_1d_and_non_finite_x():
+def test_takes_1d_x_as_one_column_and_rejects_non_finite_x():
     x = BY_ID["iris"].array("x")
+    # R reads a vector as one column. tests/test_compat_inputs.py checks R's values
+    assert wpca(x[:, 0]) == wpca(x[:, :1])
     with pytest.raises(ValueError, match="2-D"):
-        wpca(x[:, 0])
+        wpca(x[None])
     for bad in (np.nan, np.inf, -np.inf):
         y = x.copy()
         y[2, 1] = bad
