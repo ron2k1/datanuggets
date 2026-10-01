@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from datanuggets._compat.rcompat import _NA_BITS
-from datanuggets._compat.rstats import r_matvec, r_sum, r_weighted_mean
+from datanuggets._compat.arithmetic import r_sum, r_weighted_mean
+from datanuggets._compat.linalg import r_matvec
+from datanuggets._compat.missing import _NA_BITS
 from datanuggets._validate import as_labels, as_matrix, as_weights
 from datanuggets.result import WwcssResult
 

@@ -4,8 +4,9 @@ from fractions import Fraction
 import numpy as np
 import pytest
 
-from datanuggets._compat import rcompat
-from datanuggets._compat.rcompat import _r_mean_py, r_mean, split_indices
+from datanuggets._compat import arithmetic
+from datanuggets._compat.arithmetic import _r_mean_py, r_mean
+from datanuggets._compat.indexing import split_indices
 from rfixtures import fixture_data, hex_bits, load_group, same_bits
 
 
@@ -63,7 +64,7 @@ def test_r_mean_uses_the_compiled_path_for_finite_lines(monkeypatch):
     def replay(v):
         raise AssertionError("r_mean fell back to the Python replay")
 
-    monkeypatch.setattr(rcompat, "_ldouble_mean", replay)
+    monkeypatch.setattr(arithmetic, "_ldouble_mean", replay)
     x = DATA[BIGGEST][0]
     assert r_mean(x, 0).shape == (x.shape[1],)
 

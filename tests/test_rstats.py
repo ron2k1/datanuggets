@@ -16,22 +16,22 @@ import pytest
 from numba.core.registry import CPUDispatcher
 from numba.np import ufunc as numba_ufunc
 
-from datanuggets._compat import rstats
-from datanuggets._compat.rcompat import _r_mean_py, r_mean, unique_first
-from datanuggets._compat.rstats import (
+from datanuggets._compat import arithmetic, moments
+from datanuggets._compat.arithmetic import (
     _r_cov_py,
-    group_moments,
+    _r_mean_py,
     r_cov,
-    r_eigen_sym,
     r_mad,
-    r_matmul,
-    r_matvec,
+    r_mean,
     r_median,
     r_quantile7,
     r_sum,
     r_vec_mean,
     r_weighted_mean,
 )
+from datanuggets._compat.indexing import unique_first
+from datanuggets._compat.linalg import r_eigen_sym, r_matmul, r_matvec
+from datanuggets._compat.moments import group_moments
 from rfixtures import ATOL, RTOL, fixture_data, hex_bits, load_group, same_bits
 
 CASES = load_group("rcompat_stats")
@@ -200,7 +200,7 @@ def test_r_cov_uses_the_compiled_path_for_finite_data(monkeypatch):
     def replay(x):
         raise AssertionError("r_cov fell back to the Python replay")
 
-    monkeypatch.setattr(rstats, "_r_cov_py", replay)
+    monkeypatch.setattr(arithmetic, "_r_cov_py", replay)
     x = DATA[BIGGEST][0]
     assert r_cov(x).shape == (x.shape[1], x.shape[1])
 
@@ -264,8 +264,8 @@ def test_group_moments_uses_the_compiled_path_for_finite_data(monkeypatch, n_job
     def replay(*args):
         raise AssertionError("group_moments fell back to r_mean or r_cov")
 
-    monkeypatch.setattr(rstats, "r_mean", replay)
-    monkeypatch.setattr(rstats, "r_cov", replay)
+    monkeypatch.setattr(moments, "r_mean", replay)
+    monkeypatch.setattr(moments, "r_cov", replay)
     x, sets = DATA[BIGGEST]
     groups = _nuggets(sets[0])
     assert len(list(group_moments(x, groups, n_jobs))) == len(groups)
@@ -280,7 +280,7 @@ def test_read_only_input_runs_the_same_compiled_kernels():
     x, sets = DATA[BIGGEST]
     groups = _nuggets(sets[0])
     want = _all_outputs(x, groups)
-    kernels = [k for k in vars(rstats._ldjit).values() if isinstance(k, CPUDispatcher)]
+    kernels = [k for k in vars(moments._ldjit).values() if isinstance(k, CPUDispatcher)]
     compiled = [len(k.signatures) for k in kernels]
     frozen = x.copy()
     frozen.setflags(write=False)
@@ -295,7 +295,7 @@ def test_group_moments_chunking_gives_the_same_result(monkeypatch):
     want = list(group_moments(x, groups))
     p = x.shape[1]
     for chunk in (1, 3 * p * p):  # one group per call, then three
-        monkeypatch.setattr(rstats, "MOMENTS_CHUNK", chunk)  # rstats' own binding of it
+        monkeypatch.setattr(moments, "MOMENTS_CHUNK", chunk)  # moments' own binding of it
         assert _same_moments(list(group_moments(x, groups)), want), chunk
         assert _same_moments(list(group_moments(x, groups, 4)), want), chunk
 
@@ -323,7 +323,7 @@ def test_group_moments_from_two_threads_at_once(monkeypatch):
     x, sets = DATA[BIGGEST]
     groups = _nuggets(sets[0])
     want = list(group_moments(x, groups))
-    monkeypatch.setattr(rstats, "MOMENTS_CHUNK", x.shape[1] ** 2)  # a launch per group
+    monkeypatch.setattr(moments, "MOMENTS_CHUNK", x.shape[1] ** 2)  # a launch per group
     start = threading.Barrier(2)
 
     def run():
@@ -392,7 +392,7 @@ def test_only_gnu_openmp_forbids_a_launch_after_fork(monkeypatch, layer, vendor,
     monkeypatch.setattr(numba, "threading_layer", lambda: layer)
     fake = SimpleNamespace(openmp_vendor=vendor)
     monkeypatch.setattr(numba_ufunc, "omppool", fake, raising=False)
-    assert rstats._layer_forbids_fork() is forbids
+    assert moments._layer_forbids_fork() is forbids
 
 
 def test_no_parallel_launch_yet_leaves_fork_safe(monkeypatch):
@@ -400,7 +400,7 @@ def test_no_parallel_launch_yet_leaves_fork_safe(monkeypatch):
         raise ValueError("Threading layer is not initialized.")
 
     monkeypatch.setattr(numba, "threading_layer", unset)
-    assert rstats._layer_forbids_fork() is False
+    assert moments._layer_forbids_fork() is False
 
 
 def _moment_bytes(moments) -> bytes:
@@ -437,7 +437,7 @@ def _launch_in_progress():
     held, done = threading.Event(), threading.Event()
 
     def launch():
-        with rstats._THREADS:
+        with moments._THREADS:
             held.set()
             done.wait()
 
@@ -461,8 +461,8 @@ def test_group_moments_runs_serially_in_a_child_forked_after_gnu_openmp(monkeypa
     def launch(*args):
         raise AssertionError("numba threads launched")
 
-    monkeypatch.setattr(rstats, "_layer_forbids_fork", lambda: True)
-    monkeypatch.setattr(rstats._ldjit, "group_moments_parallel", launch)
+    monkeypatch.setattr(moments, "_layer_forbids_fork", lambda: True)
+    monkeypatch.setattr(moments._ldjit, "group_moments_parallel", launch)
     assert _forked_child_moments(x, groups, 2) == (0, want)
     with pytest.raises(AssertionError, match="numba threads launched"):  # only the child is serial
         list(group_moments(x, groups, 2))
@@ -470,11 +470,11 @@ def test_group_moments_runs_serially_in_a_child_forked_after_gnu_openmp(monkeypa
 
 def test_a_child_forked_during_a_launch_gets_a_free_lock(monkeypatch):
     # the fork copies _THREADS held, but not the thread that would release it
-    monkeypatch.setattr(rstats, "_THREADS", rstats._THREADS)  # restored after the test
-    monkeypatch.setattr(rstats, "_FORKED_UNSAFE", rstats._FORKED_UNSAFE)
+    monkeypatch.setattr(moments, "_THREADS", moments._THREADS)  # restored after the test
+    monkeypatch.setattr(moments, "_FORKED_UNSAFE", moments._FORKED_UNSAFE)
     with _launch_in_progress():
-        rstats._after_fork_in_child()  # what os.register_at_fork runs in the child
-        assert not rstats._THREADS.locked()
+        moments._after_fork_in_child()  # what os.register_at_fork runs in the child
+        assert not moments._THREADS.locked()
 
 
 @pytest.mark.skipif(not hasattr(os, "fork"), reason="needs os.fork")

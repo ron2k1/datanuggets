@@ -9,7 +9,8 @@ import warnings
 import numpy as np
 from joblib import Parallel, delayed
 
-from datanuggets._compat.rcompat import r_mean, split_indices
+from datanuggets._compat.arithmetic import r_mean
+from datanuggets._compat.indexing import split_indices
 from datanuggets._compat.rfast import nearest_index
 from datanuggets._defaults import (
     CENTER_METHODS,

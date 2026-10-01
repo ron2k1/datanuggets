@@ -23,9 +23,8 @@ from numba.core.dispatcher import Dispatcher
 import datanuggets
 from covertype import compare, load, run, stage_lines, warm_up
 from datanuggets import DataNuggets, create_dn, refine_dn
+from datanuggets._compat import arithmetic, moments
 from datanuggets._compat import ldjit as _ldjit
-from datanuggets._compat import rcompat as _rcompat
-from datanuggets._compat import rstats as _rstats
 
 SRC = os.path.normcase(str(Path(datanuggets.__file__).resolve().parent))
 LIMIT = 0.10
@@ -92,7 +91,7 @@ def main(size: str) -> int:
     cr = load(cid + "_create")
     x = cr.array("x")
     warm_up(x)
-    _rstats._ldjit = _rcompat._ldjit = Booked(_ldjit)
+    moments._ldjit = arithmetic._ldjit = Booked(_ldjit)
     try:
         (dn, secs, extra), stats = profiled(
             lambda: run(lambda d: create_dn(x, seed=d), cr, stage_lines(cr.manifest["messages"]))
@@ -108,7 +107,7 @@ def main(size: str) -> int:
         (got, secs, extra), stats = profiled(lambda: run(lambda d: refine_dn(x, r_dn, seed=d), rc))
         good &= report(f"refine_dn {cid}", stats, secs, {**compare(got, rc), **extra})
     finally:
-        _rstats._ldjit = _rcompat._ldjit = _ldjit
+        moments._ldjit = arithmetic._ldjit = _ldjit
     return 0 if good else 1
 
 

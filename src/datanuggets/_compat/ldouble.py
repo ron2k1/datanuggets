@@ -8,7 +8,7 @@ ends in zeros, and add passes such a value through when the other operand is zer
 limits are ignored: long double's range covers every sum and product of finite doubles that R
 forms here.
 
-The compiled kernels in _ldjit do the same arithmetic fast. This module is the reference their
+The compiled kernels in ldjit do the same arithmetic fast. This module is the reference their
 tests compare against.
 """
 
@@ -16,8 +16,7 @@ from __future__ import annotations
 
 import math
 
-from datanuggets._compat.rcompat import _LDOUBLE_DIGITS as DIGITS
-
+DIGITS = 64  # R's LDOUBLE on x86-64: x87 extended precision, 64-bit significand
 ZERO = (0, 0)
 
 

@@ -7,7 +7,8 @@ import warnings
 import numpy as np
 import pytest
 
-from datanuggets._compat.rstats import r_eigen_sym, r_matmul, r_sum
+from datanuggets._compat.arithmetic import r_sum
+from datanuggets._compat.linalg import r_eigen_sym, r_matmul
 from datanuggets.exceptions import DataNuggetWarning
 from datanuggets.wcluster.wpca import _wpca_parts, wpca
 from rfixtures import (

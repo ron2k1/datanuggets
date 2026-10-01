@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from datanuggets._compat.rcompat import r_mean
+from datanuggets._compat.arithmetic import r_mean
 from datanuggets._validate import as_matrix, check_assignments
 from datanuggets.result import DataNuggets
 

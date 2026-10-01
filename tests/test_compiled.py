@@ -13,8 +13,8 @@ from numba.core.registry import CPUDispatcher
 
 import datanuggets
 from datanuggets._compat._compiled import frozen
-from datanuggets._compat.rcompat import r_mean
-from datanuggets._compat.rstats import group_moments, r_cov
+from datanuggets._compat.arithmetic import r_cov, r_mean
+from datanuggets._compat.moments import group_moments
 from rfixtures import fixture_data
 
 # every module of compiled kernels, at any depth, so one added later is checked without editing
@@ -38,8 +38,8 @@ import numpy as np
 numba.core.caching.CacheImpl._locator_classes = []
 for name in sys.argv[2:]:
     importlib.import_module(name)
-from datanuggets._compat.rcompat import r_mean
-from datanuggets._compat.rstats import group_moments, r_cov
+from datanuggets._compat.arithmetic import r_cov, r_mean
+from datanuggets._compat.moments import group_moments
 
 x = np.load(sys.argv[1])
 ((center, cov),) = group_moments(x, [np.arange(x.shape[0])], 2)

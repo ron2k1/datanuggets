@@ -18,17 +18,16 @@ import numpy as np
 from joblib import Parallel, delayed
 
 from datanuggets._clustering.hartigan_wong import KMeansError, kmeans
-from datanuggets._compat.rstats import (
-    group_moments,
+from datanuggets._compat.arithmetic import (
     r_cov,
-    r_eigen_sym,
     r_mad,
-    r_matvec,
     r_median,
     r_quantile7,
     r_sum,
     r_vec_mean,
 )
+from datanuggets._compat.linalg import r_eigen_sym, r_matvec
+from datanuggets._compat.moments import group_moments
 from datanuggets._defaults import (
     DELTA,
     EV_TOL,

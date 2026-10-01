@@ -1,7 +1,7 @@
-"""R's x87 long double arithmetic compiled with numba, the fast path behind _rstats and _rcompat.
+"""R's x87 long double arithmetic compiled with numba, the fast path behind arithmetic and moments.
 
 R sums in long double, which on x86-64 is x87 extended precision: a 64-bit significand, rounded to
-nearest with ties to even after every operation. _ldouble replays that with Python integers and
+nearest with ties to even after every operation. ldouble replays that with Python integers and
 stays as the reference these kernels are tested against. Here a long double is a triple (s, m, e)
 standing for (-1)**s * m * 2**e, where m is a uint64 with its top bit set. Zero is (0, 0, 0).
 

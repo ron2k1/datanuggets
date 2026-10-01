@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from datanuggets._compat.rstats import r_matmul, r_matvec
+from datanuggets._compat.linalg import r_matmul, r_matvec
 from datanuggets._validate import as_matrix, as_weights
 from datanuggets.wcluster.wstats import wmean
 
