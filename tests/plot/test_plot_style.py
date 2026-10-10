@@ -6,20 +6,22 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
+from matplotlib.colors import to_hex
 
 from datanuggets import plot
 
 
 def test_palettes():
+    # R 4.6.1's col2rgb(palette()), as hex: matplotlib doesn't know R's name gray62
     assert plot.R_PALETTE == (
-        "black",
+        "#000000",
         "#DF536B",
         "#61D04F",
         "#2297E6",
         "#28E2E5",
         "#CD0BBC",
         "#F5C710",
-        "gray62",
+        "#9E9E9E",
     )
     assert plot.OKABE_ITO == (
         "#000000",
@@ -31,6 +33,8 @@ def test_palettes():
         "#D55E00",
         "#CC79A7",
     )
+    for color in plot.R_PALETTE + plot.OKABE_ITO:
+        assert to_hex(color).upper() == color
 
 
 def test_style_sets_the_paper_settings():

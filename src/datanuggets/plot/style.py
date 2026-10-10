@@ -13,8 +13,9 @@ from cycler import cycler
 if TYPE_CHECKING:
     from matplotlib.typing import RcKeyType
 
-# R 4's default palette(), so label l can take R's col = l + 1
-R_PALETTE = ("black", "#DF536B", "#61D04F", "#2297E6", "#28E2E5", "#CD0BBC", "#F5C710", "gray62")
+# R 4's default palette(), so label l can take R's col = l + 1. Its hex from col2rgb, since
+# matplotlib doesn't know R's names gray62 and the like
+R_PALETTE = ("#000000", "#DF536B", "#61D04F", "#2297E6", "#28E2E5", "#CD0BBC", "#F5C710", "#9E9E9E")
 # Okabe and Ito's eight colors, which stay apart for readers with color-blindness
 OKABE_ITO = ("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
 WIDTHS = {"single": 3.5, "double": 7.0}  # one and two journal columns, inches
