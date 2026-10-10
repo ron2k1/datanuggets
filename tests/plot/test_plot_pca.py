@@ -172,6 +172,8 @@ def test_one_component_has_a_scree_but_no_plane():
         (scores, {"rows": np.zeros((4, 3))}),
         (scores, {"labels": [0, 1]}),
         (scores, {"w": [1.0, 2.0]}),
+        (scores, {"colors": []}),
+        (scores, {"colors": ["notacolor"], "rows": np.zeros((4, len(QUAKES)))}),
         (loadings, {"names": ["lat", "long"]}),
         (loadings, {"dims": (0, 5)}),
     ],

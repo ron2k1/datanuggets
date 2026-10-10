@@ -197,6 +197,27 @@ def test_bad_centers_draw_nothing():
     assert len(ax.collections) == 0
 
 
+@pytest.mark.parametrize("colors", [[], ["notacolor"], ["red", "notacolor"]])
+def test_bad_colors_stop_before_anything_is_drawn(colors):
+    """Every entry is checked, one no label reaches too, and no colors at all is a ValueError,
+    not a division by zero."""
+    dn = DataNuggets(
+        DN.array("centers"), DN.array("weights"), DN.array("scales"), DN.array("assignments") - 1
+    )
+    _, ax = plt.subplots()
+    with pytest.raises(ValueError, match="^colors "):
+        clusters(np.zeros((3, 2)), [0, 0, 0], centers=np.zeros((1, 2)), colors=colors, ax=ax)
+    with pytest.raises(ValueError, match="^colors "):
+        nuggets(dn, labels=np.zeros(dn.n_nuggets, dtype=np.int64), colors=colors, ax=ax)
+    assert len(ax.collections) == 0
+
+
+def test_one_color_string_is_not_a_palette():
+    """list("red") would be the colors r, e and d."""
+    with pytest.raises(TypeError, match="^colors must be a sequence of colors, not one string$"):
+        clusters(np.zeros((3, 2)), [0, 0, 0], colors="red")
+
+
 def test_clusters_rejects_a_vector_x():
     with pytest.raises(ValueError, match="two-dimensional"):
         clusters(np.zeros(3), [0, 1, 1])

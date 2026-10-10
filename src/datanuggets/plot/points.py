@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.colors import to_rgba_array
 
 from datanuggets._compat.arithmetic import r_quantile7, r_sum
 
@@ -39,9 +40,20 @@ def _labels(labels, n: int) -> np.ndarray:
 
 
 def _palette(colors) -> list:
+    """The colors labels index into, the color cycle by default. Checks every one before a view
+    draws, so a bad one can't leave a half-drawn plot."""
     if colors is None:
         return plt.rcParams["axes.prop_cycle"].by_key()["color"]
-    return list(colors)
+    if isinstance(colors, str):
+        raise TypeError("colors must be a sequence of colors, not one string")
+    palette = list(colors)
+    if not palette:
+        raise ValueError("colors must hold at least one color")
+    try:
+        to_rgba_array(palette)
+    except (TypeError, ValueError) as e:
+        raise ValueError(f"colors must all be matplotlib colors: {e}") from e
+    return palette
 
 
 def _label_colors(labels, palette) -> list:
