@@ -1,0 +1,63 @@
+{
+  "group": "plot",
+  "case": "stops",
+  "args": {},
+  "arrays": {
+    "merge": {
+      "file": "merge.bin",
+      "dtype": "<i4",
+      "shape": [
+        2,
+        2
+      ]
+    },
+    "height": {
+      "file": "height.bin",
+      "dtype": "<f8",
+      "shape": [
+        2
+      ]
+    },
+    "order": {
+      "file": "order.bin",
+      "dtype": "<i4",
+      "shape": [
+        3
+      ]
+    },
+    "k_2_9": {
+      "file": "k_2_9.bin",
+      "dtype": "<i4",
+      "shape": [
+        3
+      ]
+    }
+  },
+  "versions": {
+    "R": "R version 4.6.1 (2026-06-24 ucrt)",
+    "platform": "x86_64-w64-mingw32",
+    "datanugget": "1.5.0",
+    "Rfast": "2.1.5.2",
+    "WCluster": "1.3.0",
+    "matprod": "default",
+    "lapack": "3.12.1",
+    "blas": "Rblas.dll md5 5fe8258e86d8a1a52a6c3db05faa0225",
+    "longdouble_digits": 64
+  },
+  "errors": {
+    "no_k_or_h": "either 'k' or 'h' must be specified",
+    "k_0": "elements of 'k' must be between 1 and 3",
+    "k_4": "elements of 'k' must be between 1 and 3",
+    "k_nan": "missing value where TRUE/FALSE needed",
+    "k_inf": "missing value where TRUE/FALSE needed",
+    "k_big": "missing value where TRUE/FALSE needed",
+    "h_nan": "length of 'dimnames' [2] not equal to array extent",
+    "h_nan_height": "missing value where TRUE/FALSE needed",
+    "h_unsorted": "the 'height' component of 'tree' is not sorted (increasingly)",
+    "none_cut": "invalid 'tree' ('merge' component)",
+    "none_plot": "argument must be coercible to non-negative integer",
+    "one_plot": "invalid dendrogram input",
+    "hang_nan": "invalid dendrogram input",
+    "hang_inf": "invalid dendrogram input"
+  }
+}
