@@ -15,7 +15,7 @@ RON2K asked that the package draw graphs, for three uses: what R draws, explorin
 2. `dendrogram` draws R's lines. On every recorded tree its segments equal the polylines R's `plot.hclust` drew, read back from R's PDF output, to within the PDF's rounding. It stops where `plot.hclust` stops.
 3. `nuggets` without labels colors each nugget with exactly the hex color R's recipe gives.
 4. Every plot function takes `ax=` and returns the Axes it drew on. The tests check the drawn data on the artists, not pixels.
-5. `save` writes a PDF whose page is the requested size in points and a PNG whose pixel size is the requested size at 300 dpi.
+5. `save` writes a PDF whose page is the requested size in points and a PNG whose sides are the requested inches times 300, rounded down, as matplotlib's Agg writes them. Only the PDF is exact at every size: the default single-column PNG would be 787.5 pixels tall and comes out 787 (review finding 9).
 6. `import datanuggets` doesn't import matplotlib. `import datanuggets.plot` without matplotlib raises `ImportError` naming the extra.
 7. The suite passes on Python 3.14 and 3.15 on the laptop, the Mac mini and the Actions runner.
 
@@ -71,7 +71,7 @@ The C routine walks the merges in order. It keeps, for each row, whether it's st
 
 ## 4. `dendrogram`
 
-R's `plot.hclust` first runs `.validity.hclust`: the lengths of `height` and `order` ("'height' is of wrong length", "'order' is of wrong length"), then the sorted merge entries, in R's numbering, which must be exactly `-n, ..., -1, 1, ..., n - 2`, or it stops with "'merge' matrix has invalid contents". Every self-merge tree stops here (`selfmerge_mid` on its order's length, since its order drops rows), so `dendrogram` raises R's message where `to_linkage` raises its own. A tree with no merges stops in `seq_len(-1)`: "argument must be coercible to non-negative integer". One merge passes the check and stops in `C_dendwindow`: "invalid dendrogram input".
+R's `plot.hclust` first runs `.validity.hclust`: `any(as.integer(merge) != merge)`, which stops with "'merge' component in dendrogram must be integer" once an entry `as.integer` can hold is fractional, and otherwise with "missing value where TRUE/FALSE needed" for NaN, an infinity or an entry at 2^31 or beyond, then the lengths of `height` and `order` ("'height' is of wrong length", "'order' is of wrong length"), then the sorted merge entries, in R's numbering, which must be exactly `-n, ..., -1, 1, ..., n - 2`, or it stops with "'merge' matrix has invalid contents". Every self-merge tree stops here (`selfmerge_mid` on its order's length, since its order drops rows), so `dendrogram` raises R's message where `to_linkage` raises its own. A tree with no merges stops in `seq_len(-1)`: "argument must be coercible to non-negative integer". One merge passes the check and stops in `C_dendwindow`: "invalid dendrogram input".
 
 R draws a tree with NaN or infinite heights, which whclust gives for zero weights, with only a warning ("nonfinite axis=2 limits ... corrected now"). The probe on `zero_w1` and `inf_single` shows what it draws: the y axis "corrected" to about 4.6e307 to 1.2e308, every line below or above the page, and NaN coordinates written into the PDF as `-nan(ind)`, which isn't a PDF number. There's nothing to copy, so `dendrogram` raises `ValueError` for such a tree, a departure (section 12).
 
@@ -122,7 +122,7 @@ Eigenvectors are defined up to sign. As in the parity guide, component `j` is fl
 - TrueType fonts embedded in PDF and PostScript (`pdf.fonttype` and `ps.fonttype` 42)
 - constrained layout and 300 dpi when saving
 
-`save(fig, path, width="single", height=None)` sets the figure to 3.5 inches wide (`"single"`, one journal column), 7.0 (`"double"`) or a number of inches. `height` defaults to 0.75 times the width. It saves at 300 dpi without a tight bounding box, which would change the size, and returns the path. The format comes from the suffix. It doesn't create folders.
+`save(fig, path, width="single", height=None)` sets the figure to 3.5 inches wide (`"single"`, one journal column), 7.0 (`"double"`) or a number of inches. `height` defaults to 0.75 times the width. It saves at 300 dpi without a tight bounding box, which would change the size, and returns the path. The format comes from the suffix, so a path without one raises `ValueError`, where matplotlib would write `path.png` instead. It doesn't create folders.
 
 `OKABE_ITO` is `#000000, #E69F00, #56B4E9, #009E73, #F0E442, #0072B2, #D55E00, #CC79A7`. `R_PALETTE` is R 4's default `palette()`, `black, #DF536B, #61D04F, #2297E6, #28E2E5, #CD0BBC, #F5C710, gray62`, given as the hex R's `col2rgb` reads them as, since matplotlib doesn't know R's names such as `gray62`: `#000000, #DF536B, #61D04F, #2297E6, #28E2E5, #CD0BBC, #F5C710, #9E9E9E`.
 
@@ -132,14 +132,17 @@ Eigenvectors are defined up to sign. As in the parity guide, component `j` is fl
 |---|---|
 | `import datanuggets.plot` without matplotlib | `ImportError`: "datanuggets.plot needs matplotlib: pip install 'datanuggets[plot]'" |
 | `cut_tree` stops | `ValueError` with R's message (section 3) |
-| a tree `plot.hclust` stops on: a self-merge, a wrong `height` or `order` length, no merges, one merge | `ValueError` with R's message (section 4) |
-| a non-finite `hang`, leaf labels of the wrong length | `ValueError`: "invalid dendrogram input" |
+| a tree `plot.hclust` stops on: a self-merge, a wrong `height` or `order` length, no merges, one merge, a fractional, NaN, infinite or huge merge entry | `ValueError` with R's message (section 4) |
+| a non-finite `hang`, leaf labels of the wrong length, one label such as a string or `True` for many leaves | `ValueError`: "invalid dendrogram input" |
 | a tree with NaN or infinite heights in `dendrogram` | `ValueError`, the port's message (departure 5) |
 | `dims` not two distinct columns in range | `ValueError` |
 | labels, weights or centers of the wrong length or width | `ValueError` |
 | a negative, NaN or infinite weight, or all zero, with `size="area"` | `ValueError` |
 | weights R's color recipe stops on, in `nuggets` | `ValueError` with R's message (section 5) |
 | `size` other than `"area"` or `"log"`, `width` other than the two names or a positive number | `ValueError` |
+| `colors` empty, or with an entry that isn't a matplotlib color | `ValueError`, before anything is drawn |
+| `colors` as one string | `TypeError` |
+| a `save` path without a suffix | `ValueError` |
 
 ## 9. Fixtures
 
