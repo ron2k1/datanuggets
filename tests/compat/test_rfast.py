@@ -3,6 +3,7 @@ import pytest
 from numba.core.registry import CPUDispatcher
 
 from datanuggets._compat import rfastjit
+from datanuggets._compat._compiled import frozen
 from datanuggets._compat.rfast import (
     _cross_distances_py,
     arma_sum_last,
@@ -138,9 +139,11 @@ def test_dist_matrix_mirrors_every_tile(n):
     assert rfastjit.MIRROR_TILE == 64
     x = np.random.default_rng(n).integers(0, 50, size=(n, 3)).astype(float)
     for metric in ("euclidean", "manhattan"):
-        got = dist_matrix(x, metric)
+        got = np.full((n, n), np.nan)  # an entry the kernel skips stays NaN, whatever memory held
+        rfastjit.dist(frozen(x), frozen(np.ascontiguousarray(x.T)), metric == "manhattan", got)
         assert same_bits(got, _replay(x, x, metric)), metric
         assert same_bits(got, got.T), metric
+        assert same_bits(dist_matrix(x, metric), got), metric
 
 
 def _nearest_index_py(points, centers, metric):
@@ -181,6 +184,22 @@ def test_distances_reject_mismatched_columns():
             cross_distances(a, b, "euclidean")
         with pytest.raises(ValueError, match="columns"):
             nearest_index(a, b, "euclidean")
+
+
+def test_distances_reject_inputs_the_kernels_cant_fill():
+    """With no columns the kernels never write their output, and with no centers nearest reads
+    past an empty row, so either would hand back whatever memory held. Public calls can't get
+    here (as_matrix rejects zero columns, and every caller has a center), but nothing else stops
+    an internal one."""
+    for metric in ("euclidean", "manhattan"):
+        with pytest.raises(ValueError, match="no columns"):
+            cross_distances(np.zeros((3, 0)), np.zeros((2, 0)), metric)
+        with pytest.raises(ValueError, match="no columns"):
+            dist_matrix(np.zeros((3, 0)), metric)
+        with pytest.raises(ValueError, match="no columns"):
+            nearest_index(np.zeros((3, 0)), np.zeros((2, 0)), metric)
+        with pytest.raises(ValueError, match="no centers"):
+            nearest_index(np.ones((3, 2)), np.ones((0, 2)), metric)
 
 
 def _all_distances(a, b):

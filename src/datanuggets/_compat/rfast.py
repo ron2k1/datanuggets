@@ -71,6 +71,8 @@ def cross_distances(
     bt = frozen(np.ascontiguousarray(np.asarray(b, dtype=np.float64).T))
     if bt.shape[0] != a.shape[1]:
         raise ValueError(f"a has {a.shape[1]} columns but b has {bt.shape[0]}")
+    if a.shape[1] == 0:  # the kernel would write nothing, and out would keep what memory held
+        raise ValueError("a and b have no columns")
     out = np.empty((a.shape[0], bt.shape[1]))
     seq = _dista_sums_in_order(a.shape[1], metric, kernel)
     _rfastjit.cross(a, bt, metric == "manhattan", seq, out)
@@ -106,6 +108,8 @@ def _cross_distances_py(
 def dist_matrix(x: np.ndarray, metric: str) -> np.ndarray:
     """Rfast::Dist(x, method = metric): the full n x n matrix."""
     x = frozen(np.ascontiguousarray(x, dtype=np.float64))
+    if x.shape[1] == 0:  # the kernel would write nothing, and out would keep what memory held
+        raise ValueError("x has no columns")
     out = np.empty((x.shape[0], x.shape[0]))
     _rfastjit.dist(x, frozen(np.ascontiguousarray(x.T)), metric == "manhattan", out)
     return out
@@ -119,6 +123,12 @@ def nearest_index(points: np.ndarray, centers: np.ndarray, metric: str) -> np.nd
         raise ValueError(
             f"points have {points.shape[1]} columns but centers have {centers.shape[1]}"
         )
+    # With no columns the kernel compares unwritten sums, and with no centers it reads past an
+    # empty row. Either way best would be garbage.
+    if points.shape[1] == 0:
+        raise ValueError("points and centers have no columns")
+    if centers.shape[0] == 0:
+        raise ValueError("there are no centers")
     seq = _dista_sums_in_order(points.shape[1], metric, "dista")
     best = np.empty(points.shape[0], dtype=np.intp)
     ct = frozen(np.ascontiguousarray(centers.T))
