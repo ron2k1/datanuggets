@@ -5,11 +5,18 @@ from dataclasses import FrozenInstanceError, fields
 
 import numpy as np
 import pytest
+import scipy.cluster.hierarchy
 
 import datanuggets
 import datanuggets.wcluster
 from datanuggets import CentersResult, DataNuggets
-from datanuggets.result import WpcaResult, WwcssResult
+from datanuggets.result import (
+    DnWkmeansResult,
+    WhclustResult,
+    WkmeansResult,
+    WpcaResult,
+    WwcssResult,
+)
 
 # Each WCluster leaf and the module that defines it. The modules are reached through importlib,
 # because the exported function wpca shadows its module as an attribute of datanuggets.wcluster.
@@ -189,3 +196,58 @@ def test_wcluster_results_equal_by_value_with_nan():
     assert _wwcss() != _wpca()
     with pytest.raises(TypeError):
         hash(_wpca())
+
+
+def _whclust(**over):
+    values = {
+        "merge": np.array([[2, 3], [0, 1], [5, 4]]),
+        "height": np.array([0.5, 1.0, 4.0]),
+        "order": np.array([0, 1, 2, 3]),
+    }
+    values.update(over)
+    return WhclustResult(**values)
+
+
+def test_iterative_result_fields_follow_the_spec():
+    assert [f.name for f in fields(WkmeansResult)] == ["labels", "centers", "wwcss", "total_wwcss"]
+    assert [f.name for f in fields(DnWkmeansResult)] == [
+        "labels",
+        "centers",
+        "wwcss",
+        "total_wwcss",
+        "row_labels",
+    ]
+    assert [f.name for f in fields(WhclustResult)] == ["merge", "height", "order"]
+
+
+def test_whclust_result_to_linkage_counts_cluster_sizes():
+    z = _whclust().to_linkage()
+    assert z.dtype == np.float64
+    assert z.tolist() == [[2, 3, 0.5, 2], [0, 1, 1.0, 2], [5, 4, 4.0, 4]]
+    assert scipy.cluster.hierarchy.is_valid_linkage(z)
+
+
+def test_to_linkage_keeps_heights_bit_for_bit():
+    h = np.array([0.1 + 0.2, -1e-300, np.inf])
+    assert _whclust(height=h).to_linkage()[:, 2].tobytes() == h.tobytes()
+
+
+def test_to_linkage_refuses_a_self_merge():
+    with pytest.raises(ValueError, match="itself"):
+        _whclust(
+            merge=np.array([[2, 3], [0, 1], [4, 4]]), order=np.array([2, 3, 2, 3])
+        ).to_linkage()
+
+
+def test_iterative_results_are_frozen_and_compare_by_value():
+    a = WkmeansResult(np.array([0, 1]), np.ones((2, 2)), np.ones(2), np.float64(2))
+    assert a == WkmeansResult(np.array([0, 1]), np.ones((2, 2)), np.ones(2), np.float64(2))
+    assert a != WkmeansResult(np.array([1, 0]), np.ones((2, 2)), np.ones(2), np.float64(2))
+    with pytest.raises(ValueError):
+        a.labels[0] = 1
+    d = DnWkmeansResult(a.labels, a.centers, a.wwcss, a.total_wwcss, np.array([1, 0, 0]))
+    assert d.row_labels.tolist() == [1, 0, 0] and not d.row_labels.flags.writeable
+    assert d != a
+    assert _whclust() == _whclust() and _whclust() != _whclust(order=np.array([1, 0, 2, 3]))
+    with pytest.raises(TypeError):
+        hash(_whclust())
