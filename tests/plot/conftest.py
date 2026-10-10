@@ -1,4 +1,7 @@
-"""Every plot test draws on the Agg backend and closes its figures."""
+"""Every plot test draws on the Agg backend, closes its figures, and fails on a UserWarning,
+which from matplotlib means an argument it had to guess at."""
+
+import warnings
 
 import pytest
 
@@ -10,5 +13,7 @@ import matplotlib.pyplot as plt
 
 @pytest.fixture(autouse=True)
 def _close_figures():
-    yield
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        yield
     plt.close("all")
