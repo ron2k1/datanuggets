@@ -1,15 +1,20 @@
 """WCluster's Whclust: weighted Ward hierarchical clustering, merge for merge as R does it.
 
-_whclust_py is R's function statement for statement: its distance matrix, its which.min, its
-label bookkeeping and its forder. It's the reference a compiled path will be held to.
+whclust runs the compiled kernel in whclustjit. _whclust_py is R's function statement for
+statement: its distance matrix, its which.min, its label bookkeeping and its forder. It's the
+reference the tests hold the kernel to, and it runs for real when weights that cancel make R
+merge a cluster with itself, a case the kernel hands back rather than replay.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
+from datanuggets._compat._compiled import frozen
 from datanuggets._compat.arithmetic import r_sum
+from datanuggets._validate import as_matrix, as_weights
 from datanuggets.result import WhclustResult
+from datanuggets.wcluster import whclustjit
 from datanuggets.wcluster.wstats import _wss, wwcss
 
 _MISSING = "missing value where TRUE/FALSE needed"
@@ -121,3 +126,39 @@ def _to_result(n: int, merge, height, order) -> WhclustResult:
         height=np.array(height, dtype=np.float64),
         order=np.array(order, dtype=np.intp) - 1,
     )
+
+
+def whclust(x, w=None) -> WhclustResult:
+    """Weighted Ward hierarchical clustering, as WCluster's Whclust computes it.
+
+    Every row starts as its own cluster, and each step merges the pair whose merge adds the
+    least weighted within-cluster sum of squares, R's distwij, taking R's first pick on a tie.
+    merge is in scipy's numbering (see WhclustResult), height is R's total WWCSS after each
+    merge, and order is R's forder, so all three match R's merge, height and order exactly. w is
+    one weight per row of x, and None means ones. A row with weight zero has NaN distances, so
+    it merges only once R's which.min is left to pick an Inf. Weights that cancel can make R
+    merge a cluster with itself, which this replays through R's own steps. R stops below three
+    rows, and so does this, with R's message. Needs n by n float64 working memory.
+    """
+    x = as_matrix(x, logical=True, vector=True)
+    w = np.ascontiguousarray(as_weights(w, x.shape[0]))
+    n = x.shape[0]
+    if n < 3:
+        try:
+            _whclust_py(x, w)
+        except ValueError as e:
+            raise ValueError(
+                f'whclust needs at least 3 rows, got {n}: R stops with "{e}"'
+            ) from None
+    merge = np.empty((n - 1, 2), np.int64)
+    height = np.empty(n - 1)
+    status = whclustjit.whclust(frozen(np.ascontiguousarray(x)), frozen(w), merge, height)
+    if status == whclustjit.SELF_MERGE:
+        return _to_result(n, *_whclust_py(x, w))
+    if status == whclustjit.NO_CANDIDATE:
+        raise ValueError(
+            "every distance left is NaN, so R's which.min finds nothing to merge and R stops "
+            'with "argument is of length zero"'
+        )
+    rows = [tuple(r) for r in merge.tolist()]
+    return _to_result(n, rows, height, _forder(rows))
