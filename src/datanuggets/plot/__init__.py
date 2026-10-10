@@ -7,6 +7,7 @@ try:
 except ImportError as exc:
     raise ImportError("datanuggets.plot needs matplotlib: pip install 'datanuggets[plot]'") from exc
 
+from datanuggets.plot.pca import loadings, scores, scree
 from datanuggets.plot.points import clusters, nuggets
 from datanuggets.plot.style import OKABE_ITO, PAPER_RC, R_PALETTE, save, style
 from datanuggets.plot.tree import dendrogram
@@ -17,7 +18,10 @@ __all__ = [
     "R_PALETTE",
     "clusters",
     "dendrogram",
+    "loadings",
     "nuggets",
     "save",
+    "scores",
+    "scree",
     "style",
 ]
