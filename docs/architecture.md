@@ -26,7 +26,8 @@ Some folders a fuller layout would have aren't here yet, because nothing exists 
 src/datanuggets/
   __init__.py          the public API: imports, __all__ and the old module paths, nothing else
   exceptions.py        DataNuggetWarning
-  result.py            DataNuggets, CentersResult, WpcaResult, WwcssResult
+  result.py            DataNuggets, CentersResult, WpcaResult, WwcssResult, WkmeansResult,
+                       DnWkmeansResult, WhclustResult
   _validate.py         input coercion and argument checks, mirroring R's stop() conditions
   _defaults.py         R's default argument values and the internal sizes
   nuggets/             the datanugget ports
@@ -40,6 +41,12 @@ src/datanuggets/
     wstats.py          wmean, wss, wwcss and distw, which share their input and sum helpers
     predict.py         cluster_predict (cluster.predict)
     wpca.py            wpca (Wpca)
+    wstatsjit.py       the sums, means and nearest centers the iterative kernels share, compiled
+    whclust.py         whclust (Whclust), and the plain-Python reference its kernel is held to
+    whclustjit.py      Whclust's merges compiled, each wss computed once
+    wkmeans.py         wkmeans (Wkmeans): its random starts, and the plain-Python reference
+    wkmeansjit.py      Wkmeans_single compiled, each trial move over two clusters' rows
+    dn.py              dn_wkmeans, dn_whclust, dn_wpca and dn_cluster_predict (the DN wrappers)
   _compat/             R's arithmetic and numerics, bit for bit
     arithmetic.py      long double sums, mean, cov, median, mad, quantile type 7, weighted.mean
     missing.py         R's NA and NaN bits, and sums that meet a non-finite value
@@ -82,12 +89,12 @@ Imports run from the workflows down to the R-compatibility layer and never back 
 | `_compat` | `_compat`, `_defaults` |
 | `_random` | `_random`, `exceptions` |
 | `_clustering` | `_compat`, `_random` |
-| `wcluster` | `wcluster`, `_compat`, `_validate`, `result`, `exceptions` |
+| `wcluster` | `wcluster`, `_compat`, `_random`, `_validate`, `result`, `exceptions` |
 | `nuggets` | `nuggets`, `_clustering`, `_compat`, `_random`, `_defaults`, `_validate`, `result`, `exceptions` |
 | the old paths: `create`, `refine`, `centers`, `means`, `complexity`, `_draws` | `nuggets`, `_random` |
 | `datanuggets/__init__.py` | `nuggets`, `wcluster`, the old paths, `result`, `exceptions` |
 
-So R's arithmetic and the draw sources never import a workflow, and new code in them can't create a cycle. WCluster draws nothing, so `wcluster` imports neither `_random` nor `nuggets`. The table is the whole import graph of the package by layer, imports inside a layer and inside functions included.
+So R's arithmetic and the draw sources never import a workflow, and new code in them can't create a cycle. Wkmeans draws its starts through `_random`, the other WCluster functions draw nothing, and `wcluster` never imports `nuggets`: the DN wrappers take a `DataNuggets` from `result`. The table is the whole import graph of the package by layer, imports inside a layer and inside functions included.
 
 ## Where new code goes
 
@@ -108,7 +115,7 @@ So R's arithmetic and the draw sources never import a workflow, and new code in 
 | Folder | Covers |
 |---|---|
 | `tests/nuggets/` | `nuggets/` |
-| `tests/wcluster/` | `wcluster/` |
+| `tests/wcluster/` | `wcluster/`, the iterative functions in `test_whclust.py`, `test_wkmeans.py` and `test_wstatsjit.py`, and the DN wrappers in `test_dn.py` |
 | `tests/compat/` | `_compat/` |
 | `tests/randomness/` | `_random/` |
 | `tests/clustering/` | `_clustering/` |

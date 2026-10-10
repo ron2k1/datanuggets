@@ -11,8 +11,29 @@ from datanuggets.nuggets import (
     get_dn_means,
     refine_dn,
 )
-from datanuggets.result import CentersResult, DataNuggets, WpcaResult, WwcssResult
-from datanuggets.wcluster import cluster_predict, distw, wmean, wpca, wss, wwcss
+from datanuggets.result import (
+    CentersResult,
+    DataNuggets,
+    DnWkmeansResult,
+    WhclustResult,
+    WkmeansResult,
+    WpcaResult,
+    WwcssResult,
+)
+from datanuggets.wcluster import (
+    cluster_predict,
+    distw,
+    dn_cluster_predict,
+    dn_whclust,
+    dn_wkmeans,
+    dn_wpca,
+    whclust,
+    wkmeans,
+    wmean,
+    wpca,
+    wss,
+    wwcss,
+)
 
 __version__ = "0.1.0.dev0"
 
@@ -20,6 +41,9 @@ __all__ = [
     "CentersResult",
     "DataNuggetWarning",
     "DataNuggets",
+    "DnWkmeansResult",
+    "WhclustResult",
+    "WkmeansResult",
     "WpcaResult",
     "WwcssResult",
     "arithmetic_complexity",
@@ -27,8 +51,14 @@ __all__ = [
     "create_dn",
     "create_dn_centers",
     "distw",
+    "dn_cluster_predict",
+    "dn_whclust",
+    "dn_wkmeans",
+    "dn_wpca",
     "get_dn_means",
     "refine_dn",
+    "whclust",
+    "wkmeans",
     "wmean",
     "wpca",
     "wss",

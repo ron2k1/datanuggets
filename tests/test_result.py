@@ -19,14 +19,28 @@ from datanuggets.result import (
 )
 
 # Each WCluster leaf and the module that defines it. The modules are reached through importlib,
-# because the exported function wpca shadows its module as an attribute of datanuggets.wcluster.
+# because the exported functions wpca, whclust and wkmeans shadow their modules as attributes of
+# datanuggets.wcluster.
 WCLUSTER_LEAVES = {
     "cluster_predict": "datanuggets.wcluster.predict",
     "distw": "datanuggets.wcluster.wstats",
+    "dn_cluster_predict": "datanuggets.wcluster.dn",
+    "dn_whclust": "datanuggets.wcluster.dn",
+    "dn_wkmeans": "datanuggets.wcluster.dn",
+    "dn_wpca": "datanuggets.wcluster.dn",
+    "whclust": "datanuggets.wcluster.whclust",
+    "wkmeans": "datanuggets.wcluster.wkmeans",
     "wmean": "datanuggets.wcluster.wstats",
     "wpca": "datanuggets.wcluster.wpca",
     "wss": "datanuggets.wcluster.wstats",
     "wwcss": "datanuggets.wcluster.wstats",
+}
+RESULTS = {
+    "DnWkmeansResult": DnWkmeansResult,
+    "WhclustResult": WhclustResult,
+    "WkmeansResult": WkmeansResult,
+    "WpcaResult": WpcaResult,
+    "WwcssResult": WwcssResult,
 }
 
 
@@ -36,10 +50,9 @@ def test_wcluster_leaves_are_exported_from_both_packages():
         assert getattr(datanuggets.wcluster, name, None) is defined, name
         assert getattr(datanuggets, name, None) is defined, name
     assert datanuggets.wcluster.__all__ == sorted(WCLUSTER_LEAVES)
-    assert datanuggets.WpcaResult is WpcaResult
-    assert datanuggets.WwcssResult is WwcssResult
-    top = set(WCLUSTER_LEAVES) | {"WpcaResult", "WwcssResult"}
-    assert top <= set(datanuggets.__all__)
+    for name, cls in RESULTS.items():
+        assert getattr(datanuggets, name, None) is cls, name
+    assert set(WCLUSTER_LEAVES) | set(RESULTS) <= set(datanuggets.__all__)
     assert datanuggets.__all__ == sorted(datanuggets.__all__)
     for name in datanuggets.__all__:
         assert hasattr(datanuggets, name), name

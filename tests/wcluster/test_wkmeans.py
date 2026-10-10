@@ -2,6 +2,7 @@
 the error R stops with, for the reference and the kernel, and the kernel against the reference
 on tie-heavy data."""
 
+import importlib
 import re
 
 import numpy as np
@@ -10,9 +11,11 @@ import pytest
 from datanuggets._compat._compiled import frozen
 from datanuggets._random.r_draws import RDraws
 from datanuggets._random.replay import ReplayDraws
-from datanuggets.wcluster import wkmeans as wk
 from datanuggets.wcluster.wkmeans import wkmeans
 from rfixtures import assert_same_values, load_group
+
+# The exported function wkmeans shadows its module as an attribute of datanuggets.wcluster
+wk = importlib.import_module("datanuggets.wcluster.wkmeans")
 
 CASES = load_group("wkmeans")
 RETURNED = [c for c in CASES if not c.manifest["error"]]

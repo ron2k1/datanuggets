@@ -1,6 +1,7 @@
 """whclust against R's Whclust: the reference and the kernel on every fixture, and the kernel
 against the reference on tie-heavy data."""
 
+import importlib
 import re
 
 import numpy as np
@@ -8,9 +9,11 @@ import pytest
 import scipy.cluster.hierarchy
 
 from datanuggets._compat._compiled import frozen
-from datanuggets.wcluster import whclust as wh
 from datanuggets.wcluster.whclust import whclust
 from rfixtures import assert_same_values, load_group
+
+# The exported function whclust shadows its module as an attribute of datanuggets.wcluster
+wh = importlib.import_module("datanuggets.wcluster.whclust")
 
 CASES = load_group("whclust")
 RETURNED = [c for c in CASES if not c.manifest["error"]]
