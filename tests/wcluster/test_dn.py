@@ -1,6 +1,7 @@
 """The DN wrappers against WCluster's DN.Wkmeans, DN.Whclust, DN.Wpca and DNcluster.predict on
 datanuggets from create.DN, and where R stops."""
 
+import re
 import warnings
 
 import numpy as np
@@ -132,17 +133,34 @@ def test_cluster_labels_must_cover_the_nuggets():
 
 
 def test_one_variable_nuggets_stop_where_r_stops():
+    # R's runs on dn cut to its first variable: the messages it stops with and what it returns
+    case = CASES["one_variable"]
+    stops = case.manifest["errors"]
     one = first_vars(DN, 1)
-    with pytest.raises(ValueError, match="argument is of length zero"):
+    with pytest.raises(ValueError, match=re.escape(stops["wkmeans"])):
         dn_wkmeans(one, 2)
-    with pytest.raises(ValueError, match="invalid 'times' argument"):
+    with pytest.raises(ValueError, match=re.escape(stops["wpca"])):
         dn_wpca(one)
-    assert dn_wpca(one, wcol=[1.0]).sdev.shape == (1,)
-    assert dn_whclust(one).merge.shape == (DN.n_nuggets - 1, 2)
-    for newx in (one, DN2):  # dn's width slices newx's table, whatever newx's own width
-        with pytest.raises(ValueError, match="argument is of length zero"):
+    assert_same_values(dn_wpca(one, wcol=[1.0]).sdev, case.array("wpca_sdev"))
+    got = dn_whclust(one)
+    merge = case.array("merge").astype(np.int64)
+    assert got.merge.tolist() == np.where(merge < 0, -merge - 1, DN.n_nuggets + merge - 1).tolist()
+    assert_same_values(got.height, case.array("height"))
+    assert got.order.tolist() == (case.array("order").astype(np.int64) - 1).tolist()
+    # dn's width slices newx's table, whatever newx's own width
+    for newx, key in ((one, "predict_one"), (DN2, "predict_dn2")):
+        with pytest.raises(ValueError, match=re.escape(stops[key])):
             dn_cluster_predict(one, CL, newx)
-    assert dn_cluster_predict(one, CL, TAB.array("newx")[:5, :1]).shape == (5,)
+    got = dn_cluster_predict(one, CL, TAB.array("newx")[:5, :1])
+    assert (got + 1).tolist() == case.array("predict_labels").tolist()
+
+
+def test_a_matrix_newx_is_where_the_port_departs_from_r():
+    # R stops on a matrix newx, and the port takes it as the data frame R takes
+    stop = CASES["one_variable"].manifest["errors"]["predict_matrix"]
+    assert stop == "newdata should be either a data frame or a datanugget object."
+    got = dn_cluster_predict(DN, CL, TAB.array("newx"))
+    assert (got + 1).tolist() == CASES["predict_frame"].array("labels").tolist()
 
 
 def test_r_positional_order_fails():

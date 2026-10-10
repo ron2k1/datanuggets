@@ -87,3 +87,30 @@ for (case in list(list(id = "predict_frame", newx = newx), list(id = "predict_dn
   stopifnot(is.integer(got), !anyNA(got))
   write_case("dn_wcluster", case$id, no_args, list(cl = cl, labels = unname(got)))
 }
+
+# dn cut to its first variable: R's [, 2:2] drops the table to a vector, so DN.Wkmeans, DN.Wpca's
+# default wcol and DNcluster.predict with a datanugget newx stop, while DN.Whclust, DN.Wpca with a
+# wcol and DNcluster.predict with a data frame run. A matrix newx stops for any dn.
+one <- dn
+one[["Data Nuggets"]] <- one[["Data Nuggets"]][, c(1, 2, ncol(tab$centers) + 2, ncol(tab$centers) + 3)]
+stopifnot(identical(names(one[["Data Nuggets"]])[3:4], c("Weight", "Scale")))
+stop_message <- function(expr) {
+  msg <- tryCatch({
+    capture.output(expr)
+    NULL
+  }, error = function(e) conditionMessage(e))
+  if (is.null(msg)) stop("R returned where this case says it stops")
+  msg
+}
+errors <- list(
+  wkmeans = stop_message(WCluster::DN.Wkmeans(one, 2)),
+  wpca = stop_message(WCluster::DN.Wpca(one)),
+  predict_one = stop_message(WCluster::DNcluster.predict(one, cl, one)),
+  predict_dn2 = stop_message(WCluster::DNcluster.predict(one, cl, dn2)),
+  predict_matrix = stop_message(WCluster::DNcluster.predict(dn, cl, as.matrix(newx))))
+hc1 <- unclass(timed("one_variable", WCluster::DN.Whclust(one)))
+pc1 <- WCluster::DN.Wpca(one, wcol = 1)
+pr1 <- WCluster::DNcluster.predict(one, cl, newx[1:5, 1, drop = FALSE])
+write_case("dn_wcluster", "one_variable", no_args, list(
+  cl = cl, merge = hc1$merge, height = hc1$height, order = hc1$order, wpca_sdev = pc1$sdev,
+  predict_labels = unname(pr1)), extra = list(errors = errors))

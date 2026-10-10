@@ -1,6 +1,6 @@
 # datanuggets
 
-A native Python port of CRAN's `datanugget` 1.5.0 and `WCluster` 1.3.0. It runs without R. Its tests check it against 525 cases recorded from R itself and a few values checked by hand in R, and the port matches R bit for bit on them except for the eigen solver's output and the differences documented below.
+A native Python port of CRAN's `datanugget` 1.5.0 and `WCluster` 1.3.0. It runs without R. Its tests check it against 526 cases recorded from R itself and a few values checked by hand in R, and the port matches R bit for bit on them except for the eigen solver's output and the differences documented below.
 
 Data nuggets reduce a dataset to groups described by a center, a row count and a scale. Scale measures spread as the average variance across columns. Centers are chosen by repeatedly removing one point from the closest pair, which spreads them across the data instead of concentrating them in dense regions. Each row joins its nearest center.
 
@@ -205,7 +205,7 @@ Parity is against R 4.6.1 on x86-64 Windows with `datanugget` 1.5.0, `WCluster` 
 
 ### What R recorded
 
-Every R result the tests compare with comes from R itself. A few were checked by hand in an R session and written into the tests, such as the cancelling-weight cases in `tests/wcluster/test_wstats.py` and `arithmetic_complexity` on an `x` with no rows or no columns. The long double fuzz below checks against a Python reference instead of R. Everything else comes from the scripts in `r/`. They run R 4.6.1 with the pinned packages, trace the functions under test without modifying them, and write the inputs, the outputs, every random draw and the internal values that matter into `tests/fixtures/`. Each case carries a manifest with the R version, the package versions, the BLAS and the long double width. Running the tests doesn't need R. Fixtures are recorded on one machine only, the laptop with the pinned R. There are 525 cases in 22 groups:
+Every R result the tests compare with comes from R itself. A few were checked by hand in an R session and written into the tests, such as the cancelling-weight cases in `tests/wcluster/test_wstats.py` and `arithmetic_complexity` on an `x` with no rows or no columns. The long double fuzz below checks against a Python reference instead of R. Everything else comes from the scripts in `r/`. They run R 4.6.1 with the pinned packages, trace the functions under test without modifying them, and write the inputs, the outputs, every random draw and the internal values that matter into `tests/fixtures/`. Each case carries a manifest with the R version, the package versions, the BLAS and the long double width. Running the tests doesn't need R. Fixtures are recorded on one machine only, the laptop with the pinned R. There are 526 cases in 22 groups:
 
 | Group | Script in `r/` | Cases | What R recorded |
 | --- | --- | --- | --- |
@@ -224,7 +224,7 @@ Every R result the tests compare with comes from R itself. A few were checked by
 | `whclust` | `fixtures_whclust.R` | 14 | `Whclust`'s `merge`, `height` and `order` or R's message where it stops, and how often each quirk fired in a copy of `Whclust` with counters |
 | `wkmeans` | `fixtures_wkmeans.R` | 15 | `Wkmeans`' every draw, each start's labels from `init`, each start's refined labels and WWCSS, the outputs or R's message, and the quirk counts |
 | `wkmeans_args` | `fixtures_wkmeans.R` | 1 | 28 `Wkmeans` runs on arguments R stops on, with R's message, or its labels where it returns |
-| `dn_wcluster` | `fixtures_dn_wcluster.R` | 7 | two quakes datanuggets and a data frame of new rows, and `DN.Wkmeans`, `DN.Whclust`, `DN.Wpca` and `DNcluster.predict` on them |
+| `dn_wcluster` | `fixtures_dn_wcluster.R` | 8 | two quakes datanuggets and a data frame of new rows, `DN.Wkmeans`, `DN.Whclust`, `DN.Wpca` and `DNcluster.predict` on them, and R's messages and outputs on a datanugget with one variable and on a matrix `newx` |
 
 ### How the tests compare
 
@@ -372,7 +372,7 @@ In the `WCluster` functions `Wpca` becomes `wpca`, `cluster.predict` becomes `cl
 | `num.init` or `max.iterations` below 1 | `1:0` runs the loop twice | `ValueError` |
 | `DNcluster.predict` with a matrix `newx` | stops ("newdata should be either a data frame or a datanugget object.") | runs, as `cluster_predict` does |
 
-The `dn_` functions stop where R's do on a datanugget with one variable, where R's `[, 2:2]` drops the table to a vector: `dn_wkmeans` always, `dn_wpca` without `wcol`, and `dn_cluster_predict` with a `DataNuggets` as `newx`. `dn_whclust` runs, as R's does. `dn_cluster_predict` reads a `DataNuggets` given as `newx` the way R reads a datanugget there. It takes as many columns of `newx`'s table as `dn` has variables, so a wider `newx` gives its first variables, and a narrower one passes its weights and scales as data. Both stop when the table runs out of columns.
+The `dn_` functions stop where R's do on a datanugget with one variable, where R's `[, 2:2]` drops the table to a vector: `dn_wkmeans` always, `dn_wpca` without `wcol`, and `dn_cluster_predict` with a `DataNuggets` as `newx`. `dn_whclust` runs, as R's does. The `one_variable` case records R's messages there, and what R returns where it runs. `dn_cluster_predict` reads a `DataNuggets` given as `newx` the way R reads a datanugget there. It takes as many columns of `newx`'s table as `dn` has variables, so a wider `newx` gives its first variables, and a narrower one passes its weights and scales as data. Both stop when the table runs out of columns.
 
 ## Limitations
 
