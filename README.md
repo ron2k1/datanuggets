@@ -116,6 +116,30 @@ Output:
 
 `cluster_predict` returns each new row's 0-based position among the sorted labels. The labels here are 0 and 1, so the positions equal the labels.
 
+`dn_wkmeans` and `dn_whclust` cluster the nuggets, weighted by their row counts. With `seed=RDraws(291102)`, `dn_wkmeans` draws its starts as R's `DN.Wkmeans` does with seed 291102, so the same nuggets give R's clusters:
+
+```python
+from datanuggets import dn_whclust, dn_wkmeans
+from datanuggets._random.r_draws import RDraws
+
+km = dn_wkmeans(dn, 3, seed=RDraws(291102))
+print(km.wwcss, km.total_wwcss)
+print(np.bincount(km.row_labels))
+
+hc = dn_whclust(dn)
+print(hc.merge[-1], hc.height[-1])
+```
+
+Output:
+
+```text
+[52989.7953179  54819.45581478 57960.64673812] 165769.8978708033
+[31348 32229 36423]
+[397 396] 268304.21872574475
+```
+
+`row_labels` puts each of the 100,000 rows in its nugget's cluster, so the counts add up to 100,000. `merge` is in scipy's numbering, so the last merge joins clusters 396 and 397, the ones made at 0-based steps 196 and 197, and `height` ends at the total WWCSS of all 200 nuggets as one cluster. `hc.to_linkage()` gives the linkage that `scipy.cluster.hierarchy.dendrogram` takes.
+
 ## What was done
 
 The work landed in the order below. Most steps started from a written plan, linked in the table. Steps 4, 5 and 10 also had an independent review, and its findings were fixed or recorded. `RDraws` grew out of a spike and has no plan document, and the architecture document was written after the moves it describes.
