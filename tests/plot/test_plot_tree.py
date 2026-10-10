@@ -128,6 +128,24 @@ def test_leaf_labels():
         dendrogram(tree, labels=["a", "b"])
 
 
+def test_each_label_sits_under_its_own_row():
+    """Row r's label hangs at its leaf: x is 1 plus r's place in order, y its merge's height minus
+    the hang. Labels assigned in drawing order would keep the same set of texts."""
+    tree = port_tree(CASES["tree_dn"])
+    n = tree.order.size
+    parent = np.empty(n)
+    for s, pair in enumerate(np.asarray(tree.merge)):
+        parent[pair[pair < n]] = tree.height[s]
+    leaf_y = parent - 0.1 * (tree.height[-1] - tree.height[0])
+    rank = np.argsort(tree.order)
+    names = [f"r{r}" for r in range(n)]
+    for labels, text in ((None, [str(r) for r in range(n)]), (names, names)):
+        _, ax = plt.subplots()
+        dendrogram(tree, labels=labels, ax=ax)
+        got = {t.get_text(): t.xy for t in ax.texts}
+        assert got == {text[r]: (1.0 + rank[r], leaf_y[r]) for r in range(n)}
+
+
 def test_axes_look_like_r():
     _, ax = plt.subplots()
     dendrogram(port_tree(CASES["tree_n3"]), ax=ax)
