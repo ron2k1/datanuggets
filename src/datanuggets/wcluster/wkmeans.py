@@ -1,6 +1,7 @@
 """WCluster's Wkmeans: weighted k-means with R's random starts, Lloyd steps and single-point
 moves, bit for bit.
 
+wkmeans draws each start's labels here and refines them in the compiled wkmeansjit.
 _wkmeans_py is R's Wkmeans, Wkmeans_single and init statement for statement on the Python
 primitives, the reference the tests hold the compiled path to. R's quirks are kept: the table
 of cluster sizes is refreshed only when a move is taken and is read by position, the Lloyd step
@@ -9,16 +10,22 @@ renumbers the labels left, and a move can empty a label or fill an empty one.
 
 from __future__ import annotations
 
+import logging
 import math
 import numbers
 
 import numpy as np
+from joblib import Parallel, delayed
 
+from datanuggets._compat._compiled import frozen
 from datanuggets._random.seeds import as_draws
-from datanuggets._validate import as_matrix, as_weights
+from datanuggets._validate import as_matrix, as_weights, check_n_jobs
 from datanuggets.result import WkmeansResult
+from datanuggets.wcluster import wkmeansjit, wstatsjit
 from datanuggets.wcluster.predict import _wdist_mat
 from datanuggets.wcluster.wstats import wmean, wwcss
+
+log = logging.getLogger("datanuggets")
 
 _MISSING = "missing value where TRUE/FALSE needed"
 _LIST = "unimplemented type 'list' in 'orderVector1'"
@@ -28,6 +35,17 @@ _USER_EMPTY = (
     "For the initialization, no data assigned to one(or multiple) of the clusters based on the "
     "weighted\n         distance to the initial cluster centers chosen by users."
 )
+# Where Wkmeans_single stops: R's message, and why. The reference and the kernel share these.
+_NAN_STOP = (_MISSING, "a WWCSS is NaN, which a cluster whose weights sum to zero gives")
+_TB_STOP = (_MISSING, "R's stale table of cluster sizes is shorter than the label")
+_DEAD_SOME_STOP = (_LIST, "a row's distances to every center are NaN")
+_DEAD_ALL_STOP = (_LENGTH, "every row's distances are NaN")
+_STATUS = {
+    wkmeansjit.NAN_TEST: _NAN_STOP,
+    wkmeansjit.TB_NA: _TB_STOP,
+    wkmeansjit.DEAD_SOME: _DEAD_SOME_STOP,
+    wkmeansjit.DEAD_ALL: _DEAD_ALL_STOP,
+}
 MAX_STARTS = 10_000  # init draws this many starts before saying R would never stop
 QUIRKS = ("redraw", "revert", "fixed", "stale_decides", "recreate", "gap", "tb_na", "nan_test")
 
@@ -144,16 +162,16 @@ def _test(a: float, b: float, counts=None) -> None:
     if math.isnan(a) or math.isnan(b):
         if counts is not None:
             counts["nan_test"] += 1
-        raise _r_stop(_MISSING, "a WWCSS is NaN, which a cluster whose weights sum to zero gives")
+        raise _r_stop(*_NAN_STOP)
 
 
 def _lloyd_labels(yy: np.ndarray) -> np.ndarray:
     """R's stop when apply(z, 1, which.min) leaves a row without a label: wwcss gets a list,
     or integer(0) when no row has one."""
     if (yy == 0).all():
-        raise _r_stop(_LENGTH, "every row's distances are NaN")
+        raise _r_stop(*_DEAD_ALL_STOP)
     if (yy == 0).any():
-        raise _r_stop(_LIST, "a row's distances to every center are NaN")
+        raise _r_stop(*_DEAD_SOME_STOP)
     return yy
 
 
@@ -191,9 +209,7 @@ def _single_py(x, w, y, K, counts=None):
                 if a > tb.size:
                     if counts is not None:
                         counts["tb_na"] += 1
-                    raise _r_stop(
-                        _MISSING, "R's stale table of cluster sizes is shorter than the label"
-                    )
+                    raise _r_stop(*_TB_STOP)
                 if counts is not None and (tb[a - 1] > 1) != (np.count_nonzero(yy == a) > 1):
                     counts["stale_decides"] += 1
                 if tb[a - 1] > 1:
@@ -254,4 +270,92 @@ def _wkmeans_py(
             _test(best[0], u)
             if best[0] > u:
                 best = (u, labels)
+    return _result(x, w, best[1])
+
+
+def wkmeans(
+    x, k, *, w=None, centers=None, num_init=1, max_iter=10, seed=291102, n_jobs=1
+) -> WkmeansResult:
+    """Weighted k-means, as WCluster's Wkmeans computes it.
+
+    Each start draws labels at random (every label on at least two rows), takes their weighted
+    means as centers and gives every row its nearest center, then runs up to max_iter rounds of
+    20 Lloyd steps followed by single-point moves, keeping a move that doesn't raise the
+    weighted within-cluster sum of squares (WWCSS). The start with the smallest WWCSS wins, the
+    first on ties. To get R's clusters, pass seed=RDraws(seed), R's set.seed(seed) draws. An int
+    or a numpy Generator draws from numpy instead, which is reproducible but not R's.
+
+    centers (k, p) replaces the random starts, and then num_init is 1. k, num_init and max_iter
+    are floored like R's, and num_init or max_iter below 1 raises where R's 1:0 would run twice.
+    labels keeps R's quirks: R's table of cluster sizes goes stale between moves and is read by
+    position, so a cluster can empty and come back, and labels can have gaps. Where R stops,
+    this raises ValueError with R's message. Where R would draw forever (fewer than 2k rows,
+    fewer than k distinct (row, weight) pairs, or MAX_STARTS starts that never reach k
+    clusters), this raises ValueError. n_jobs refines the starts on threads and never changes
+    the result. Arguments after k are keyword-only, since R's order puts centers before the
+    weights.
+    """
+    return _wkmeans(
+        x, k, w=w, centers=centers, num_init=num_init, max_iter=max_iter, seed=seed, n_jobs=n_jobs
+    )
+
+
+def _wkmeans(x, k, *, w, centers, num_init, max_iter, seed, n_jobs, trace=None) -> WkmeansResult:
+    """wkmeans, with trace, a list, given (start labels, wwcss, labels) for each start refined."""
+    x, w, k, centers, num_init, max_iter = _prepare(x, k, w, centers, num_init, max_iter)
+    check_n_jobs(n_jobs)
+    draws = as_draws(seed)
+    n = x.shape[0]
+    xf, wf = frozen(np.ascontiguousarray(x)), frozen(w)
+    m11 = frozen(wstatsjit.row_norms(xf))
+    zbuf = np.empty((n, k))
+
+    def assign(c):
+        out = np.empty(n, np.int64)
+        wstatsjit.assign(xf, wf, frozen(np.ascontiguousarray(c)), c.shape[0], m11, zbuf, out)
+        return out
+
+    def wmean_of(y):
+        return wkmeansjit.centers_of(xf, wf, y, k)
+
+    def refine(y):
+        y = y.copy()
+        status, u, it = wkmeansjit.refine(xf, wf, y, max_iter, m11)
+        return status, u, it, y
+
+    # One start at a time is R's order, which replayed draws need: a start that stops R leaves
+    # later starts undrawn. With threads every start is drawn first, then refined, and the first
+    # error in start order is raised, which is R's, since in R a start's own init comes after
+    # every earlier start's refinement.
+    results, init_error = [], None
+    if n_jobs == 1 or num_init == 1:
+        for _ in range(num_init):
+            s = _init(n, k, centers, draws, assign, wmean_of)
+            results.append((s, *refine(s)))
+            if results[-1][1] != wkmeansjit.OK:
+                break
+    else:
+        starts = []
+        try:
+            for _ in range(num_init):
+                starts.append(_init(n, k, centers, draws, assign, wmean_of))
+        except ValueError as e:
+            init_error = e
+        refined = Parallel(n_jobs=n_jobs, prefer="threads")(delayed(refine)(s) for s in starts)
+        results = [(s, *r) for s, r in zip(starts, refined, strict=True)]
+    best = None
+    for i, (s, status, u, it, labels) in enumerate(results):
+        if trace is not None:
+            trace.append((s, u, labels))
+        if status != wkmeansjit.OK:
+            raise _r_stop(*_STATUS[status])
+        log.debug("Wkmeans start %d: %d iterations, WWCSS %r", i + 1, it, u)
+        if best is None:
+            best = (u, labels)
+        else:
+            _test(best[0], u)
+            if best[0] > u:
+                best = (u, labels)
+    if init_error is not None:
+        raise init_error
     return _result(x, w, best[1])

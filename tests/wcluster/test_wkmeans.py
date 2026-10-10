@@ -1,13 +1,17 @@
 """wkmeans against R's Wkmeans: the draws, each start's labels and result, and the answer, or
-the error R stops with."""
+the error R stops with, for the reference and the kernel, and the kernel against the reference
+on tie-heavy data."""
 
 import re
 
 import numpy as np
 import pytest
 
+from datanuggets._compat._compiled import frozen
+from datanuggets._random.r_draws import RDraws
 from datanuggets._random.replay import ReplayDraws
 from datanuggets.wcluster import wkmeans as wk
+from datanuggets.wcluster.wkmeans import wkmeans
 from rfixtures import assert_same_values, load_group
 
 CASES = load_group("wkmeans")
@@ -141,3 +145,161 @@ def test_one_row_follows_rs_diag():
         wk._wkmeans_py(x, 1, w=np.array([2.0]), centers=c)
     with pytest.raises(ValueError, match=re.escape("invalid 'nrow' value (< 0)")):
         wk._wkmeans_py(x, 1, w=np.array([-1.0]), centers=c)
+
+
+@pytest.mark.parametrize("case", RETURNED, ids=_ids(RETURNED))
+def test_wkmeans_matches_r_and_uses_r_draws(case):
+    trace = []
+    draws = ReplayDraws(case.draws())
+    got = wk._wkmeans(
+        case.array("x"),
+        case.args["k"],
+        w=case.array("w"),
+        centers=case.array("centers_in") if case.has("centers_in") else None,
+        num_init=case.args["num_init"],
+        max_iter=case.args["max_iter"],
+        seed=draws,
+        n_jobs=1,
+        trace=trace,
+    )
+    draws.assert_exhausted()
+    check(case, got, trace)
+
+
+@pytest.mark.parametrize("case", STOPPED, ids=_ids(STOPPED))
+def test_wkmeans_stops_where_r_stops(case):
+    draws = ReplayDraws(case.draws())
+    with pytest.raises(ValueError, match=re.escape(case.manifest["error"].strip())):
+        wkmeans(
+            case.array("x"),
+            case.args["k"],
+            w=case.array("w"),
+            centers=case.array("centers_in") if case.has("centers_in") else None,
+            num_init=case.args["num_init"],
+            max_iter=case.args["max_iter"],
+            seed=draws,
+        )
+    draws.assert_exhausted()
+
+
+def fuzz_inputs(seed, family):
+    rng = np.random.default_rng(seed)
+    n = int(rng.integers(6, 30))
+    p = int(rng.integers(1, 4))
+    k = int(rng.integers(1, max(2, n // 3)))
+    x = rng.integers(0, 4, (n, p)).astype(float)
+    if family == "huge":
+        x = x * 1e153  # 1e154 overflows the distances, and init never reaches k clusters
+    w = {
+        "unit": np.ones(n),
+        "int": rng.integers(1, 4, n),
+        "zero": rng.integers(0, 3, n),
+        "signed": rng.choice([-1, 1, 2], n),
+        "huge": rng.integers(1, 3, n),
+        # Mostly negative: a negative-weight row takes its farthest center, which empties middle
+        # labels, and moving it out of its cluster can raise that cluster's WWCSS, so the
+        # emptied label can stay empty. That's the only way R returns a gap.
+        "negative": rng.choice([-2.41, -1.19, 0.73], n),
+    }[family].astype(float)
+    return x, k, w
+
+
+def run_both(x, k, w, seed, counts):
+    def go(fn, **kw):
+        try:
+            return fn(x, k, w=w, num_init=3, max_iter=4, seed=RDraws(seed), **kw), None
+        except ValueError as e:
+            return None, str(e)
+
+    ref, ref_err = go(wk._wkmeans_py, counts=counts)
+    for n_jobs in (1, 3):
+        got, got_err = go(wkmeans, n_jobs=n_jobs)
+        assert got_err == ref_err
+        if ref is not None:
+            assert got.labels.tolist() == ref.labels.tolist()
+            assert_same_values(got.centers, ref.centers)
+            assert_same_values(got.wwcss, ref.wwcss)
+            assert_same_values(got.total_wwcss, ref.total_wwcss)
+
+
+FAMILIES = ["unit", "int", "zero", "signed", "huge", "negative"]
+
+# R's gap case's grid, with weights from R's gap search drawn by numpy. A returned gap needs a
+# singleton emptied through R's stale table after every row of the top label, since that row
+# would hit tb_na, with no refill behind it, in the last iteration: a sweep of 5,000 seeds per k
+# found 5 at k = 3 and 2 at k = 4. These are the first, so the default run checks a gap without
+# the thousands of seeds before them.
+GRID = np.array([[a, b] for b in range(3) for a in range(4)], float)
+GAP_SEEDS = [(1061, 3), (1943, 3), (2114, 4)]
+
+
+def grid_inputs(seed, k):
+    return GRID, k, np.random.default_rng(seed).choice([-0.73, 1.19, 2.41], GRID.shape[0])
+
+
+@pytest.fixture
+def few_starts(monkeypatch):
+    # Zero weights and overflowing distances can fail init on every start, where R draws
+    # forever. Both paths share the cap, so a lower one ends those runs in the same error sooner.
+    monkeypatch.setattr(wk, "MAX_STARTS", 100)
+
+
+@pytest.mark.usefixtures("few_starts")
+@pytest.mark.parametrize("family", FAMILIES)
+def test_kernel_matches_reference_on_tie_heavy_data(family):
+    for seed in range(25):
+        run_both(*fuzz_inputs(seed, family), seed, wk._counts())
+
+
+@pytest.mark.usefixtures("few_starts")
+def test_fuzz_reaches_every_quirk():
+    total = wk._counts()
+    runs = [(fuzz_inputs(s, f), s) for f in ("negative", "signed") for s in range(10)]
+    runs += [(grid_inputs(s, k), s) for s, k in GAP_SEEDS]
+    for inputs, seed in runs:
+        c = wk._counts()
+        run_both(*inputs, seed, c)
+        for q in total:
+            total[q] += c[q]
+    assert all(total[q] > 0 for q in wk.QUIRKS), total
+
+
+@pytest.mark.slow
+@pytest.mark.usefixtures("few_starts")
+@pytest.mark.parametrize("family", FAMILIES)
+def test_kernel_matches_reference_on_a_large_fuzz(family):
+    for seed in range(25, 625):
+        run_both(*fuzz_inputs(seed, family), seed, wk._counts())
+
+
+def test_int_seed_is_reproducible():
+    x = CASES[0].array("x")
+    assert wkmeans(x, 3, seed=5) == wkmeans(x, 3, seed=5)
+
+
+def test_rdraws_seed_matches_r():
+    case = next(c for c in RETURNED if c.id == "iris_k3_init5")
+    got = wkmeans(case.array("x"), 3, num_init=5, seed=RDraws(291102))
+    assert got.labels.tolist() == (case.array("labels").astype(np.int64) - 1).tolist()
+
+
+def test_n_jobs_does_not_change_the_result():
+    case = next(c for c in RETURNED if c.id == "iris_k3_init5")
+    one = wkmeans(case.array("x"), 3, num_init=5, seed=RDraws(291102), n_jobs=1)
+    assert wkmeans(case.array("x"), 3, num_init=5, seed=RDraws(291102), n_jobs=4) == one
+    assert wkmeans(case.array("x"), 3, num_init=5, seed=RDraws(291102), n_jobs=-1) == one
+
+
+def test_wkmeans_takes_any_layout_and_dtype():
+    case = next(c for c in RETURNED if c.id == "quakes500_k4_w")
+    x, w = case.array("x"), case.array("w")
+    want = wkmeans(x, 4, w=w, seed=RDraws(291102))
+    for xv in (np.asfortranarray(x), np.repeat(x, 2, axis=1)[:, ::2], frozen(x.copy())):
+        assert wkmeans(xv, 4, w=list(w), seed=RDraws(291102)) == want
+    grid = next(c for c in RETURNED if c.id == "gap").array("x")
+    assert wkmeans(grid.astype(np.int64), 3, seed=1) == wkmeans(grid, 3, seed=1)
+
+
+def test_r_positional_order_fails():
+    with pytest.raises(TypeError):
+        wkmeans(np.zeros((4, 2)), 2, None, np.ones(4))
