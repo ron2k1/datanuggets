@@ -80,8 +80,11 @@ def _drawdend(rm, height, xpos, hang):
 def _leaf_text(labels, n: int):
     if labels is None:
         return [str(i) for i in range(n)]
-    if labels is False:
-        return None
+    if np.ndim(labels) == 0:
+        # R's FALSE draws none. Anything else single, a string too, is one label for n leaves
+        if isinstance(labels, (bool, np.bool_)) and not labels:
+            return None
+        raise ValueError(BAD_INPUT)
     text = [str(v) for v in labels]
     if len(text) != n:
         raise ValueError(BAD_INPUT)

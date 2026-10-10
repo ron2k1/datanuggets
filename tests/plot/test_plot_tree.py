@@ -128,6 +128,20 @@ def test_leaf_labels():
         dendrogram(tree, labels=["a", "b"])
 
 
+@pytest.mark.parametrize("labels", ["abc", True, 5, np.int64(3), np.True_])
+def test_one_label_for_many_leaves_stops_like_r(labels):
+    """plot.hclust takes as.character(labels), one string for any of these, so C_dendwindow
+    stops on the length. Checked by hand on R 4.6.1 for "abc", TRUE and 5."""
+    with pytest.raises(ValueError, match="^invalid dendrogram input$"):
+        dendrogram(port_tree(CASES["tree_n3"]), labels=labels)
+
+
+def test_numpy_false_draws_no_labels_like_false():
+    _, ax = plt.subplots()
+    dendrogram(port_tree(CASES["tree_n3"]), labels=np.False_, ax=ax)
+    assert len(ax.texts) == 0
+
+
 def test_each_label_sits_under_its_own_row():
     """Row r's label hangs at its leaf: x is 1 plus r's place in order, y its merge's height minus
     the hang. Labels assigned in drawing order would keep the same set of texts."""
