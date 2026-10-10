@@ -138,7 +138,9 @@ class WhclustResult(_ArrayFields):
     def to_linkage(self) -> np.ndarray:
         """scipy's (n-1, 4) linkage: merge, height and each new cluster's size, for
         scipy.cluster.hierarchy.dendrogram. Raises ValueError for a self-merge, which a scipy
-        linkage can't hold."""
+        linkage can't hold. The heights are R's as they are: negative weights can give negative
+        ones, which scipy's dendrogram and fcluster reject with ValueError, and zero weights can
+        give NaN ones, which scipy takes without a word."""
         n = self.merge.shape[0] + 1
         if np.any(self.merge[:, 0] == self.merge[:, 1]):
             raise ValueError("merge joins a cluster with itself, which a scipy linkage can't hold")
