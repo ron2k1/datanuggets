@@ -17,8 +17,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 
 from datanuggets import DataNuggets, DataNuggetWarning, create_dn, refine_dn
-from datanuggets._compat import arithmetic, moments
+from datanuggets._clustering import hartigan_wong
+from datanuggets._compat import arithmetic, moments, rfast
 from datanuggets._random.replay import ReplayDraws
+from datanuggets.nuggets import centers
 from rfixtures import Case
 
 OUT = ROOT / "tmp" / "covertype" / "out"
@@ -65,6 +67,10 @@ def warm_up(x: np.ndarray) -> None:
     arithmetic.r_cov(head)
     list(moments.group_moments(head, [np.arange(50)]))
     list(moments.group_moments(head, [np.arange(50)], n_jobs=2))
+    rfast.cross_distances(head, head[:5], "euclidean")
+    rfast.nearest_index(head, head[:5], "euclidean")
+    centers.select_centers(head, 10, 0.1, "euclidean")
+    hartigan_wong.kmns(head[:, :1], head[:3, :1], 10, 2500)
 
 
 def run(fn, case: Case, want_messages=None):

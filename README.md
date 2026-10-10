@@ -34,7 +34,7 @@ Still to port: `WCluster`'s `Wkmeans` and `Whclust`, then `datanugget`'s `DN.Wkm
 
 ## Install
 
-Requires Python 3.12 or newer, `numpy >= 2.0`, `scipy >= 1.13`, `joblib >= 1.4` and `numba >= 0.67`.
+Requires Python 3.12 or newer, `numpy >= 2.0`, `scipy >= 1.13`, `joblib >= 1.4` and `numba >= 0.67`. On Python 3.15 it needs `numba >= 0.68`, the first numba with 3.15 wheels. The suite passes on Python 3.14 and 3.15.
 
 It isn't on PyPI. `pip install datanugget`, without the s, gets an unrelated package of code snippets.
 
@@ -80,7 +80,7 @@ Output of `to_frame().head()`:
 4            4  3.074095 -1.813385  0.944272       3  0.033129
 ```
 
-Those weight-1 nuggets are expected. Closest-pair deletion keeps points far out in the tails as centers. They share the scale 0.000331 because a nugget with fewer than 2 rows gets the smallest scale among nuggets with 2 or more rows, divided by 100. R does the same. The call took 14.6 seconds on my laptop (i7-13650HX).
+Those weight-1 nuggets are expected. Closest-pair deletion keeps points far out in the tails as centers. They share the scale 0.000331 because a nugget with fewer than 2 rows gets the smallest scale among nuggets with 2 or more rows, divided by 100. R does the same. The call took 3.0 seconds on my laptop (i7-13650HX), with the numba cache warm.
 
 The `WCluster` functions take the nuggets' centers as the data and their weights as row weights. Continuing the example, this runs weighted PCA and splits the nuggets by the sign of their first coordinate:
 
@@ -110,7 +110,7 @@ Output:
 
 ## What was done
 
-The work landed in the order below. Most steps started from a written plan, linked in the table. Steps 4 and 5 also had an independent review, and its findings were fixed or recorded. `RDraws` grew out of a spike and has no plan document, and the architecture document was written after the moves it describes.
+The work landed in the order below. Most steps started from a written plan, linked in the table. Steps 4, 5 and 10 also had an independent review, and its findings were fixed or recorded. `RDraws` grew out of a spike and has no plan document, and the architecture document was written after the moves it describes.
 
 | Step | Record | What it added |
 | --- | --- | --- |
@@ -123,6 +123,7 @@ The work landed in the order below. Most steps started from a written plan, link
 | 7 | [plan](docs/plans/2026-09-30-r-compat.md) | A decision record for every known difference from R, backed by 46 new recorded cases. The first four fixes: R's -NaN for an empty nugget, logical data read as 0 and 1, a vector `x` read as one column, and R's NA bits in `distw` |
 | 8 | [plan](docs/plans/2026-09-30-eigen-reference-solver.md) | A measured spike with no code shipped: R's own LAPACK reproduces R's eigen output on every input tried, where scipy's doesn't. It sets out the options for a reference solver |
 | 9 | [architecture](docs/architecture.md) | The package split into `nuggets/`, `wcluster/`, `_compat/`, `_random/` and `_clustering/`, with the tests in matching folders. The five old public module paths and the private `datanuggets._draws` still import. The other moved private modules are reachable only at their new paths |
+| 10 | [plan](docs/plans/2026-09-30-speed-next-targets.md), [review](docs/reviews/2026-10-09-speed-next-review.md) | Rfast's distances, `create.DNcenters`' deletion rounds and the Hartigan-Wong port compiled with numba, with the same bits. The deletion rounds work on one distance matrix instead of copying it every round. numba 0.68 in the lock, so the package runs on Python 3.15 |
 
 PRs #4 and #5 were opened against the speed branch, and both reached `main` together through the merge of this branch.
 
@@ -193,6 +194,8 @@ Parity tests feed R's recorded draws back through `ReplayDraws`. It raises if th
 
 The compiled long double kernels are checked against a slower reference written with Python integers, on a fixed-seed fuzz aimed at exact ties, sticky bits and exponent edges. The default run tries 200,000 cases per operation. The slow run, `pytest -m slow`, tries 10 million per operation for each of the seven operations. Another test finds every compiled module by itself, checks that each kernel is made through the package's shared `compiled` wrapper, and checks that the kernels cache where numba can and still compile where it can't.
 
+The compiled distance, deletion-round and Hartigan-Wong kernels each keep the Python code they replaced in the package, as `_cross_distances_py`, `_select_centers_py` and `_kmns_py`. Their tests compare the two bit for bit on fuzzed data built for ties: whole-number grids, duplicated centers, values near overflow and subnormals, widths on both sides of dista's 32-column switch, and Hartigan-Wong problems that reach all five of its fault codes.
+
 Several tests target a specific wrong implementation and were seen to fail on it: `math.fsum` in place of R's long double `sum(wrow)` in `wpca`, numpy's +NaN in place of R's -NaN for an empty nugget, `RDraws` taking the wrong side of R's hash switch, and a matrix product that returns -0.0 where R's starts from +0. Reviews also ran mutants against the suite and turned most survivors into tests. The [WCluster review](docs/reviews/2026-09-30-wcluster-leaves-review.md) lists the ones it ran, and the survivors are under Open problems.
 
 The package layout has its own tests: a bare `import datanuggets` in a fresh interpreter still binds the old module paths, and a pickle naming an old path still loads.
@@ -203,8 +206,8 @@ The suite ran on both machines at the commit that merged into `main`, with no fa
 
 | Machine | Environment | Run |
 | --- | --- | --- |
-| Laptop, i7-13650HX | Windows 11, Python 3.14.3, numpy 2.5.3, scipy 1.18.1, numba 0.67.0 | the default suite, and the slow fuzz separately. Two tests skip because Windows has no `os.fork` |
-| Mac mini, Apple M4 | macOS 26.6.2 arm64, Python 3.14.3, numpy 2.5.3, scipy 1.18.1, numba 0.67.0 | the default suite on 8 workers, the two fork tests included |
+| Laptop, i7-13650HX | Windows 11, Python 3.14.3 and 3.15.0, numpy 2.5.3, scipy 1.18.1, numba 0.68.0 | the default suite and the slow fuzz on each Python. Two tests skip because Windows has no `os.fork` |
+| Mac mini, Apple M4 | macOS 26.6.2 arm64, Python 3.14.3 and 3.15.0, numpy 2.5.3, scipy 1.18.1, numba 0.68.0 | the default suite on 8 workers on each Python, the two fork tests included |
 
 The package layout change was also checked from a built wheel. The wheel holds the same files as `src/`, and the suite passed in a clean virtual environment from outside the repo.
 
@@ -216,24 +219,26 @@ The fixtures are small, so I also ran both packages on a real large dataset: UCI
 
 Each size runs `create.DN` with R's defaults, then `refine.DN` on its result with shape splits off and on. The only change from R's defaults is `no.cores = 1`, and `n_jobs=1` in Python, so R's random draws can be recorded in order. Python replays them the way the tests do. Assignments, weights, centers, scales, progress messages and warnings matched exactly in every run. At 100,000 rows the shape-split run replayed 383,475 draws.
 
-Wall time in seconds, around the function call only, one run each. The middle column is the port before the compiled long double kernels. The last column is the merged code, with the numba cache warm:
+Wall time in seconds, around the function call only, one run each, all in one sitting. "Python, before" is `main` before step 10, which compiled the long double sums but not Rfast's distances, the deletion rounds or Hartigan-Wong. The last two columns are the code now on two Pythons, with the numba cache warm:
 
-| Rows | Step | R | Python, before | Python, now |
-| --- | --- | --- | --- | --- |
-| 10,000 | create | 5.7 | 6.7 | 6.8 |
-| 10,000 | refine | 0.2 | 0.9 | 0.1 |
-| 10,000 | refine, shape splits | 5.2 | 3.3 | 0.9 |
-| 100,000 | create | 36.2 | 48.1 | 43.2 |
-| 100,000 | refine | 0.5 | 8.9 | 1.3 |
-| 100,000 | refine, shape splits | 1801 | 110 | 28.0 |
-| 581,012 | create | 202.1 | 239.6 | 220.5 |
-| 581,012 | refine | 0.9 | 50.0 | 8.7 |
+| Rows | Step | R | Python, before | Python 3.14 | Python 3.15 |
+| --- | --- | --- | --- | --- | --- |
+| 10,000 | create | 5.86 | 6.72 | 0.65 | 0.65 |
+| 10,000 | refine | 0.17 | 0.16 | 0.09 | 0.09 |
+| 10,000 | refine, shape splits | 5.61 | 1.05 | 0.45 | 0.41 |
+| 100,000 | create | 37.3 | 45.8 | 4.19 | 4.35 |
+| 100,000 | refine | 0.53 | 1.50 | 0.36 | 0.38 |
+| 100,000 | refine, shape splits | 1801 | 32.9 | 8.28 | 8.22 |
+| 581,012 | create | 184.1 | 230.6 | 21.7 | 21.6 |
+| 581,012 | refine | 0.89 | 9.50 | 1.52 | 1.43 |
 
-R's shape-split run took 30 minutes at 100,000 rows, so the full-size run skips shape splits. The compiled kernels cut `refine_dn`'s time several times over. `create_dn` barely moved, because its time goes into Rfast's distances and the closest-pair deletion rounds, which the kernels don't touch yet. The open problems below describe the plan for those.
+R's shape-split time at 100,000 rows comes from an earlier sitting. It took 30 minutes, so it wasn't run again, and the full-size runs skip shape splits. `create_dn` is about 10 times faster than before and 8.5 to 9 times faster than R. `refine_dn` beats R at 10,000 and 100,000 rows. On the full data it takes 1.5 seconds to R's 0.9, and the limitations below say why. Python 3.14 and 3.15 are within noise of each other, since nearly all the time is spent in compiled kernels, not in the interpreter.
 
-Peak memory was 2072, 2092 and 2183 MiB in R at the three sizes, and 1501, 1510 and 1560 MiB in Python now. That's the peak working set of the whole process, data load included. It hardly grows with the row count. The biggest object is the 10,000 by 10,000 distance matrix between the first-stage centers, which is the same size every time.
+Every run was pinned to one thread on each of the laptop's six performance cores, with Windows power throttling off, by `benchmarks/pin.py`. Unpinned, Windows sometimes put a run on an efficiency core, where the same kernel took 2.8 times as long, and one run could take twice as long as the next.
 
-They ran on my laptop (i7-13650HX, 16 GB, Windows 11). R was 4.6.1 with `datanugget` 1.5.0 and its reference BLAS. Python was 3.14.3 with numpy 2.5.3, scipy 1.18.1 and numba 0.67.0.
+Peak memory was 2072, 2092 and 2183 MiB in R at the three sizes, measured in an earlier sitting. In Python it was 1501, 1511 and 1559 MiB before and 887, 896 and 944 MiB now, with 3.15 within 2 MiB of 3.14. That's the peak working set of the whole process, data load included. It hardly grows with the row count. The biggest object is the 10,000 by 10,000 distance matrix between the first-stage centers, which is the same size every time. The compiled deletion rounds work on it in place, where the Python code before copied the surviving rows and columns every round.
+
+They ran on my laptop (i7-13650HX, 16 GB, Windows 11). R was 4.6.1 with `datanugget` 1.5.0 and its reference BLAS. Python was 3.14.3 and 3.15.0, each with numpy 2.5.3, scipy 1.18.1 and numba 0.68.0.
 
 Covertype data: Blackard, J. (1998). [Covertype](https://doi.org/10.24432/C50K5N) [Dataset]. UCI Machine Learning Repository. It's licensed under CC BY 4.0.
 
@@ -314,9 +319,9 @@ In the `WCluster` functions `Wpca` becomes `wpca`, `cluster.predict` becomes `cl
 - An integer seed or a NumPy `Generator` draws from NumPy, so the nuggets differ from R's for the same seed. Only `RDraws` gives R's draws, and it isn't exported from `datanuggets` yet.
 - NaN and infinite values in the data or the weights raise everywhere. R's behavior with them is recorded only for `cluster.predict` so far, so the rest keep raising until it is.
 - Labels must be whole numbers smaller than 1e15. Fractional, bool and text labels raise.
-- `create_dn` builds a `dn_num1` by `dn_num1` distance matrix in its second stage. At the default 10,000 that's 800 MB of float64, whatever the row count, and the process peaked near 1.5 GB on Covertype.
-- `create_dn` is slower than R at every Covertype size, and `refine_dn` without shape splits is slower than R at 100,000 rows and above.
-- numba compiles the kernels on first use and caches them. On my laptop, importing the package and making a first small call to each main function took 3.6 seconds with an empty cache and 0.65 seconds with a warm one. Where numba can't write its cache, every new process compiles again.
+- `create_dn` builds a `dn_num1` by `dn_num1` distance matrix in its second stage. At the default 10,000 that's 800 MB of float64, whatever the row count, and the process peaked near 0.9 GB on Covertype.
+- `refine_dn` without shape splits is slower than R on the full Covertype data, 1.5 seconds to 0.9. Two thirds of its time there goes to the long double means and covariances. R gets those from the x87 unit's hardware long double, and the port repeats them in 64-bit integer code.
+- numba compiles the kernels on first use and caches them. On my laptop, importing the package and making a first small call to each public function took 8.8 seconds with an empty cache and 0.9 seconds with a warm one on Python 3.14, and 8.3 and 0.9 seconds on 3.15. The cache is kept per Python version, so each new version compiles once. Where numba can't write its cache, every new process compiles again.
 - Windows has no `os.fork`, so the two tests of forked children run only on macOS and Linux.
 - It isn't on PyPI, and it needs Python 3.12 or newer with numba.
 
@@ -329,10 +334,10 @@ These are known and unsolved. Items 1 to 5 are tracked in the [R-compatibility r
 3. One-column `wpca` with `corr=True` waits on a decision. R's result there is a side effect of `diag()`, and both independent checks give the port's 1. Keeping the port's answer is the recommendation.
 4. R's behavior with NaN, NA and infinite values isn't recorded for `create_dn`, `refine_dn`, `create_dn_centers`, `arithmetic_complexity` or `get_dn_means`, so they keep raising until it is. The `WCluster` statistics need NA and NaN recorded separately before they can pass them through with R's payloads.
 5. A reference eigen solver needs approval. In the spike, R's own `Rlapack` reproduced R on all 420 rank-deficient `wpca` inputs, where scipy matched 9, on 100 of 100 refine cases against scipy's 63, and on all 43 `wpca` rotation and score cases against 16. The recommended option builds R's LAPACK sources with R's flags for Windows x64 first. It needs the R source and Rtools downloads, platform wheels in place of the pure-Python one, and a license review. Nothing was measured on Linux, macOS arm64 or another R version.
-6. The speed stopping rule fails. The design spec stops optimizing once no Python function takes more than 10% of wall time on Covertype at 100,000 rows. Under the profiler on the Mac mini, `create_dn` took 15.49 seconds, with 39.2% in Rfast's distance terms, 34.5% in the deletion rounds of `create_dn_centers` and 11.6% in the even and odd sums. `refine_dn` took 0.91 seconds, with four Hartigan-Wong functions at 12% to 17% each. The [follow-up plan](docs/plans/2026-09-30-speed-next-targets.md) compiles those three paths. A prototype of it, kept out of the repo, ran `create_dn` in 2.23 seconds and `refine_dn` in 0.32 seconds on the same machine with every output still matching R. The plan waits on review, and its file paths need updating to the new layout first.
+6. The speed work goes past the design spec's text in five places, which wait on a ruling. The stopping rule itself passes: no Python function takes more than 10% of wall time on Covertype, at 100,000 rows (5.8% for `create_dn`, 3.6% for `refine_dn`) or at full size (7.0% and 1.1%). The [follow-up plan](docs/plans/2026-09-30-speed-next-targets.md) lists the five. Each deletion round is compiled whole, marking loop included, because the profile flagged the function and not the loop. The surviving rows are kept as a list of row numbers rather than a mask, and a row's nearest neighbour is searched again only when it was deleted. The row minimum keeps four running minima instead of being vectorized, which gives the same first index. Stage 1 has always run on threads, where the spec says loky, and the kernels release the GIL, so with `n_jobs` above 1 its threads now run them at once. `DIST_BLOCK_ROWS` and `ASSIGN_BLOCK_ROWS` are gone, since the kernels make no numpy temporaries to bound.
 7. `Wkmeans`, `Whclust`, `DN.Wkmeans`, `DN.Whclust` and `optimal.DN` aren't ported.
 8. Some behavior isn't covered by a recorded case or a test:
-   - R hasn't recorded zero-column inputs or centers with no rows.
+   - R hasn't recorded zero-column inputs or centers with no rows. The compiled distance functions raise `ValueError` on both, and no public call reaches them.
    - A process that launches numba threads under GNU OpenMP and then forks, before it has ever imported the moments module, leaves the child without the hook that makes it run serially. Neither test machine has GNU OpenMP.
    - Some exact checks use `same_values`, which lets any NaN match any NaN, so a wrong NaN payload there wouldn't fail.
    - The `create_dn`, `create_dn_centers`, `refine_dn`, `kmeans` and Rfast tests compare with `assert_array_equal`, which can't tell -0.0 from 0.0. A wrong sign of zero there would pass the suite. For `create_dn` and `refine_dn` it would show when the parity tables are rebuilt.
@@ -349,6 +354,15 @@ uv run pytest -m slow
 ```
 
 The first runs the default suite. The second runs only the long fuzz of the compiled long double kernels.
+
+To run the suite on another Python, such as 3.15, give it its own environment under the ignored `tmp/` folder:
+
+```sh
+UV_PROJECT_ENVIRONMENT=tmp/venv315 uv sync --python 3.15
+tmp/venv315/Scripts/python -m pytest
+```
+
+That's the Windows path. On macOS and Linux it's `tmp/venv315/bin/python`. numba compiles every kernel again for a new Python version, so the first run there is slower.
 
 [docs/architecture.md](docs/architecture.md) shows where each part of the code, tests and fixtures lives, and where new work goes.
 

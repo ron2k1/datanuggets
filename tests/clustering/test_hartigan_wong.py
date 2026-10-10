@@ -2,10 +2,12 @@
 
 import numpy as np
 import pytest
+from numba.core.registry import CPUDispatcher
 
-from datanuggets._clustering.hartigan_wong import KMeansError, kmeans, kmns
+from datanuggets._clustering import kmnsjit
+from datanuggets._clustering.hartigan_wong import KMeansError, _kmns_py, kmeans, kmns
 from datanuggets._random.replay import ReplayDraws
-from rfixtures import load_group
+from rfixtures import load_group, same_bits
 
 KMNS = load_group("kmns")
 KMEANS = load_group("kmeans")
@@ -88,3 +90,61 @@ def test_kmeans_stops_where_r_stops(case):
     draws.assert_exhausted()
     assert str(err.value) == case.manifest["error"]
     assert list(err.value.warnings) == case.manifest["warnings"]
+
+
+def _same_kmns(got, want):
+    assert (got.ifault, got.iter) == (want.ifault, want.iter)
+    assert got.cluster == want.cluster
+    assert got.size == want.size
+    assert same_bits(got.centers, want.centers)
+    assert same_bits(got.withinss, want.withinss)
+
+
+@pytest.mark.parametrize("p", [1, 2, 5])
+@pytest.mark.parametrize("kind", ["grid", "normal"])
+def test_kmns_kernel_matches_the_python_port(kind, p):
+    """Starts that repeat a row or a value (empty clusters), tiny step budgets (ifault 2 and 4),
+    and k from 2 up to m and past it (ifault 3), on tied and untied data."""
+    rng = np.random.default_rng(p * 7 + len(kind))
+    faults = set()
+    for _ in range(300):
+        m = int(rng.integers(3, 60))
+        if kind == "grid":
+            a = rng.integers(0, 10, size=(m, p)).astype(float)
+        else:
+            a = rng.standard_normal((m, p))
+        k = int(rng.integers(2, min(8, m + 1) + 1))
+        repeats = k > m or rng.random() < 0.2
+        c = a[rng.integers(0, m, size=k) if repeats else rng.choice(m, size=k, replace=False)]
+        iter_max = int(rng.choice([1, 2, 10, 1000]))
+        max_qtran = int(rng.choice([1, 3, 50 * m], p=[0.15, 0.15, 0.7]))
+        want = _kmns_py(a, c, iter_max, max_qtran)
+        _same_kmns(kmns(a, c, iter_max, max_qtran), want)
+        faults.add(want.ifault)
+    assert faults == {0, 1, 2, 3, 4}
+
+
+def test_kmns_takes_any_layout_and_dtype():
+    rng = np.random.default_rng(3)
+    a = rng.integers(0, 9, size=(40, 6))
+    c = np.asfortranarray(a[:4].astype(float))
+    want = _kmns_py(a[:, ::2].astype(float), np.ascontiguousarray(c[:, ::2]), 50, 2000)
+    _same_kmns(kmns(a[:, ::2], c[:, ::2], 50, 2000), want)
+
+
+def test_kmns_rejects_mismatched_columns():
+    for a, c in ((np.ones((5, 3)), np.ones((2, 4))), (np.ones((5, 4)), np.ones((2, 3)))):
+        with pytest.raises(ValueError, match="columns"):
+            kmns(a, c, 10, 100)
+
+
+def test_kmns_read_only_data_runs_the_same_compiled_kernels():
+    case = max(RUNS, key=lambda c: c.array("x").size)
+    want = _kmns(case)
+    kernels = [k for k in vars(kmnsjit).values() if isinstance(k, CPUDispatcher)]
+    compiled = [len(k.signatures) for k in kernels]
+    x, c0 = case.array("x"), case.array("c0")
+    x.setflags(write=False)
+    c0.setflags(write=False)
+    _same_kmns(_kmns(case, x, c0), want)
+    assert [len(k.signatures) for k in kernels] == compiled  # no second signature to compile
