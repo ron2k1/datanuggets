@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import numbers
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -60,12 +61,15 @@ def _inches(value, name: str) -> float:
 
 def save(fig, path, *, width="single", height=None) -> Path:
     """Saves fig at width ("single", 3.5 inches, "double", 7, or inches) by height (inches,
-    default three quarters of the width) at 300 dpi, the format from the suffix. A tight
-    bounding box would change the size, so it's off whatever rcParams say."""
+    default three quarters of the width) at 300 dpi, the format from the suffix, which path
+    must have. A tight bounding box would change the size, so it's off whatever rcParams say."""
     w = _inches(width, "width")
     h = 0.75 * w if height is None else _inches(height, "height")
-    fig.set_size_inches(w, h)
     path = Path(path)
+    # matplotlib's own test: with nothing after the last dot it writes path.png instead
+    if not os.path.splitext(path)[1][1:]:
+        raise ValueError(f"path needs a suffix such as .pdf or .png for the format, got {path}")
+    fig.set_size_inches(w, h)
     with matplotlib.rc_context({"savefig.bbox": "standard"}):
         fig.savefig(path, dpi=DPI)
     return path

@@ -101,3 +101,13 @@ def test_save_rejects_bad_widths(tmp_path, bad):
     fig, _ = plt.subplots()
     with pytest.raises(ValueError):
         plot.save(fig, tmp_path / "f.pdf", width=bad)
+
+
+@pytest.mark.parametrize("name", ["f", "f."])
+def test_save_needs_a_suffix_for_the_format(tmp_path, name):
+    """matplotlib would write f.png in the default savefig.format, a file other than the path
+    save returns. The figure keeps its size and nothing is written."""
+    fig = plt.figure(figsize=(2, 1))
+    with pytest.raises(ValueError, match=r"^path needs a suffix such as \.pdf or \.png"):
+        plot.save(fig, tmp_path / name)
+    assert list(tmp_path.iterdir()) == [] and tuple(fig.get_size_inches()) == (2, 1)
