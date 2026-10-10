@@ -90,6 +90,41 @@ write_case("plot", "tree_hang", no_args, list(merge = grid$merge, height = grid$
   extra = list(scale_x_m1 = m1$scale_x, scale_y_m1 = m1$scale_y,
                scale_x_05 = h05$scale_x, scale_y_05 = h05$scale_y))
 
+# C_dend's hang is hang times the last height minus the first, not the range, and once that's
+# negative every leaf sits at 0. plot.hclust doesn't need sorted heights, so grid_dup's merges
+# drawn with the heights reversed (the last below the first) and with the last set to the first
+# (no hang while the range isn't 0) tell those rules apart
+rev_h <- grid; rev_h$height <- rev(grid$height)
+eq_h <- grid; eq_h$height[length(eq_h$height)] <- eq_h$height[1]
+d_rev <- dend_segments(rev_h)
+d_eq <- dend_segments(eq_h)
+stopifnot(!is.null(d_rev$segs), !is.null(d_eq$segs), grid$height[length(grid$height)] > grid$height[1])
+write_case("plot", "hang_heights", no_args, list(merge = grid$merge, order = grid$order,
+  height_rev = rev_h$height, segs_rev = d_rev$segs, height_eq = eq_h$height, segs_eq = d_eq$segs),
+  extra = list(scale_x_rev = d_rev$scale_x, scale_y_rev = d_rev$scale_y,
+               scale_x_eq = d_eq$scale_x, scale_y_eq = d_eq$scale_y))
+
+# R's pch = 16 disc as the pdf device draws it at its default 12 points: "x y m" and four Bezier
+# curves ("... c") around the center, whose extent gives the radius in points
+disc_radius <- function(cex) {
+  f <- tempfile(fileext = ".pdf")
+  pdf(f, width = 7, height = 5, compress = FALSE, useDingbats = FALSE)
+  plot(0, pch = 16, cex = cex, axes = FALSE, ann = FALSE)
+  dev.off()
+  lines <- readLines(f, warn = FALSE)
+  unlink(f)
+  lines <- lines[grepl("^ *(-?[0-9.]+ )+[mc]$", lines, useBytes = TRUE)]
+  p <- lapply(strsplit(trimws(lines), " +"), function(v) as.numeric(v[-length(v)]))
+  xy <- matrix(unlist(p), 2)
+  r <- (apply(xy, 1, max) - apply(xy, 1, min)) / 2
+  # Fail closed: one move and four curves, as wide as tall
+  stopifnot(length(lines) == 5L, lengths(p) == c(2L, 6L, 6L, 6L, 6L), abs(r[1] - r[2]) < 0.01)
+  r[[1]]
+}
+cex <- c(1, 0.5)
+write_case("plot", "pch16", no_args, list(cex = cex, radius = sapply(cex, disc_radius)),
+           extra = list(pointsize = 12))
+
 n3 <- tree_of("tests/fixtures/whclust/n3")
 nan_h <- n3; nan_h$height[1] <- NaN
 unsorted <- n3; unsorted$height <- rev(n3$height) + c(0, 1)
@@ -119,8 +154,8 @@ recipe <- function(W) {
 }
 w <- read_array("tests/fixtures/dn_wcluster/dn", "weights")
 ties <- c(1, 1, 1, 2, 2, 5, 5, 5, 9, 9)
-# Nugget weights are counts, whose sum is exact in any order. mtcars' wt isn't, so its t shows
-# whether the sum is R's long double one
+# Nugget weights are counts, whose sum is exact in any order. mtcars' wt isn't, so its t tells
+# R's sum from numpy's pairwise one. A plain left-to-right double sum gives the same t here
 wt <- read_array("tests/fixtures/wstats/mtcars_carb_wt", "w")
 a <- recipe(w); b <- recipe(ties); d <- recipe(wt)
 write_case("plot", "colors", no_args, list(w = w, t = a$t, w_ties = ties, t_ties = b$t,
