@@ -108,8 +108,11 @@ def main(size: str) -> int:
     x = cr.array("x")
     warm_up(x)
     refs = kernel_refs()
+    # One wrapper per kernel module, shared by every reference to it. cProfile keys its stats by
+    # file, line and name, which two wrappers of one kernel share, so one would overwrite the other.
+    wrapped = {jit.__name__: Booked(jit) for _, _, jit in refs}
     for mod, name, jit in refs:
-        setattr(mod, name, Booked(jit))
+        setattr(mod, name, wrapped[jit.__name__])
     try:
         (dn, secs, extra), stats = profiled(
             lambda: run(lambda d: create_dn(x, seed=d), cr, stage_lines(cr.manifest["messages"]))
