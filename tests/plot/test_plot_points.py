@@ -17,6 +17,13 @@ DN = {c.id: c for c in load_group("dn_wcluster")}["dn"]
 WKMEANS = {c.id: c for c in load_group("wkmeans")}
 
 
+def r_disc(cex):
+    """R's pch = 16 disc across, in points, at cex on its pdf device's default 12 points, as
+    R's own PDF drew it."""
+    c = CASES["pch16"]
+    return 2 * dict(zip(c.array("cex"), c.array("radius")))[cex]
+
+
 def drawn(ax, gid):
     (c,) = [c for c in ax.collections if c.get_gid() == gid]
     return c
@@ -68,7 +75,7 @@ def test_nuggets_draws_r_colors_and_size():
     pts = drawn(ax, "nuggets")
     assert np.array_equal(pts.get_offsets(), dn.centers[:, :2])
     assert [to_hex(c).upper() for c in pts.get_facecolor()] == CASES["colors"].manifest["hex"]
-    assert np.all(pts.get_sizes() == (9 * 0.5) ** 2)
+    assert np.allclose(pts.get_sizes(), r_disc(0.5) ** 2, rtol=1e-12, atol=0)
 
 
 def test_nuggets_by_labels_and_dims():
@@ -95,7 +102,8 @@ def test_clusters_sizes_and_colors():
     assert [to_hex(c) for c in pts.get_facecolor()] == want
     _, ax = plt.subplots()
     clusters(x, labels, w=w, size="log", ax=ax)
-    assert np.allclose(drawn(ax, "points").get_sizes(), np.where(w > 1, (9 * np.log(w)) ** 2, 0))
+    want = np.where(w > 1, (r_disc(1.0) * np.log(w)) ** 2, 0)
+    assert np.allclose(drawn(ax, "points").get_sizes(), want, rtol=1e-12, atol=0)
 
 
 def test_centers_follow_the_labels_present():

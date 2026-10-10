@@ -90,12 +90,12 @@ Then `C_dend` draws, and the port copies it:
 
 - It draws `x[:, dims]`, the row with label `l` in `colors[l % len(colors)]`. `colors` defaults to the current matplotlib color cycle. `colors=R_PALETTE` gives R's `palette()` colors, and since the port's labels are R's minus one, label `l` then gets R's `col = l + 1`.
 - `size="area"` (the default) makes each point's area proportional to its weight, `s = 6 + 400 * w / max(w)` in points squared, as the parity guide's plot did. Without `w` every point gets `s = 20`. A negative or NaN weight raises `ValueError`.
-- `size="log"` is R's rule. R draws `pch = 16` as a circle of radius 0.375 times `cex` times the 12 point font size, 4.5 points at `cex = 1`, so `s = (9 * log(w))^2`. A point whose `log(w)` isn't positive gets size 0, as it vanishes in R.
+- `size="log"` is R's rule. R draws `pch = 16` as a circle of radius 0.375 times `cex` times half the character height, which the pdf device makes 1.2 times its 12 points, so 2.7 points at `cex = 1` and `s = (5.4 * log(w))^2`. The review caught the first design's 4.5 points, which is grid's rule, and the `pch16` fixture reads the disc back from R's PDF. A point whose `log(w)` isn't positive gets size 0, as it vanishes in R.
 - `centers`, one row per cluster in label order, are drawn above the points as stars in their cluster's color with a white edge. A black edge, as first designed, hid cluster 0's star under the paper style or R's palette, which both start with black.
 
 The examples draw centers as big discs (`pch = 16, cex = 5`, `Wkmeans`) or asterisks (`pch = 8, cex = 5`, `DN.Wkmeans`). The port's stars with a white edge stay visible over points of the same color, black ones included.
 
-`nuggets` draws a `DataNuggets`' centers, `pch = 16, cex = 0.5` as in the `DN.Whclust` and `DN.Wkmeans` examples, so `s = (9 * 0.5)^2`:
+`nuggets` draws a `DataNuggets`' centers, `pch = 16, cex = 0.5` as in the `DN.Whclust` and `DN.Wkmeans` examples, so `s = (5.4 * 0.5)^2`:
 
 - With `labels`, nugget `j` is colored like `clusters`.
 - Without, it uses the examples' weight colors, `col = sapply(w_trans, function(t) rgb(0, min(t, 1), 0))` with `w_trans = w / sum(w)` and then `w_trans / quantile(w_trans, 0.8)`. `sum` is R's long double sum and `quantile` R's type 7, through `r_sum` and `r_quantile7`, since numpy's `linear` quantile rounds differently. `rgb` maps a fraction to `int(255 * x + 0.5)`. Lighter green means more weight. All-zero weights stop in `quantile` ("missing values and NaN's not allowed if 'na.rm' is FALSE"), and a quantile of 0 with zero weights makes a 0 / 0 that stops in `rgb` ("color intensity nan, not in [0,1]"). The port raises both messages.

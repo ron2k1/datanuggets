@@ -7,7 +7,9 @@ import numpy as np
 
 from datanuggets._compat.arithmetic import r_quantile7, r_sum
 
-PCH16 = 9.0  # R's pch = 16 at cex 1: a disc 0.375 * 12 pt in radius, so 9 pt across
+# R's pch = 16 at cex 1, in points across: radius 0.375 times half the character height, which
+# R's pdf device makes 1.2 times its 12 points, so 2.7 pt, as R's own PDF draws it
+PCH16 = 5.4
 NUGGET_CEX = 0.5  # the help examples' nugget size
 CENTER_SIZE = 120.0  # star markers for cluster centers, points squared
 PLAIN_SIZE = 20.0  # a point without a weight
