@@ -210,8 +210,9 @@ def _lloyd_labels(yy: np.ndarray) -> np.ndarray:
 
 def _single_py(x, w, y, K, counts=None):
     """WCluster's Wkmeans_single from init's labels y, statement for statement. Returns R's
-    (uu0, yy) and the passes R made, one "Iteration l" message each. counts gains revert, fixed (a Lloyd step that changed nothing before step 20,
-    the kernel's shortcut), stale_decides, recreate, tb_na, nan_test and gap."""
+    (uu0, yy) and the passes R made, one "Iteration l" message each. counts gains revert, fixed
+    (a Lloyd step that changed nothing before step 20, the kernel's shortcut), stale_decides,
+    recreate, tb_na, nan_test and gap."""
     n = x.shape[0]
     k = int(y.max())
     tb = _table(y)
