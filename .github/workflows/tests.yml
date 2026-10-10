@@ -1,0 +1,37 @@
+# The test suite on x86 Linux, which the laptop (Windows x86) and the mini (macOS arm64) don't
+# cover. The tests read the recorded R fixtures, so R isn't installed here.
+name: tests
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.14", "3.15"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --locked
+      - name: Default tier
+        run: uv run pytest -q -p no:cacheprovider -n 2 -m "not slow"
+      - name: Slow tier
+        run: uv run pytest -q -p no:cacheprovider -n 2 -m slow
