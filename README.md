@@ -287,6 +287,27 @@ Peak memory was 2072, 2092 and 2183 MiB in R at the three sizes, measured in an 
 
 They ran on my laptop (i7-13650HX, 16 GB, Windows 11). R was 4.6.1 with `datanugget` 1.5.0 and its reference BLAS. Python was 3.14.3 and 3.15.0, each with numpy 2.5.3, scipy 1.18.1 and numba 0.68.0.
 
+### WCluster
+
+`whclust` and `wkmeans` ran on the first n rows of R's `quakes` with the weights 1, 3, 7, 2 repeating, `wkmeans` with k = 4 and R's draws replayed. These are the workloads behind the spec's speed gates. R's `Whclust` was timed once, since it takes minutes. Everything else is the best of 3 when a run takes under a second. Seconds, on the laptop and on a Mac mini (Apple M4, macOS arm64, R 4.6.1, Python 3.14.3):
+
+| Workload | R, laptop | Python, laptop | R, mini | Python, mini |
+| --- | --- | --- | --- | --- |
+| `whclust`, 200 rows | 102.2 | 0.0107 | 40.0 | 0.0070 |
+| `whclust`, 400 rows | 534.2 | 0.0454 | 166.2 | 0.0278 |
+| `whclust`, 800 rows | 2951 | 0.186 | 682.9 | 0.111 |
+| `wkmeans`, 100 rows | 2.42 | 0.0017 | 0.82 | 0.0011 |
+| `wkmeans`, 250 rows | 8.25 | 0.0057 | 3.00 | 0.0046 |
+| `wkmeans`, 500 rows | 4.70 | 0.0081 | 2.03 | 0.0068 |
+| `wkmeans`, 1,000 rows | 10.06 | 0.0218 | 4.33 | 0.0189 |
+| `whclust`, 2,000 Covertype rows | not run | 1.34 | not run | 0.97 |
+| `wkmeans`, 10,000 Covertype rows | not run | 5.00 | not run | 5.38 |
+| `dn_whclust`, 2,000 nuggets of 100,000 Covertype rows | not run | 1.49 | not run | 1.03 |
+
+The laptop's R times run high. The laptop had between 0.2 and 1.5 GB free while R ran, so R spent part of the time waiting on memory, and its `Whclust` at 800 rows took 49 minutes where the mini took 11. So the laptop's ratios, 9,500 to 15,800 times for `whclust` and 460 to 1,450 for `wkmeans`, are higher than a quiet machine gives. The mini's, 5,700 to 6,200 and 230 to 730, are the fairer measure. On both machines the times clear every gate's limit: `whclust` under a second at 800 rows and `wkmeans` at least 50 times faster at each n.
+
+On the laptop every output was bit for bit R's. On the mini, R's merges, orders and labels were the port's, but some heights and centers differ in the last bits, under 1e-15 relative. R on arm64 macOS has no 80-bit long double, so its sums round to double at every step, while the port reproduces x86 R's 80-bit sums everywhere. The gates that also ask for R's exact bits fail there for that reason only. R wasn't run on the Covertype rows, whose gates are plain time limits. By its growth from 400 to 800 rows, R's `Whclust` on 2,000 would take about 75 minutes on the mini.
+
 Covertype data: Blackard, J. (1998). [Covertype](https://doi.org/10.24432/C50K5N) [Dataset]. UCI Machine Learning Repository. It's licensed under CC BY 4.0.
 
 ## Differences from R
@@ -461,7 +482,7 @@ Rscript benchmarks/wcluster.R wkmeans
 uv run python benchmarks/wcluster.py
 ```
 
-`whclust800` takes about 22 minutes in R. The Python script needs the Covertype file above and the `covertype.R 100000` outputs for its `dn_whclust` row. It prints a table and one PASS or FAIL line per speed gate, and exits with 1 on a FAIL.
+`whclust800` is the long one in R: 11 minutes on the M4 mini, and 49 on the laptop when it was short of memory. The Python script needs the Covertype file above and the `covertype.R 100000` outputs for its `dn_whclust` row. It prints a table and one PASS or FAIL line per speed gate, and exits with 1 on a FAIL.
 
 ## Citing the method
 
