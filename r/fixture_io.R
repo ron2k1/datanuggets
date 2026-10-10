@@ -116,7 +116,8 @@ snan_big <- from_bits("7ff4000000000000")
 capture_draws <- function(expr) {
   .capture$draws <- list()
   trace("sample.int", print = FALSE, where = baseenv(), exit = quote(
-    .capture$draws[[length(.capture$draws) + 1L]] <- list(n = n, size = size, value = returnValue())
+    .capture$draws[[length(.capture$draws) + 1L]] <- list(n = n, size = size, replace = replace,
+                                                          value = returnValue())
   ))
   on.exit(untrace("sample.int", where = baseenv()), add = TRUE)
   value <- expr
@@ -140,13 +141,24 @@ capture_centers <- function(expr) {
 # Fail closed if trace() is not seeing calls made from inside base R.
 local({
   chk <- capture_draws({ set.seed(1); sample(10, 10) })
-  stopifnot(length(chk$draws) == 1L, identical(as.integer(chk$draws[[1]]$value), as.integer(chk$value)))
+  stopifnot(length(chk$draws) == 1L, identical(as.integer(chk$draws[[1]]$value), as.integer(chk$value)),
+            identical(chk$draws[[1]]$replace, FALSE))
+  chk <- capture_draws({ set.seed(1); sample(3, 5, replace = TRUE) })
+  stopifnot(length(chk$draws) == 1L, isTRUE(chk$draws[[1]]$replace),
+            identical(as.integer(chk$draws[[1]]$value), as.integer(chk$value)))
 })
 
 
-# The draws capture_draws recorded, as the three arrays tests/rfixtures.py reads back.
-draw_arrays <- function(draws) list(
-  draw_n = as.integer(vapply(draws, function(d) as.numeric(d$n), numeric(1))),
-  draw_size = as.integer(vapply(draws, function(d) as.numeric(d$size), numeric(1))),
-  draw_values = as.integer(unlist(lapply(draws, function(d) d$value)))
-)
+# The draws capture_draws recorded, as the arrays tests/rfixtures.py reads back. draw_replace
+# (1 for sample.int(n, size, replace = TRUE)) is written only when some draw used replace, so a
+# fixture group without replace draws records the same files as before it existed.
+draw_arrays <- function(draws) {
+  out <- list(
+    draw_n = as.integer(vapply(draws, function(d) as.numeric(d$n), numeric(1))),
+    draw_size = as.integer(vapply(draws, function(d) as.numeric(d$size), numeric(1))),
+    draw_values = as.integer(unlist(lapply(draws, function(d) d$value)))
+  )
+  rep <- vapply(draws, function(d) isTRUE(d$replace), logical(1))
+  if (any(rep)) out$draw_replace <- as.integer(rep)
+  out
+}
