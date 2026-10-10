@@ -32,6 +32,7 @@ src/datanuggets/
   nuggets/             the datanugget ports
     create.py          create_dn (create.DN)
     centers.py         create_dn_centers (create.DNcenters)
+    centersjit.py      create.DNcenters' deletion rounds compiled, over one distance matrix
     refine.py          refine_dn (refine.DN)
     means.py           get_dn_means (getDN.means)
     complexity.py      arithmetic_complexity (AC)
@@ -46,6 +47,7 @@ src/datanuggets/
     linalg.py          %*% and eigen() of a symmetric matrix
     moments.py         every nugget's colMeans and cov in one compiled call, with its threading
     rfast.py           Rfast's Dist and dista, Armadillo's accumulation order, libstdc++'s sort
+    rfastjit.py        Dist, dista and dista's nearest center compiled, in rfast's order
     ldouble.py         x87 long double replayed with Python integers, the reference
     ldjit.py           the same long double arithmetic compiled with numba
     _compiled.py       the numba decorator every kernel goes through, and read-only input views
@@ -57,6 +59,7 @@ src/datanuggets/
     seeds.py           as_draws, what seed= becomes
   _clustering/         algorithms the workflows call internally
     hartigan_wong.py   R's kmeans with the Hartigan-Wong algorithm
+    kmnsjit.py         kmns.f compiled, statement for statement with hartigan_wong's port
   create.py  refine.py  centers.py  means.py  complexity.py  _draws.py
                        old import paths that only forward (see Retained import paths)
 ```
