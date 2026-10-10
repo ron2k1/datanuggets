@@ -91,9 +91,9 @@ Then `C_dend` draws, and the port copies it:
 - It draws `x[:, dims]`, the row with label `l` in `colors[l % len(colors)]`. `colors` defaults to the current matplotlib color cycle. `colors=R_PALETTE` gives R's `palette()` colors, and since the port's labels are R's minus one, label `l` then gets R's `col = l + 1`.
 - `size="area"` (the default) makes each point's area proportional to its weight, `s = 6 + 400 * w / max(w)` in points squared, as the parity guide's plot did. Without `w` every point gets `s = 20`. A negative or NaN weight raises `ValueError`.
 - `size="log"` is R's rule. R draws `pch = 16` as a circle of radius 0.375 times `cex` times the 12 point font size, 4.5 points at `cex = 1`, so `s = (9 * log(w))^2`. A point whose `log(w)` isn't positive gets size 0, as it vanishes in R.
-- `centers`, one row per cluster in label order, are drawn above the points as stars in their cluster's color with a black edge.
+- `centers`, one row per cluster in label order, are drawn above the points as stars in their cluster's color with a white edge. A black edge, as first designed, hid cluster 0's star under the paper style or R's palette, which both start with black.
 
-The examples draw centers as big discs (`pch = 16, cex = 5`, `Wkmeans`) or asterisks (`pch = 8, cex = 5`, `DN.Wkmeans`). The port's stars with a black edge stay visible over points of the same color.
+The examples draw centers as big discs (`pch = 16, cex = 5`, `Wkmeans`) or asterisks (`pch = 8, cex = 5`, `DN.Wkmeans`). The port's stars with a white edge stay visible over points of the same color, black ones included.
 
 `nuggets` draws a `DataNuggets`' centers, `pch = 16, cex = 0.5` as in the `DN.Whclust` and `DN.Wkmeans` examples, so `s = (9 * 0.5)^2`:
 

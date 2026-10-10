@@ -8,7 +8,7 @@ from matplotlib.colors import to_hex
 
 from datanuggets import DataNuggets, wkmeans
 from datanuggets._random.r_draws import RDraws
-from datanuggets.plot import R_PALETTE, clusters, nuggets
+from datanuggets.plot import OKABE_ITO, R_PALETTE, clusters, nuggets
 from datanuggets.plot.points import _rgb_green, _weight_fractions, weight_colors
 from rfixtures import assert_same_values, load_group
 
@@ -108,6 +108,16 @@ def test_centers_follow_the_labels_present():
     stars = drawn(ax, "centers")
     assert np.array_equal(stars.get_offsets(), centers)
     assert [to_hex(c) for c in stars.get_facecolor()] == [to_hex(R_PALETTE[v]) for v in (0, 2, 3)]
+
+
+def test_center_stars_stand_out_from_their_own_points():
+    """OKABE_ITO and R_PALETTE start with black, where a black edge would hide the star."""
+    for palette in (OKABE_ITO, R_PALETTE):
+        _, ax = plt.subplots()
+        clusters(np.zeros((3, 2)), [0, 1, 1], centers=np.zeros((2, 2)), colors=palette, ax=ax)
+        stars = drawn(ax, "centers")
+        assert to_hex(stars.get_facecolor()[0]) == "#000000"
+        assert {to_hex(c) for c in stars.get_edgecolor()} == {"#ffffff"}
 
 
 @pytest.mark.parametrize("case_id", ["gap", "iris_k3"])

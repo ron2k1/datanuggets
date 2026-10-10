@@ -102,7 +102,7 @@ def clusters(x, labels, *, w=None, centers=None, dims=(0, 1), size="area", color
     """The Whclust and Wkmeans examples' plot(x, col = labels) with points(centers): the rows of
     x on columns dims, label l in colors[l % len(colors)] (the color cycle by default, R_PALETTE
     for R's), sized by w (see size), and centers, one row per label present in label order, as
-    stars in their cluster's color. Returns the Axes."""
+    stars in their cluster's color with a white edge. Returns the Axes."""
     x = _matrix(x)
     n, p = x.shape
     i, j = _dims(dims, p)
@@ -124,7 +124,7 @@ def clusters(x, labels, *, w=None, centers=None, dims=(0, 1), size="area", color
             s=CENTER_SIZE,
             marker="*",
             c=_label_colors(present, palette),
-            edgecolors="black",
+            edgecolors="white",  # OKABE_ITO and R_PALETTE start with black
             linewidths=0.6,
             zorder=3,
             gid="centers",
