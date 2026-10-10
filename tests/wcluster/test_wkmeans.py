@@ -185,6 +185,24 @@ def test_arguments_stop_where_r_stops(row, fn):
         assert (go().labels + 1).tolist() == row["labels"]
 
 
+def test_replayed_draws_give_rs_error_for_any_n_jobs():
+    # R's nan_stop drew only start 1, which stops in its refinement, so with three starts the
+    # threaded path runs out of replayed draws in start 2's init. R's error still comes first.
+    case = next(c for c in STOPPED if c.id == "nan_stop")
+    for n_jobs in (1, 3):
+        with pytest.raises(ValueError, match=re.escape(case.manifest["error"])):
+            wk._wkmeans(
+                case.array("x"),
+                case.args["k"],
+                w=case.array("w"),
+                centers=None,
+                num_init=3,
+                max_iter=case.args["max_iter"],
+                seed=ReplayDraws(case.draws()),
+                n_jobs=n_jobs,
+            )
+
+
 @pytest.mark.parametrize("case", RETURNED, ids=_ids(RETURNED))
 def test_wkmeans_matches_r_and_uses_r_draws(case):
     trace = []

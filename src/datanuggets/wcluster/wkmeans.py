@@ -18,6 +18,7 @@ import numpy as np
 from joblib import Parallel, delayed
 
 from datanuggets._compat._compiled import frozen
+from datanuggets._random.replay import ReplayMismatch
 from datanuggets._random.seeds import as_draws
 from datanuggets._validate import as_matrix, as_weights, check_n_jobs
 from datanuggets.result import WkmeansResult
@@ -327,8 +328,9 @@ def wkmeans(
     this raises ValueError with R's message. Where R would draw forever (at least k but fewer
     than 2k rows, fewer than k distinct (row, weight) pairs, or MAX_STARTS starts that never
     reach k clusters), this raises ValueError. n_jobs refines the starts on threads and never
-    changes the result. Arguments after k are keyword-only, since R's order puts centers before
-    the weights.
+    changes the result. With n_jobs above 1 every start is drawn before any is refined, so when
+    a start stops, a numpy Generator given as seed has drawn the later starts too. Arguments
+    after k are keyword-only, since R's order puts centers before the weights.
     """
     return _wkmeans(
         x, k, w=w, centers=centers, num_init=num_init, max_iter=max_iter, seed=seed, n_jobs=n_jobs
@@ -363,7 +365,8 @@ def _wkmeans(x, k, *, w, centers, num_init, max_iter, seed, n_jobs, trace=None) 
     # One start at a time is R's order, which replayed draws need: a start that stops R leaves
     # later starts undrawn. With threads every start is drawn first, then refined, and the first
     # error in start order is raised, which is R's, since in R a start's own init comes after
-    # every earlier start's refinement.
+    # every earlier start's refinement. So an init error waits, R's or a ReplayMismatch from
+    # draws R never made.
     results, init_error = [], None
     if n_jobs == 1 or num_init == 1:
         for _ in range(num_init):
@@ -376,7 +379,7 @@ def _wkmeans(x, k, *, w, centers, num_init, max_iter, seed, n_jobs, trace=None) 
         try:
             for _ in range(num_init):
                 starts.append(_init(n, k, centers, draws, assign, wmean_of))
-        except ValueError as e:
+        except (ValueError, ReplayMismatch) as e:
             init_error = e
         refined = Parallel(n_jobs=n_jobs, prefer="threads")(delayed(refine)(s) for s in starts)
         results = [(s, *r) for s, r in zip(starts, refined, strict=True)]
