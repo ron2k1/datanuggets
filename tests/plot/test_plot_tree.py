@@ -17,12 +17,12 @@ NONFINITE = [c for c in TREES if c.manifest["nonfinite"] and not c.manifest["plo
 DRAWN = [c for c in TREES if c not in REFUSED and c not in NONFINITE]
 
 
-def port_tree(case):
+def port_tree(case, height="height"):
     m = case.array("merge").astype(np.int64)
     n = m.shape[0] + 1
     return WhclustResult(
         np.where(m < 0, -m - 1, n + m - 1),
-        case.array("height"),
+        case.array(height),
         case.array("order").astype(np.int64) - 1,
     )
 
@@ -57,6 +57,23 @@ def test_hang_matches_r(hang, suffix):
     m = case.manifest
     assert_r_lines(
         segments(ax), case.array(f"segs_{suffix}"), m[f"scale_x_{suffix}"], m[f"scale_y_{suffix}"]
+    )
+
+
+@pytest.mark.parametrize("heights", ["rev", "eq"])
+def test_hang_is_the_last_height_minus_the_first(heights):
+    """R hangs leaves by hang times the last height minus the first, not the range, and puts them
+    at 0 once that's negative. R drew grid_dup's merges with the heights reversed, so the last is
+    below the first, and with the last set to the first, so there's no hang but a range."""
+    case = CASES["hang_heights"]
+    _, ax = plt.subplots()
+    dendrogram(port_tree(case, f"height_{heights}"), labels=False, ax=ax)
+    m = case.manifest
+    assert_r_lines(
+        segments(ax),
+        case.array(f"segs_{heights}"),
+        m[f"scale_x_{heights}"],
+        m[f"scale_y_{heights}"],
     )
 
 
