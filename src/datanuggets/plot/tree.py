@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.collections import LineCollection
 
-from datanuggets.wcluster.cutree import r_merge
+from datanuggets.wcluster.cutree import INT_EDGE, NA_STOP, r_merge
 
 BAD_INPUT = "invalid dendrogram input"  # C_dend's and C_dendwindow's one message
 # .validity.hclust's seq_len(n - 2) for a tree with no merges
@@ -23,8 +23,14 @@ def _r_merge_checked(tree) -> np.ndarray:
     merge = np.asarray(tree.merge)
     if merge.ndim != 2 or merge.shape[1] != 2:
         raise ValueError("invalid dendrogram")
-    if not np.issubdtype(merge.dtype, np.integer) and not np.array_equal(merge, np.trunc(merge)):
+    # any(as.integer(merge) != merge) on R's merge in doubles: TRUE once an entry as.integer can
+    # hold is fractional, and otherwise NA for NaN, Inf or an entry at 2^31 or beyond
+    rf = r_merge(merge, float)
+    held = np.isfinite(rf) & (np.abs(rf) < INT_EDGE)
+    if np.any(held & (rf != np.trunc(rf))):
         raise ValueError("'merge' component in dendrogram must be integer")
+    if not held.all():
+        raise ValueError(NA_STOP)
     n1 = merge.shape[0]
     n = n1 + 1
     if np.size(tree.height) != n1:
@@ -33,7 +39,7 @@ def _r_merge_checked(tree) -> np.ndarray:
         raise ValueError("'order' is of wrong length")
     if n1 == 0:
         raise ValueError(NO_MERGE_STOP)
-    rm = r_merge(merge.astype(np.int64))
+    rm = rf.astype(np.int64)
     want = np.concatenate([np.arange(-n, 0), np.arange(1, n - 1)])
     if not np.array_equal(np.sort(rm, axis=None), want):
         raise ValueError("'merge' matrix has invalid contents")

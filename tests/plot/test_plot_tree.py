@@ -113,6 +113,42 @@ def test_stops_match_r():
         assert str(exc.value) == e[key], key
 
 
+NOT_INTEGER = "'merge' component in dendrogram must be integer"
+NA_IF = "missing value where TRUE/FALSE needed"
+
+
+@pytest.mark.parametrize(
+    ("x", "y", "message"),
+    [
+        (-1, np.nan, NA_IF),
+        (-1, np.inf, NA_IF),
+        (-1, -np.inf, NA_IF),
+        (-1, 2.0**31, NA_IF),
+        (-1, 2.0**31 - 1, "'merge' matrix has invalid contents"),
+        (-1, 3e9 + 0.5, NA_IF),
+        (-1.5, np.nan, NOT_INTEGER),
+        (-1.5, np.inf, NOT_INTEGER),
+    ],
+)
+def test_merge_entries_stop_like_r(x, y, message):
+    """.validity.hclust tests any(as.integer(merge) != merge). A fractional entry as.integer can
+    hold gives TRUE, so it wins, and otherwise NaN, Inf or an entry at 2^31 or beyond gives NA.
+    R's merge is rbind(c(x, y), c(-3, 1)) for three rows, each stop checked by hand on R 4.6.1."""
+    rm = np.array([[x, y], [-3.0, 1.0]])
+    merge = np.where(rm < 0, -rm - 1, rm + 2)  # R's -k is row k - 1 and its cluster j is j + 2
+    tree = WhclustResult(merge, np.array([1.0, 2.0]), np.array([2, 0, 1]))
+    with pytest.raises(ValueError) as e:
+        dendrogram(tree)
+    assert str(e.value) == message
+
+
+def test_a_fraction_beside_a_huge_entry_is_not_integer_like_r():
+    merge = np.array([[0.0, 3e9 + 2], [2.0, 3.5]])  # R's rbind(c(-1, 3e9), c(-3, 1.5))
+    tree = WhclustResult(merge, np.array([1.0, 2.0]), np.array([2, 0, 1]))
+    with pytest.raises(ValueError, match=f"^{NOT_INTEGER}$"):
+        dendrogram(tree)
+
+
 def test_leaf_labels():
     tree = port_tree(CASES["tree_n3"])
     _, ax = plt.subplots()

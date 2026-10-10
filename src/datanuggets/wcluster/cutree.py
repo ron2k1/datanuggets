@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
+from numpy.typing import DTypeLike
 
 from datanuggets.result import WhclustResult
 
@@ -12,13 +13,13 @@ from datanuggets.result import WhclustResult
 NA_STOP = "missing value where TRUE/FALSE needed"
 # cutree's h = NaN: which.max of all NA is empty, so k is empty and colnames<- fails
 H_NAN_STOP = "length of 'dimnames' [2] not equal to array extent"
-_INT_EDGE = 2.0**31  # as.integer gives NA at or beyond +-2^31
+INT_EDGE = 2.0**31  # as.integer gives NA at or beyond +-2^31
 
 
-def r_merge(merge: np.ndarray) -> np.ndarray:
-    """R's merge numbering from the port's: row a below n is -(a + 1), and the cluster merge s
-    made is s + 1."""
-    m = np.asarray(merge, dtype=np.int64)
+def r_merge(merge: np.ndarray, dtype: DTypeLike = np.int64) -> np.ndarray:
+    """R's merge numbering from the port's, in dtype: row a below n is -(a + 1), and the cluster
+    merge s made is s + 1."""
+    m = np.asarray(merge, dtype=dtype)
     n = m.shape[0] + 1
     return np.where(m < n, -(m + 1), m - n + 1)
 
@@ -32,7 +33,7 @@ def _scalar(v, name: str) -> float:
 def _k(k, n: int) -> int:
     """as.integer(k), then cutree's range check."""
     k = _scalar(k, "k")
-    if math.isnan(k) or k >= _INT_EDGE or k <= -_INT_EDGE:
+    if math.isnan(k) or k >= INT_EDGE or k <= -INT_EDGE:
         raise ValueError(NA_STOP)
     k = int(k)  # truncates toward zero, as as.integer does
     if k < 1 or k > n:
