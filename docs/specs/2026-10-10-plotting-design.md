@@ -124,7 +124,7 @@ Eigenvectors are defined up to sign. As in the parity guide, component `j` is fl
 
 `save(fig, path, width="single", height=None)` sets the figure to 3.5 inches wide (`"single"`, one journal column), 7.0 (`"double"`) or a number of inches. `height` defaults to 0.75 times the width. It saves at 300 dpi without a tight bounding box, which would change the size, and returns the path. The format comes from the suffix. It doesn't create folders.
 
-`OKABE_ITO` is `#000000, #E69F00, #56B4E9, #009E73, #F0E442, #0072B2, #D55E00, #CC79A7`. `R_PALETTE` is R 4's default `palette()`: `black, #DF536B, #61D04F, #2297E6, #28E2E5, #CD0BBC, #F5C710, gray62`.
+`OKABE_ITO` is `#000000, #E69F00, #56B4E9, #009E73, #F0E442, #0072B2, #D55E00, #CC79A7`. `R_PALETTE` is R 4's default `palette()`, `black, #DF536B, #61D04F, #2297E6, #28E2E5, #CD0BBC, #F5C710, gray62`, given as the hex R's `col2rgb` reads them as, since matplotlib doesn't know R's names such as `gray62`: `#000000, #DF536B, #61D04F, #2297E6, #28E2E5, #CD0BBC, #F5C710, #9E9E9E`.
 
 ## 8. Errors
 
