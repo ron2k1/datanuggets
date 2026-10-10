@@ -1,9 +1,10 @@
 """Hartigan-Wong k-means as R's stats::kmeans runs it.
 
-kmns() is a line-by-line port of R's kmns.f (Hartigan and Wong 1979, algorithm AS 136, with
-R's changes). Every floating-point operation happens in the Fortran's order, in double, so from
-the same starting centers the clusters, centers and within-cluster sums of squares match R bit
-for bit. kmeans() adds what stats::kmeans does around it: the random starts, the nstart
+_HW is a line-by-line port of R's kmns.f (Hartigan and Wong 1979, algorithm AS 136, with R's
+changes). Every floating-point operation happens in the Fortran's order, in double, so from the
+same starting centers the clusters, centers and within-cluster sums of squares match R bit for
+bit. kmns() runs the same operations compiled, in kmnsjit, and _HW is the reference it's
+tested against. kmeans() adds what stats::kmeans does around it: the random starts, the nstart
 restarts, and R's errors and warnings.
 """
 
@@ -14,11 +15,13 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 
+from datanuggets._clustering import kmnsjit as _kmnsjit
+from datanuggets._compat._compiled import frozen
 from datanuggets._compat.arithmetic import r_sum
 from datanuggets._compat.indexing import unique_first
 from datanuggets._random.interfaces import Draws
 
-BIG = float(np.float32(1e30))  # kmns.f: DATA BIG /1.E30/, a REAL constant widened to double
+BIG = _kmnsjit.BIG  # kmns.f: DATA BIG /1.E30/, a REAL constant widened to double
 _INT_MAX = 2**31 - 1
 _QTRAN_STEPS_PER_ROW = 50  # kmeans(): isteps.Qtran = min(.Machine$integer.max, 50 * m)
 
@@ -59,6 +62,19 @@ class KMeansResult:
 
 def kmns(a: np.ndarray, c: np.ndarray, iter_max: int, max_qtran: int) -> Kmns:
     """R's C_kmns: Hartigan-Wong on the rows of a (m x p) from the starting centers c (k x p)."""
+    a = frozen(np.ascontiguousarray(a, dtype=np.float64))
+    c = np.array(c, dtype=np.float64, order="C")  # a copy: the kernel overwrites the centers
+    if c.shape[1] != a.shape[1]:
+        raise ValueError(f"a has {a.shape[1]} columns but c has {c.shape[1]}")
+    ic1 = np.zeros(a.shape[0], dtype=np.int64)
+    nc = np.zeros(c.shape[0], dtype=np.int64)
+    wss = np.zeros(c.shape[0])
+    it, ifault = _kmnsjit.hartigan_wong(a, c, iter_max, max_qtran, ic1, nc, wss)
+    return Kmns(ic1.tolist(), c, nc.tolist(), wss.tolist(), it, ifault)
+
+
+def _kmns_py(a: np.ndarray, c: np.ndarray, iter_max: int, max_qtran: int) -> Kmns:
+    """kmns in pure Python, the reference the kernel is tested against."""
     hw = _HW(np.asarray(a, dtype=np.float64), np.asarray(c, dtype=np.float64))
     return hw.run(iter_max, max_qtran)
 
