@@ -18,6 +18,11 @@ class DrawRecord:
     n: int
     size: int
     value: np.ndarray  # 1-based, as R returned it
+    replace: bool = False
+
+
+def _call(n: int, size: int, replace: bool) -> str:
+    return f"sample.int({n}, {size}{', replace = TRUE' if replace else ''})"
 
 
 class ReplayDraws:
@@ -25,17 +30,17 @@ class ReplayDraws:
         self._records = list(records)
         self._pos = 0
 
-    def _next(self, n: int, size: int) -> np.ndarray:
+    def _next(self, n: int, size: int, replace: bool = False) -> np.ndarray:
         if self._pos >= len(self._records):
             raise ReplayMismatch(
-                f"draw #{self._pos + 1} sample.int({n}, {size}) requested, "
+                f"draw #{self._pos + 1} {_call(n, size, replace)} requested, "
                 f"but R made only {len(self._records)} draws"
             )
         rec = self._records[self._pos]
-        if rec.n != n or rec.size != size:
+        if rec.n != n or rec.size != size or rec.replace != replace:
             raise ReplayMismatch(
-                f"draw #{self._pos + 1}: Python asked for sample.int({n}, {size}), "
-                f"R did sample.int({rec.n}, {rec.size})"
+                f"draw #{self._pos + 1}: Python asked for {_call(n, size, replace)}, "
+                f"R did {_call(rec.n, rec.size, rec.replace)}"
             )
         self._pos += 1
         return rec.value - 1
@@ -48,6 +53,9 @@ class ReplayDraws:
 
     def sample(self, n: int, size: int) -> np.ndarray:
         return self._next(n, size).astype(np.intp)
+
+    def sample_replace(self, n: int, size: int) -> np.ndarray:
+        return self._next(n, size, True).astype(np.intp)
 
     def fork(self) -> ReplayDraws:
         """R's re-seeding is already in the recording, so forks share the one stream."""

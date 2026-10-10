@@ -103,6 +103,32 @@ def test_replay_fork_shares_the_recorded_stream():
 def test_both_implementations_satisfy_the_protocol():
     assert isinstance(NumpyDraws(1), Draws)
     assert isinstance(ReplayDraws([]), Draws)
+    assert all(
+        callable(getattr(d, "sample_replace", None)) for d in (NumpyDraws(1), ReplayDraws([]))
+    )
+
+
+def test_replay_sample_replace_returns_zero_based_values_and_checks_the_kind():
+    draws = ReplayDraws([DrawRecord(3, 4, np.array([1, 3, 3, 2]), replace=True)])
+    assert draws.sample_replace(3, 4).tolist() == [0, 2, 2, 1]
+    draws.assert_exhausted()
+    with pytest.raises(ReplayMismatch, match=r"replace = TRUE"):
+        ReplayDraws([DrawRecord(3, 4, np.array([1, 3, 3, 2]), replace=True)]).sample(3, 4)
+    with pytest.raises(ReplayMismatch, match=r"replace = TRUE"):
+        ReplayDraws([DrawRecord(3, 3, np.array([2, 3, 1]))]).sample_replace(3, 3)
+
+
+def test_numpy_sample_replace_draws_values_in_range():
+    v = NumpyDraws(7).sample_replace(3, 1000)
+    assert v.dtype == np.intp and set(v.tolist()) == {0, 1, 2}
+    assert NumpyDraws(7).sample_replace(3, 1000).tolist() == v.tolist()
+    assert NumpyDraws(7).sample_replace(3, 0).shape == (0,)
+
+
+def test_fixtures_without_draw_replace_read_as_plain_draws():
+    case = next(c for c in load_group("create_dn") if c.id == "iris_euclidean_random")
+    assert not case.has("draw_replace")
+    assert case.draws() and not any(r.replace for r in case.draws())
 
 
 # Each draw source and its module in datanuggets._random. datanuggets._draws, their old import

@@ -22,6 +22,9 @@ class NumpyDraws:
     def sample(self, n: int, size: int) -> np.ndarray:
         return self._rng.choice(n, size, replace=False)
 
+    def sample_replace(self, n: int, size: int) -> np.ndarray:
+        return self._rng.integers(n, size=size).astype(np.intp)
+
     def fork(self) -> NumpyDraws:
         """An int seed restarts the same stream on every call, like R's set.seed(seed). A
         Generator hands out a new child stream per call (Generator.spawn), so forks made in the
