@@ -5,9 +5,13 @@ from __future__ import annotations
 import math
 import numbers
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import matplotlib
 from cycler import cycler
+
+if TYPE_CHECKING:
+    from matplotlib.typing import RcKeyType
 
 # R 4's default palette(), so label l can take R's col = l + 1
 R_PALETTE = ("black", "#DF536B", "#61D04F", "#2297E6", "#28E2E5", "#CD0BBC", "#F5C710", "gray62")
@@ -16,7 +20,8 @@ OKABE_ITO = ("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "
 WIDTHS = {"single": 3.5, "double": 7.0}  # one and two journal columns, inches
 DPI = 300
 
-PAPER_RC = {
+# Typed by matplotlib's rc keys, so a checker catches a misspelled one
+PAPER_RC: dict[RcKeyType, Any] = {
     "font.size": 8,
     "axes.labelsize": 8,
     "axes.titlesize": 9,
