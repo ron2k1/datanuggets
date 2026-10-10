@@ -55,6 +55,17 @@ def test_rgb_stops_match_r(v, key):
     assert str(e.value) == CASES["colors"].manifest["errors"][key]
 
 
+@pytest.mark.parametrize(
+    ("j", "hex_"), [(0, "#000100"), (2, "#000300"), (8, "#000900"), (254, "#00FF00")]
+)
+def test_rgb_rounds_halves_up_like_r(j, hex_):
+    """255 v is exactly j + 0.5 for these v. R adds 0.5 and truncates, where Python's round goes
+    to the even j. R 4.6.1's rgb(0, v, 0), checked by hand."""
+    v = (2 * j + 1) / 510
+    assert 255 * v == j + 0.5
+    assert _rgb_green(v) == hex_
+
+
 def test_no_weights_give_no_colors():
     """R's sapply over numeric(0) gives an empty list, with no quantile stop."""
     assert weight_colors([]) == []
