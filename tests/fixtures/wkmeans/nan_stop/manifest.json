@@ -58,6 +58,13 @@
         1,
         12
       ]
+    },
+    "iterations": {
+      "file": "iterations.bin",
+      "dtype": "<i4",
+      "shape": [
+        1
+      ]
     }
   },
   "versions": {

@@ -75,6 +75,13 @@
         1
       ]
     },
+    "iterations": {
+      "file": "iterations.bin",
+      "dtype": "<i4",
+      "shape": [
+        1
+      ]
+    },
     "labels": {
       "file": "labels.bin",
       "dtype": "<i4",

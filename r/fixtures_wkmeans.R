@@ -23,11 +23,20 @@ add_wkmeans <- function(id, x, k, w = rep(1, nrow(x)), centers = NULL, num.init 
   pr <- prove(id, counted_wkmeans, wcluster_wkmeans, args, quirks)
   .capture$inits <- list()
   .capture$singles <- list()
+  .capture$iterations <- integer()
   trace("init", where = W, print = FALSE, exit = hook(quote(inits)))
   trace("Wkmeans_single", where = W, print = FALSE, exit = hook(quote(singles)))
+  # Wkmeans_single's message("Iteration l") at the top of each pass, read before run_quiet's
+  # suppressMessages drops it: l restarts at 1 with each start
+  iteration <- function(m) {
+    l <- regmatches(conditionMessage(m), regexec("^Iteration ([0-9]+)\n$", conditionMessage(m)))[[1]]
+    if (length(l)) .capture$iterations <- c(.capture$iterations, as.integer(l[2]))
+  }
   res <- tryCatch(capture_draws(run_quiet(function() {
     out <- NULL
-    capture.output(out <- WCluster::Wkmeans(x, k, centers, w, num.init, max.iterations, seed))
+    withCallingHandlers(
+      capture.output(out <- WCluster::Wkmeans(x, k, centers, w, num.init, max.iterations, seed)),
+      message = iteration)
     out
   }, list())), finally = suppressMessages({
     untrace("init", where = W)
@@ -44,6 +53,7 @@ add_wkmeans <- function(id, x, k, w = rep(1, nrow(x)), centers = NULL, num.init 
     arrays$single_labels <- do.call(rbind, lapply(.capture$singles, function(s) as.integer(s[[2]])))
     arrays$single_wwcss <- vapply(.capture$singles, function(s) as.double(s[[1]]), 0)
   }
+  if (length(.capture$iterations)) arrays$iterations <- .capture$iterations
   if (!nzchar(err)) {
     out <- res$value
     if (!identical(unname(out[[1]]), unname(pr$value[[1]]))) stop(id, ": traced labels differ")

@@ -3,6 +3,7 @@ the error R stops with, for the reference and the kernel, and the kernel against
 on tie-heavy data."""
 
 import importlib
+import logging
 import re
 
 import numpy as np
@@ -49,12 +50,24 @@ def check_counts(case, counts):
         assert counts[q] == case.manifest["counts"][q], q
 
 
+def r_passes(case):
+    """R's "Iteration l" messages split into starts: the passes each start made."""
+    passes = []
+    for l in case.array("iterations").tolist() if case.has("iterations") else []:
+        if l == 1:
+            passes.append(0)
+        passes[-1] += 1
+        assert passes[-1] == l
+    return passes
+
+
 def check(case, got, trace):
     starts = case.array("init_labels").astype(np.int64)
     assert [t[0].tolist() for t in trace] == starts.tolist()
     singles = case.array("single_labels").astype(np.int64)
     assert len(trace) == singles.shape[0]
-    for i, (_, u, labels, _passes) in enumerate(trace):
+    assert [t[3] for t in trace] == r_passes(case)
+    for i, (_, u, labels, _) in enumerate(trace):
         assert labels.tolist() == singles[i].tolist()
         assert_same_values(np.float64(u), np.float64(case.array("single_wwcss")[i]))
     assert got.labels.tolist() == (case.array("labels").astype(np.int64) - 1).tolist()
@@ -204,22 +217,26 @@ def test_replayed_draws_give_rs_error_for_any_n_jobs():
 
 
 @pytest.mark.parametrize("case", RETURNED, ids=_ids(RETURNED))
-def test_wkmeans_matches_r_and_uses_r_draws(case):
+def test_wkmeans_matches_r_and_uses_r_draws(case, caplog):
     trace = []
     draws = ReplayDraws(case.draws())
-    got = wk._wkmeans(
-        case.array("x"),
-        case.args["k"],
-        w=case.array("w"),
-        centers=case.array("centers_in") if case.has("centers_in") else None,
-        num_init=case.args["num_init"],
-        max_iter=case.args["max_iter"],
-        seed=draws,
-        n_jobs=1,
-        trace=trace,
-    )
+    with caplog.at_level(logging.DEBUG, logger="datanuggets"):
+        got = wk._wkmeans(
+            case.array("x"),
+            case.args["k"],
+            w=case.array("w"),
+            centers=case.array("centers_in") if case.has("centers_in") else None,
+            num_init=case.args["num_init"],
+            max_iter=case.args["max_iter"],
+            seed=draws,
+            n_jobs=1,
+            trace=trace,
+        )
     draws.assert_exhausted()
     check(case, got, trace)
+    # the debug line in place of R's "Iteration l" messages counts the passes R printed
+    logged = [r.args[1] for r in caplog.records if r.msg.startswith("Wkmeans start")]
+    assert logged == r_passes(case)
 
 
 @pytest.mark.parametrize("case", STOPPED, ids=_ids(STOPPED))
