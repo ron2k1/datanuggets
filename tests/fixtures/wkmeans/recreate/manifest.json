@@ -1,0 +1,132 @@
+{
+  "group": "wkmeans",
+  "case": "recreate",
+  "args": {
+    "k": 3,
+    "num_init": 1,
+    "max_iter": 4,
+    "seed": 4
+  },
+  "arrays": {
+    "x": {
+      "file": "x.bin",
+      "dtype": "<f8",
+      "shape": [
+        12,
+        2
+      ]
+    },
+    "w": {
+      "file": "w.bin",
+      "dtype": "<f8",
+      "shape": [
+        12
+      ]
+    },
+    "draw_n": {
+      "file": "draw_n.bin",
+      "dtype": "<i4",
+      "shape": [
+        2
+      ]
+    },
+    "draw_size": {
+      "file": "draw_size.bin",
+      "dtype": "<i4",
+      "shape": [
+        2
+      ]
+    },
+    "draw_values": {
+      "file": "draw_values.bin",
+      "dtype": "<i4",
+      "shape": [
+        21
+      ]
+    },
+    "draw_replace": {
+      "file": "draw_replace.bin",
+      "dtype": "<i4",
+      "shape": [
+        2
+      ]
+    },
+    "init_labels": {
+      "file": "init_labels.bin",
+      "dtype": "<i4",
+      "shape": [
+        1,
+        12
+      ]
+    },
+    "single_labels": {
+      "file": "single_labels.bin",
+      "dtype": "<i4",
+      "shape": [
+        1,
+        12
+      ]
+    },
+    "single_wwcss": {
+      "file": "single_wwcss.bin",
+      "dtype": "<f8",
+      "shape": [
+        1
+      ]
+    },
+    "labels": {
+      "file": "labels.bin",
+      "dtype": "<i4",
+      "shape": [
+        12
+      ]
+    },
+    "centers": {
+      "file": "centers.bin",
+      "dtype": "<f8",
+      "shape": [
+        3,
+        2
+      ]
+    },
+    "wwcss": {
+      "file": "wwcss.bin",
+      "dtype": "<f8",
+      "shape": [
+        3
+      ]
+    },
+    "total": {
+      "file": "total.bin",
+      "dtype": "<f8",
+      "shape": [
+        1
+      ]
+    }
+  },
+  "versions": {
+    "R": "R version 4.6.1 (2026-06-24 ucrt)",
+    "platform": "x86_64-w64-mingw32",
+    "datanugget": "1.5.0",
+    "Rfast": "2.1.5.2",
+    "WCluster": "1.3.0",
+    "matprod": "default",
+    "lapack": "3.12.1",
+    "blas": "Rblas.dll md5 5fe8258e86d8a1a52a6c3db05faa0225",
+    "longdouble_digits": 64
+  },
+  "error": "",
+  "counts": {
+    "redraw": 0,
+    "revert": 20,
+    "fixed": 17,
+    "stale_decides": 0,
+    "recreate": 1,
+    "gap": 0,
+    "tb_na": 0,
+    "nan_test": 0,
+    "inf_pick": 0,
+    "self_merge": 0,
+    "self_merge_mid": 0
+  }
+}
