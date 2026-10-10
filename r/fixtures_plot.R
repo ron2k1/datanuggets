@@ -119,9 +119,13 @@ recipe <- function(W) {
 }
 w <- read_array("tests/fixtures/dn_wcluster/dn", "weights")
 ties <- c(1, 1, 1, 2, 2, 5, 5, 5, 9, 9)
-a <- recipe(w); b <- recipe(ties)
-write_case("plot", "colors", no_args, list(w = w, t = a$t, w_ties = ties, t_ties = b$t),
-  extra = list(hex = I(a$hex), hex_ties = I(b$hex), errors = list(
+# Nugget weights are counts, whose sum is exact in any order. mtcars' wt isn't, so its t shows
+# whether the sum is R's long double one
+wt <- read_array("tests/fixtures/wstats/mtcars_carb_wt", "w")
+a <- recipe(w); b <- recipe(ties); d <- recipe(wt)
+write_case("plot", "colors", no_args, list(w = w, t = a$t, w_ties = ties, t_ties = b$t,
+                                           w_wt = wt, t_wt = d$t),
+  extra = list(hex = I(a$hex), hex_ties = I(b$hex), hex_wt = I(d$hex), errors = list(
     all_zero = stop_message(recipe(c(0, 0, 0))),
     quantile_zero = stop_message(recipe(c(0, 0, 0, 0, 0, 0, 0, 0, 0, 1))),
     rgb_nan = stop_message(rgb(0, NaN, 0)), rgb_neg = stop_message(rgb(0, -0.5, 0)))))
