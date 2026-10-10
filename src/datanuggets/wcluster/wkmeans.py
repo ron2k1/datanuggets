@@ -28,6 +28,11 @@ from datanuggets.wcluster.wstats import wmean, wwcss
 log = logging.getLogger("datanuggets")
 
 _MISSING = "missing value where TRUE/FALSE needed"
+_NAN_SEQ = "NA/NaN argument"
+_LONG_SEQ = "result would be too long a vector"
+_SIZE = "invalid 'size' argument"
+_ZERO = "argument is of length zero"
+_CENTERS = "cl.centers must be a ncol(dataset) by k numeric matrix"
 _LIST = "unimplemented type 'list' in 'orderVector1'"
 _MAX_LIST = "invalid 'type' (list) of argument"
 _LENGTH = "The length of cluster assignments should be the same as the number of observations. "
@@ -59,33 +64,55 @@ def _numeric(name: str, v) -> None:
         raise TypeError(f'{name} must be of class "numeric", got {type(v).__name__}')
 
 
+def _r_seq(name: str, v) -> None:
+    """R's 1:v, which stops on a v that isn't finite."""
+    if math.isnan(v):
+        raise _r_stop(_NAN_SEQ, f"{name} is NaN")
+    if math.isinf(v):
+        raise _r_stop(_LONG_SEQ, f"{name} is infinite")
+
+
 def _prepare(x, k, w, centers, num_init, max_iter):
-    """R's argument checks in R's order, then R's floors, then the inputs on which R would draw
-    starts forever. Returns float64 x and w, int k, num_init and max_iter, and centers as a
-    (k, p) float64 array or None."""
+    """R's argument checks in R's order, then R's floors, then the arguments R stops on before a
+    start finishes, in the order R reaches them, then the inputs on which R would draw starts
+    forever. Returns float64 x and w, int k and num_init, centers as a (k, p) float64 array or
+    None, and max_iter, an int unless it's the NaN or infinity R's 1:K stops on once the first
+    start's init is done, which _single_py and refine raise."""
     _numeric("k", k)
     x = as_matrix(x, logical=True, vector=True)
     n, p = x.shape
     if centers is not None:
+        if np.ndim(centers) == 1:
+            raise _r_stop(_ZERO, "centers is a vector, whose nrow R takes as NULL")
         centers = as_matrix(centers, "centers")
+        if centers.shape[1] == p and math.isnan(k):  # R's FALSE | NA
+            raise _r_stop(_MISSING, "k is NaN, so R's ncol(cl.centers) != k is NA")
         if centers.shape[0] != k or centers.shape[1] != p:
-            raise ValueError(
-                f"centers must be a k by ncol(x) matrix, ({k}, {p}), got {centers.shape}"
+            raise _r_stop(
+                _CENTERS, f"centers must be a k by ncol(x) matrix, ({k}, {p}), got {centers.shape}"
             )
     w = as_weights(w, n)
     _numeric("num_init", num_init)
     _numeric("max_iter", max_iter)
-    k, num_init, max_iter = math.floor(k), math.floor(num_init), math.floor(max_iter)
+    k, num_init, max_iter = (
+        math.floor(v) if math.isfinite(v) else v for v in (k, num_init, max_iter)
+    )
     if centers is not None:
         num_init = 1
-    if k < 1:
-        raise ValueError(f"k must be at least 1 after R's floor, got {k}")
-    for name, v in (("num_init", num_init), ("max_iter", max_iter)):
-        if v < 1:
-            raise ValueError(
-                f"{name} must be at least 1 after R's floor, got {v}: R's 1:{v} would run twice"
-            )
+    _r_seq("num_init", num_init)
+    if math.isnan(k):  # init's while (length(unique(zz)) < k)
+        raise _r_stop(_MISSING, "k is NaN")
+    if k == math.inf:  # init's 1:k
+        raise _r_stop(_LONG_SEQ, "k is infinite")
+    if k < 1:  # init gives no labels, then Wkmeans_single's 1:K runs and wwcss stops
+        _r_seq("max_iter", max_iter)
+        raise _r_stop(_LENGTH, f"k is {k} after R's floor, so init gives no labels")
     if centers is None:
+        if n < k:
+            raise _r_stop(
+                _SIZE,
+                f"x has {n} rows, fewer than k = {k}, so R's sample(k, n - k) gets a negative size",
+            )
         if n < 2 * k:
             raise ValueError(
                 f"wkmeans needs at least 2k = {2 * k} rows to draw a start, got {n}: R draws "
@@ -101,6 +128,11 @@ def _prepare(x, k, w, centers, num_init, max_iter):
             "invalid 'nrow' value (< 0)" if w[0] < 0 else "non-conformable arguments",
             "R's diag(w) for one row is an identity matrix of size w",
         )
+    for name, v in (("num_init", num_init), ("max_iter", max_iter)):
+        if math.isfinite(v) and v < 1:
+            raise ValueError(
+                f"{name} must be at least 1 after R's floor, got {v}: R's 1:{v} would run twice"
+            )
     return x, w, k, centers, num_init, max_iter
 
 
@@ -186,6 +218,7 @@ def _single_py(x, w, y, K, counts=None):
     yy0 = yy
     uu0 = math.nan
     passes = 0
+    _r_seq("max_iter", K)
     for _ in range(K):
         passes += 1
         uu0 = uu00 = wwcss(x, yy, w)
@@ -291,11 +324,11 @@ def wkmeans(
     are floored like R's, and num_init or max_iter below 1 raises where R's 1:0 would run twice.
     labels keeps R's quirks: R's table of cluster sizes goes stale between moves and is read by
     position, so a cluster can empty and come back, and labels can have gaps. Where R stops,
-    this raises ValueError with R's message. Where R would draw forever (fewer than 2k rows,
-    fewer than k distinct (row, weight) pairs, or MAX_STARTS starts that never reach k
-    clusters), this raises ValueError. n_jobs refines the starts on threads and never changes
-    the result. Arguments after k are keyword-only, since R's order puts centers before the
-    weights.
+    this raises ValueError with R's message. Where R would draw forever (at least k but fewer
+    than 2k rows, fewer than k distinct (row, weight) pairs, or MAX_STARTS starts that never
+    reach k clusters), this raises ValueError. n_jobs refines the starts on threads and never
+    changes the result. Arguments after k are keyword-only, since R's order puts centers before
+    the weights.
     """
     return _wkmeans(
         x, k, w=w, centers=centers, num_init=num_init, max_iter=max_iter, seed=seed, n_jobs=n_jobs
@@ -322,6 +355,7 @@ def _wkmeans(x, k, *, w, centers, num_init, max_iter, seed, n_jobs, trace=None) 
         return wkmeansjit.centers_of(xf, wf, y, k)
 
     def refine(y):
+        _r_seq("max_iter", max_iter)  # Wkmeans_single's 1:K
         y = y.copy()
         status, u, it = wkmeansjit.refine(xf, wf, y, max_iter, m11)
         return status, u, it, y

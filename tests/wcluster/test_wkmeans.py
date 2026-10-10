@@ -105,7 +105,6 @@ def test_reference_stops_where_r_stops(case):
     [
         ({"k": "3"}, TypeError, 'k must be of class "numeric"'),
         ({"k": True}, TypeError, 'k must be of class "numeric"'),
-        ({"k": 0.5}, ValueError, "k must be"),
         ({"num_init": 0.9}, ValueError, "num_init"),
         ({"max_iter": 0}, ValueError, "max_iter"),
         ({"centers": np.zeros((2, 4))}, ValueError, "centers must be"),
@@ -148,6 +147,42 @@ def test_one_row_follows_rs_diag():
         wk._wkmeans_py(x, 1, w=np.array([2.0]), centers=c)
     with pytest.raises(ValueError, match=re.escape("invalid 'nrow' value (< 0)")):
         wk._wkmeans_py(x, 1, w=np.array([-1.0]), centers=c)
+
+
+ARGS = load_group("wkmeans_args")[0]
+ROWS = ARGS.manifest["rows"]
+
+
+def _row_id(r):
+    return "-".join(f"{key}={r[key]}" for key in ("n", "k", "num_init", "max_iter", "centers"))
+
+
+@pytest.mark.parametrize("fn", [wk._wkmeans_py, wkmeans], ids=["reference", "wkmeans"])
+@pytest.mark.parametrize("row", ROWS, ids=[_row_id(r) for r in ROWS])
+def test_arguments_stop_where_r_stops(row, fn):
+    # R's runs on the first n rows of the grid, with each argument as R prints it, since JSON
+    # has no NaN or Inf: the message R stops with, or R's labels where it returns
+    centers = {
+        "none": None,
+        "matrix": ARGS.array("centers_in"),
+        "vector": ARGS.array("centers_in")[0],
+    }[row["centers"]]
+
+    def go():
+        return fn(
+            ARGS.array("x")[: row["n"]],
+            float(row["k"]),
+            centers=centers,
+            num_init=float(row["num_init"]),
+            max_iter=float(row["max_iter"]),
+            seed=RDraws(291102),
+        )
+
+    if row["error"]:
+        with pytest.raises(ValueError, match=re.escape(f"(R stops: {row['error'].strip()}")):
+            go()
+    else:
+        assert (go().labels + 1).tolist() == row["labels"]
 
 
 @pytest.mark.parametrize("case", RETURNED, ids=_ids(RETURNED))

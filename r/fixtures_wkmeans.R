@@ -100,3 +100,38 @@ add_wkmeans("gap", grid, 3, w = by_seed(195, wset, 12), max.iterations = 4, seed
 # Weights 1 and -1 can cancel in a cluster: its WWCSS is NaN and R's comparison stops
 add_wkmeans("nan_stop", grid, 2, w = by_seed(1, c(-1, 1), 12), max.iterations = 4, seed = 1,
             quirks = "nan_test")
+
+# Arguments R stops on, each row on the first n rows of grid with unit weights. R reaches them in
+# this order: the centers check, 1:num.init, init's while and 1:k, sample(k, n - k) on fewer than
+# k rows, Wkmeans_single's 1:K, then wwcss on the empty labels init gives for k below 1. Given
+# centers, R sets num.init to 1, so a NaN or infinite one returns. JSON has no NaN or Inf, so the
+# arguments are written as R prints them.
+args_rows <- list(
+  list(n = 3, k = 5), list(n = 1, k = 2), list(n = 11, k = 12), list(n = 3, k = 5, max_iter = NaN),
+  list(n = 3, k = 5, num_init = 0), list(k = Inf), list(n = 3, k = Inf), list(k = NaN),
+  list(k = -Inf), list(k = 0), list(k = 0.5), list(num_init = Inf), list(num_init = NaN),
+  list(num_init = -Inf), list(max_iter = Inf), list(max_iter = NaN), list(max_iter = -Inf),
+  list(k = NaN, num_init = NaN), list(k = 0, num_init = NaN), list(k = 0, max_iter = NaN),
+  list(k = 0, max_iter = 0), list(k = 0, num_init = 0), list(centers = "matrix", num_init = NaN),
+  list(centers = "matrix", num_init = Inf), list(centers = "matrix", k = NaN),
+  list(centers = "matrix", k = Inf), list(centers = "matrix", max_iter = NaN),
+  list(centers = "vector", k = 1))
+centers_in <- t(grid[c(1, 12), ])  # R's p by k centers
+args_out <- lapply(args_rows, function(r) {
+  r <- modifyList(list(n = 12, k = 2, num_init = 1, max_iter = 10, centers = "none"), r)
+  cen <- switch(r$centers, none = NULL, matrix = centers_in, vector = grid[1, ])
+  x <- grid[seq_len(r$n), , drop = FALSE]
+  value <- tryCatch(suppressWarnings(suppressMessages({
+    out <- NULL
+    capture.output(out <- WCluster::Wkmeans(x, r$k, cen, rep(1, r$n), r$num_init, r$max_iter))
+    out
+  })), error = function(e) e)
+  stopped <- inherits(value, "error")
+  cat(sprintf("wkmeans_args %-48s %s\n", paste(names(r), r, sep = "=", collapse = " "),
+              if (stopped) conditionMessage(value) else "returned"))
+  list(n = r$n, k = format(r$k), num_init = format(r$num_init), max_iter = format(r$max_iter),
+       centers = r$centers, error = if (stopped) conditionMessage(value) else "",
+       labels = if (stopped) integer() else as.integer(value[[1]]))
+})
+write_case("wkmeans_args", "table", no_args, list(x = grid, centers_in = t(centers_in)),
+           extra = list(rows = args_out))
