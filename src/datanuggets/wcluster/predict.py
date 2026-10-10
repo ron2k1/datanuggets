@@ -9,20 +9,22 @@ from datanuggets._validate import as_matrix, as_weights
 from datanuggets.wcluster.wstats import wmean
 
 
-def _wdist_mat(newx: np.ndarray, centers: np.ndarray) -> np.ndarray:
-    """R's wdist_mat with unit weights: each row's squared distance to each center, as
-    (|x|^2 + |c|^2) - 2 x.c with R's sums in R's order, so a value can be a rounding error
-    below zero. R then multiplies by an identity matrix, so each entry picks up 0 times every
-    other row of its column: an entry becomes NaN when another row of its column is NaN or
-    infinite, or when it is NaN itself. A lone infinity stays infinite."""
-    ones = np.ones(newx.shape[1])
+def _wdist_mat(x: np.ndarray, centers: np.ndarray, w: np.ndarray | None = None) -> np.ndarray:
+    """R's wdist_mat: each row's squared distance to each center, as (|x|^2 + |c|^2) - 2 x.c
+    with R's sums in R's order, so a value can be a rounding error below zero, times the row's
+    weight. R multiplies by diag(w), so each entry also picks up 0 times every other row of its
+    column: it's NaN when another row of its column is NaN or infinite, or when w[i] * z[i, j]
+    is NaN. A lone infinity stays infinite. None means unit weights, cluster_predict's case. R's
+    sum starts at +0, so no entry comes back as -0."""
+    ones = np.ones(x.shape[1])
     with np.errstate(all="ignore"):
-        m11 = r_matvec(newx * newx, ones)
+        m11 = r_matvec(x * x, ones)
         m22 = r_matvec(centers * centers, ones)
-        z = (m11[:, None] + m22[None, :]) - 2 * r_matmul(newx, centers.T)
+        z = (m11[:, None] + m22[None, :]) - 2 * r_matmul(x, centers.T)
+        d = z if w is None else w[:, None] * z + 0.0
     bad = ~np.isfinite(z)
     other_bad = (np.count_nonzero(bad, axis=0)[None, :] - bad) > 0
-    return np.where(other_bad | np.isnan(z), np.nan, z)
+    return np.where(other_bad | np.isnan(d), np.nan, d)
 
 
 def cluster_predict(x, cl, newx, *, w=None) -> np.ndarray:

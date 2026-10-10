@@ -65,6 +65,19 @@ def test_wdist_mat_matches_r(case, order):
     assert_same_values(got, want)  # any NaN matches any NaN, and each Inf keeps its place
 
 
+def test_wdist_mat_with_weights_is_the_weighted_identity_product():
+    x = np.array([[0.0, 1.0], [2.0, 2.0], [1e200, 0.0]])
+    c = np.array([[0.0, 0.0], [1.0, 1.0]])
+    w = np.array([2.0, -1.0, 0.0])
+    got = _wdist_mat(x, c, w)
+    assert np.isnan(got[:2]).all()  # row 2's z is Inf in both columns, and 0 * Inf is NaN
+    assert np.isnan(got[2]).all()  # w[2] * Inf is 0 * Inf
+    small = _wdist_mat(x[:2], c, w[:2])
+    assert_same_values(small, w[:2, None] * _wdist_mat(x[:2], c) + 0.0)
+    zero = _wdist_mat(x[:2], c, np.array([-0.0, 1.0]))
+    assert not np.signbit(zero[0]).any()  # R's sum starts at +0, so -0 * z comes back +0
+
+
 @ORDERS
 @pytest.mark.parametrize("case", PRED, ids=_ids(PRED))
 def test_cluster_predict_matches_r(case, order):
