@@ -53,6 +53,8 @@
     "blas": "Rblas.dll md5 5fe8258e86d8a1a52a6c3db05faa0225",
     "longdouble_digits": 64
   },
-  "scale_x": 16.695652173913,
-  "scale_y": 4.37850241545894
+  "scale_x_m1": 16.695652173913,
+  "scale_y_m1": 4.37850241545894,
+  "scale_x_05": 16.695652173913,
+  "scale_y_05": 2.91900161030597
 }

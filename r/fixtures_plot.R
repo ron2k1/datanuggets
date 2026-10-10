@@ -84,9 +84,11 @@ add_tree("dn_one", "tests/fixtures/dn_wcluster/one_variable")
 grid <- tree_of("tests/fixtures/whclust/grid_dup")
 m1 <- dend_segments(grid, hang = -1)
 h05 <- dend_segments(grid, hang = 0.5)
+# Each hang gives its own window, so each drawing keeps its own points per user unit
 write_case("plot", "tree_hang", no_args, list(merge = grid$merge, height = grid$height,
   order = grid$order, segs_m1 = m1$segs, segs_05 = h05$segs),
-  extra = list(scale_x = m1$scale_x, scale_y = m1$scale_y))
+  extra = list(scale_x_m1 = m1$scale_x, scale_y_m1 = m1$scale_y,
+               scale_x_05 = h05$scale_x, scale_y_05 = h05$scale_y))
 
 n3 <- tree_of("tests/fixtures/whclust/n3")
 nan_h <- n3; nan_h$height[1] <- NaN
