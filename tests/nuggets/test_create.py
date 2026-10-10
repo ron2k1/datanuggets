@@ -68,8 +68,10 @@ def test_n_jobs_does_not_change_result():
     x = QUAKES.array("x")
     a = create_dn(x, **SMALL, seed=11, n_jobs=1)
     b = create_dn(x, **SMALL, seed=11, n_jobs=2)
+    c = create_dn(x, **SMALL, seed=11, n_jobs=4)  # stage 1's kernels run in 4 threads at once
     for field in ("centers", "weights", "scales", "assignments"):
         np.testing.assert_array_equal(getattr(a, field), getattr(b, field))
+        np.testing.assert_array_equal(getattr(a, field), getattr(c, field))
 
 
 def test_progress_does_not_change_result():
