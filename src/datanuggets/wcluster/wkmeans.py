@@ -177,7 +177,7 @@ def _lloyd_labels(yy: np.ndarray) -> np.ndarray:
 
 def _single_py(x, w, y, K, counts=None):
     """WCluster's Wkmeans_single from init's labels y, statement for statement. Returns R's
-    (uu0, yy). counts gains revert, fixed (a Lloyd step that changed nothing before step 20,
+    (uu0, yy) and the passes R made, one "Iteration l" message each. counts gains revert, fixed (a Lloyd step that changed nothing before step 20,
     the kernel's shortcut), stale_decides, recreate, tb_na, nan_test and gap."""
     n = x.shape[0]
     k = int(y.max())
@@ -185,7 +185,9 @@ def _single_py(x, w, y, K, counts=None):
     yy = y.copy()
     yy0 = yy
     uu0 = math.nan
+    passes = 0
     for _ in range(K):
+        passes += 1
         uu0 = uu00 = wwcss(x, yy, w)
         for ll in range(20):
             yy0 = yy
@@ -227,7 +229,7 @@ def _single_py(x, w, y, K, counts=None):
             break
     if counts is not None and np.unique(yy).size < yy.max():
         counts["gap"] += 1
-    return uu0, yy
+    return uu0, yy, passes
 
 
 def _counts() -> dict:
@@ -248,7 +250,7 @@ def _wkmeans_py(
     x, k, *, w=None, centers=None, num_init=1, max_iter=10, seed=291102, counts=None, trace=None
 ):
     """WCluster's Wkmeans on the Python primitives, the test reference. trace, a list, gets
-    (start labels, wwcss, labels) for each start that finishes."""
+    (start labels, wwcss, labels, passes) for each start that finishes."""
     x, w, k, centers, num_init, max_iter = _prepare(x, k, w, centers, num_init, max_iter)
     draws = as_draws(seed)
 
@@ -261,9 +263,9 @@ def _wkmeans_py(
     best = None
     for _ in range(num_init):
         start = _init(x.shape[0], k, centers, draws, assign, wmean_of, counts)
-        u, labels = _single_py(x, w, start, max_iter, counts)
+        u, labels, passes = _single_py(x, w, start, max_iter, counts)
         if trace is not None:
-            trace.append((start, u, labels))
+            trace.append((start, u, labels, passes))
         if best is None:
             best = (u, labels)
         else:
@@ -301,7 +303,8 @@ def wkmeans(
 
 
 def _wkmeans(x, k, *, w, centers, num_init, max_iter, seed, n_jobs, trace=None) -> WkmeansResult:
-    """wkmeans, with trace, a list, given (start labels, wwcss, labels) for each start refined."""
+    """wkmeans, with trace, a list, given (start labels, wwcss, labels, passes) for each start
+    refined."""
     x, w, k, centers, num_init, max_iter = _prepare(x, k, w, centers, num_init, max_iter)
     check_n_jobs(n_jobs)
     draws = as_draws(seed)
@@ -346,7 +349,7 @@ def _wkmeans(x, k, *, w, centers, num_init, max_iter, seed, n_jobs, trace=None) 
     best = None
     for i, (s, status, u, it, labels) in enumerate(results):
         if trace is not None:
-            trace.append((s, u, labels))
+            trace.append((s, u, labels, it))
         if status != wkmeansjit.OK:
             raise _r_stop(*_STATUS[status])
         log.debug("Wkmeans start %d: %d iterations, WWCSS %r", i + 1, it, u)

@@ -54,7 +54,7 @@ def check(case, got, trace):
     assert [t[0].tolist() for t in trace] == starts.tolist()
     singles = case.array("single_labels").astype(np.int64)
     assert len(trace) == singles.shape[0]
-    for i, (_, u, labels) in enumerate(trace):
+    for i, (_, u, labels, _passes) in enumerate(trace):
         assert labels.tolist() == singles[i].tolist()
         assert_same_values(np.float64(u), np.float64(case.array("single_wwcss")[i]))
     assert got.labels.tolist() == (case.array("labels").astype(np.int64) - 1).tolist()
@@ -210,19 +210,24 @@ def fuzz_inputs(seed, family):
 def run_both(x, k, w, seed, counts):
     def go(fn, **kw):
         try:
-            return fn(x, k, w=w, num_init=3, max_iter=4, seed=RDraws(seed), **kw), None
+            got = fn(x, k, w=w, centers=None, num_init=3, max_iter=4, seed=RDraws(seed), **kw)
+            return got, None
         except ValueError as e:
             return None, str(e)
 
-    ref, ref_err = go(wk._wkmeans_py, counts=counts)
+    ref_trace = []
+    ref, ref_err = go(wk._wkmeans_py, counts=counts, trace=ref_trace)
     for n_jobs in (1, 3):
-        got, got_err = go(wkmeans, n_jobs=n_jobs)
+        trace = []
+        got, got_err = go(wk._wkmeans, n_jobs=n_jobs, trace=trace)
         assert got_err == ref_err
         if ref is not None:
             assert got.labels.tolist() == ref.labels.tolist()
             assert_same_values(got.centers, ref.centers)
             assert_same_values(got.wwcss, ref.wwcss)
             assert_same_values(got.total_wwcss, ref.total_wwcss)
+            # R messages "Iteration l" once per pass, so a start's pass count is R's output too
+            assert [t[3] for t in trace] == [t[3] for t in ref_trace]
 
 
 FAMILIES = ["unit", "int", "zero", "signed", "huge", "negative"]
