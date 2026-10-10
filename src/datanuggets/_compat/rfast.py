@@ -9,6 +9,9 @@ in its own order, so fixtures record the BLAS they were made with. Rfast::dista(
 index = TRUE) picks the nearest center with libstdc++ std::sort, which is not stable:
 among exactly tied distances the winner is whatever std::sort leaves first, not the
 lowest index.
+
+The distance loops run compiled, in rfastjit. _cross_distances_py does the same arithmetic in
+numpy, one feature at a time, and is the reference the kernels are tested against.
 """
 
 from __future__ import annotations
@@ -17,7 +20,8 @@ from collections.abc import Callable
 
 import numpy as np
 
-from datanuggets._defaults import ASSIGN_BLOCK_ROWS, DIST_BLOCK_ROWS
+from datanuggets._compat import rfastjit as _rfastjit
+from datanuggets._compat._compiled import frozen
 
 _S_THRESHOLD = 16  # libstdc++ _S_threshold
 _ARMA_DOT_MAX = 32  # Armadillo op_dot::direct_dot: its own loop up to 32 terms, BLAS ddot above
@@ -53,11 +57,31 @@ def _sequential_accumulate(term: Callable[[int], np.ndarray], p: int) -> np.ndar
     return acc
 
 
+def _dista_sums_in_order(p: int, metric: str, kernel: str) -> bool:
+    """dista's Euclidean kernel over more than 32 features adds left to right (BLAS ddot)."""
+    return kernel == "dista" and metric == "euclidean" and p > _ARMA_DOT_MAX
+
+
 def cross_distances(
     a: np.ndarray, b: np.ndarray, metric: str, *, kernel: str = "dist"
 ) -> np.ndarray:
     """Distances between the rows of a (m x p) and b (k x p), rounded as Rfast::Dist
     (kernel="dist") or Rfast::dista (kernel="dista") rounds them."""
+    a = frozen(np.ascontiguousarray(a, dtype=np.float64))
+    bt = frozen(np.ascontiguousarray(np.asarray(b, dtype=np.float64).T))
+    if bt.shape[0] != a.shape[1]:
+        raise ValueError(f"a has {a.shape[1]} columns but b has {bt.shape[0]}")
+    out = np.empty((a.shape[0], bt.shape[1]))
+    seq = _dista_sums_in_order(a.shape[1], metric, kernel)
+    _rfastjit.cross(a, bt, metric == "manhattan", seq, out)
+    return out
+
+
+def _cross_distances_py(
+    a: np.ndarray, b: np.ndarray, metric: str, *, kernel: str = "dist"
+) -> np.ndarray:
+    """cross_distances in numpy, one feature at a time. The reference the kernels are tested
+    against."""
     if metric == "euclidean":
 
         def term(j: int) -> np.ndarray:
@@ -70,7 +94,7 @@ def cross_distances(
             return np.abs(b[None, :, j] - a[:, None, j])
 
     p = a.shape[1]
-    if kernel == "dista" and metric == "euclidean" and p > _ARMA_DOT_MAX:
+    if _dista_sums_in_order(p, metric, kernel):
         total = _sequential_accumulate(term, p)
     else:
         total = _arma_accumulate(term, p)
@@ -79,30 +103,32 @@ def cross_distances(
     return total
 
 
-def dist_matrix(x: np.ndarray, metric: str, block_rows: int = DIST_BLOCK_ROWS) -> np.ndarray:
-    """Rfast::Dist(x, method = metric): full n x n matrix, built in row blocks."""
-    n = x.shape[0]
-    out = np.empty((n, n))
-    for start in range(0, n, block_rows):
-        out[start : start + block_rows] = cross_distances(x[start : start + block_rows], x, metric)
+def dist_matrix(x: np.ndarray, metric: str) -> np.ndarray:
+    """Rfast::Dist(x, method = metric): the full n x n matrix."""
+    x = frozen(np.ascontiguousarray(x, dtype=np.float64))
+    out = np.empty((x.shape[0], x.shape[0]))
+    _rfastjit.dist(x, frozen(np.ascontiguousarray(x.T)), metric == "manhattan", out)
     return out
 
 
-def nearest_index(
-    points: np.ndarray, centers: np.ndarray, metric: str, block_rows: int = ASSIGN_BLOCK_ROWS
-) -> np.ndarray:
+def nearest_index(points: np.ndarray, centers: np.ndarray, metric: str) -> np.ndarray:
     """Rfast::dista(points, centers, type = metric, k = 1, index = TRUE), 0-based."""
-    n = points.shape[0]
-    out = np.empty(n, dtype=np.intp)
-    for start in range(0, n, block_rows):
-        d = cross_distances(points[start : start + block_rows], centers, metric, kernel="dista")
-        best = d.argmin(axis=1)
-        mins = d[np.arange(d.shape[0]), best]
-        tied = np.count_nonzero(d == mins[:, None], axis=1) > 1
-        for r in np.flatnonzero(tied):
-            best[r] = gnu_sort_first(d[r])
-        out[start : start + d.shape[0]] = best
-    return out
+    points = frozen(np.ascontiguousarray(points, dtype=np.float64))
+    centers = frozen(np.ascontiguousarray(centers, dtype=np.float64))
+    if centers.shape[1] != points.shape[1]:
+        raise ValueError(
+            f"points have {points.shape[1]} columns but centers have {centers.shape[1]}"
+        )
+    seq = _dista_sums_in_order(points.shape[1], metric, "dista")
+    best = np.empty(points.shape[0], dtype=np.intp)
+    ct = frozen(np.ascontiguousarray(centers.T))
+    _rfastjit.nearest(points, ct, metric == "manhattan", seq, best)
+    tied = np.flatnonzero(best < 0)
+    if tied.size:
+        d = cross_distances(points[tied], centers, metric, kernel="dista")
+        for r, i in enumerate(tied.tolist()):
+            best[i] = gnu_sort_first(d[r])
+    return best
 
 
 def gnu_sort_first(values, *, depth_limit: int | None = None) -> int:
