@@ -14,6 +14,10 @@ import numpy as np
 
 from datanuggets._compat._compiled import compiled
 
+# Rows and columns per tile when dist mirrors its lower half. It lives here, not in _defaults,
+# because numba freezes a global into the cached kernel and only notices edits to this file.
+MIRROR_TILE = 64
+
 
 @compiled(nogil=True)
 def _sums(a, bt, manhattan, sequential, out, acc2, k):
@@ -56,15 +60,20 @@ def cross(a, bt, manhattan, sequential, out):
 
 @compiled(nogil=True)
 def dist(x, xt, manhattan, out):
-    """out (n x n) = Rfast::Dist(x). Row r computes columns 0..r and mirrors them into column r,
-    which is exact: b - a is -(a - b) in IEEE arithmetic, and both metrics drop the sign."""
+    """out (n x n) = Rfast::Dist(x). Row r computes columns 0..r, and the lower half is then
+    mirrored into the upper one, which is exact: b - a is -(a - b) in IEEE arithmetic, and both
+    metrics drop the sign. The mirror goes one tile at a time, so the column it writes stays in
+    cache. Writing a whole column per row took twice as long as the distances."""
     n = x.shape[0]
     acc2 = np.empty(n)
     for r in range(n):
-        row = out[r]
-        _sums(x[r], xt, manhattan, False, row, acc2, r + 1)
-        for c in range(r):
-            out[c, r] = row[c]
+        _sums(x[r], xt, manhattan, False, out[r], acc2, r + 1)
+    for r0 in range(0, n, MIRROR_TILE):
+        r1 = min(r0 + MIRROR_TILE, n)
+        for c0 in range(0, r0 + 1, MIRROR_TILE):
+            for r in range(r0, r1):
+                for c in range(c0, min(c0 + MIRROR_TILE, r)):
+                    out[c, r] = out[r, c]
 
 
 @compiled(nogil=True)

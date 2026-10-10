@@ -131,6 +131,18 @@ def test_dist_matrix_matches_the_numpy_replay(p, kind):
         assert same_bits(dist_matrix(x, metric), _replay(x, x, metric)), metric
 
 
+@pytest.mark.parametrize("n", [63, 64, 65, 128, 129, 200])
+def test_dist_matrix_mirrors_every_tile(n):
+    """Dist mirrors its lower half one tile at a time: sizes on and around the tile edges, so a
+    missed tile or a row cut short at a tile boundary leaves an upper entry unwritten."""
+    assert rfastjit.MIRROR_TILE == 64
+    x = np.random.default_rng(n).integers(0, 50, size=(n, 3)).astype(float)
+    for metric in ("euclidean", "manhattan"):
+        got = dist_matrix(x, metric)
+        assert same_bits(got, _replay(x, x, metric)), metric
+        assert same_bits(got, got.T), metric
+
+
 def _nearest_index_py(points, centers, metric):
     d = _replay(points, centers, metric, "dista")
     best = d.argmin(axis=1)
