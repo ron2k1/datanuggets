@@ -43,6 +43,8 @@ The `WCluster` functions treat each row as a point with a weight, such as a nugg
 
 Still to port: `datanugget`'s `optimal.DN`.
 
+`datanuggets.flow` adds Prof. Cabrera's gate finder for flow cytometry, `lymphmacro_finder`, ported from his Python and checked against it piece by piece. It's described under [Flow gates](#flow-gates).
+
 ## Install
 
 Requires Python 3.12 or newer, `numpy >= 2.0`, `scipy >= 1.13`, `joblib >= 1.4` and `numba >= 0.67`. On Python 3.15 it needs `numba >= 0.68`, the first numba with 3.15 wheels. The suite passes on Python 3.14 and 3.15.
@@ -191,6 +193,103 @@ That's how many of the 200 nuggets each cluster holds. Every plot function takes
 
 `style()` is a `with` block in which new figures take a paper style: 7 to 9 point fonts, thin lines, the Okabe-Ito colors, which color-blind readers can tell apart, and TrueType fonts embedded in the PDF. `save(fig, path, width="single")` sizes the figure to one journal column, 3.5 inches wide, or two with `"double"`, 7 inches, or any width in inches, with the height 0.75 times the width unless it's given. It saves at 300 dpi in the format the path's suffix names, such as `.pdf` or `.png`, and stops on a path without one. A PDF's page is exactly that size. A PNG's sides are the inches times 300, rounded down, so the default single-column PNG, 3.5 by 2.625 inches, is 1050 by 787 pixels. A `colors` list must hold at least one matplotlib color, and every entry is checked before anything is drawn. `colors=R_PALETTE` gives R's default `palette()`, and since the port's labels are R's minus one, label `l` then gets R's `col = l + 1`.
 
+## Flow gates
+
+`datanuggets.flow` is Prof. Cabrera's gate finder for the lymphocyte and macrophage populations of a flow cytometry sample, from his Python port of his R code. It finds the dense peaks of FSC-A against SSC-A on a 100 by 100 grid and gates the events around each one. Its own modules import numpy, scipy and the package's input checks, and `import datanuggets` doesn't import it, though importing it loads the package, numba included. The package doesn't read FCS files. flowio reads the events the way FlowKit's raw events hold them:
+
+```python
+import flowio
+from datanuggets.flow import lymphmacro_finder
+
+fd = flowio.FlowData("202.fcs")
+events = fd.as_array(preprocess=True)
+names = [fd.text[f"p{k}n"] for k in range(1, fd.channel_count + 1)]
+fsc = events[:, names.index("FSC-A")]
+ssc = events[:, names.index("SSC-A")]
+
+masks = lymphmacro_finder(fsc, ssc)
+print(masks.shape)
+print(masks.sum(axis=0))
+```
+
+Output:
+
+```text
+(282270, 3)
+[214085  66149  37742]
+```
+
+`202.fcs` is one of the 44 files of the Zenodo record credited below. `masks` has one row per event and one column per population, in his order. The first population's area takes `t11` and `t21`, the others `t12` and `t22`, with his defaults. An event can be in more than one population, as in his code: here 57,797 events are, and 29,065 are in none. `plot.gates(fsc, ssc, masks, title=..., ax=...)` draws his figure from those masks: every event in gray, then each population that has an event in the color cycle's order.
+
+The pieces keep his names, so the two can be read side by side. `f_plot` builds his density grid, a `DensityGrid` holding his `z`, `x`, `y` and `zz`. `local_maxima` finds his focal maxima, `refine_peaks` moves each to the densest cell near it with `search_ind` and applies his filters and his order, `find_area` keeps the cells around a peak, and `hull_gate` gates the events of one area.
+
+They depart from his code in six places:
+
+1. `find_area` centres its distance disc on the peak. His builds the grid row by row and flattens the density column by column, so his density test reads the right cell while his disc sits on the mirrored cell `(idy, idx)`. On `202.fcs` that puts 107,909 of the 282,270 events in a different set of populations. His three hold 225,770, 58,245 and 27,590 events, the corrected ones 214,085, 66,149 and 37,742. It's the one change in output, and it waits on a ruling, open problem 10.
+2. `hull_gate` tests each grid cell once and looks the answer up per event, and tests the events against a triangulation of their hull's vertices, where his triangulates every kept event. Both cover the same polygon, so they can differ only on an event within rounding of the hull's edge. Across the fixtures that happened once, to a kept event on the hull itself, which ours keeps and his doesn't. Across the 44 files it happened on 4, `186`, `190`, `278` and `345`, to one event each, and each of them lies exactly on the hull's edge.
+3. With no peak left after his filters, `lymphmacro_finder` returns zero columns. His raises `IndexError`.
+4. An area whose cells, or whose kept events, lie on one line, or so near one that Qhull calls them flat, gives an empty population. His raises `QhullError`. His guard of more than 3 cells and more than 3 events is kept.
+5. NaN or infinite values, or a channel with one value, raise `ValueError`. His code bins them or divides by zero.
+6. His unused `plot=False` argument is dropped. `plot.gates` draws the figure with matplotlib `Line2D` markers in place of his `scatter`, at his sizes, alphas and colors, so each population is one artist rather than a collection that keeps a size and a color per event.
+
+His script pairs `t0[i]` and `t00[i]` with the `i`-th sample FlowKit returns, and FlowKit orders the samples by their `$FIL` keyword, not by the rows of his workbook. So his thresholds go to the files in `$FIL` order, which may not be the order he meant. `benchmarks/flow/compare.py` pairs `--t0` and `--t00` with the workbook's rows.
+
+### Comparing with his script
+
+`benchmarks/flow/` holds his functions word for word in `cabrera_reference.py`, his whole script in `run_cabrera.py` with its two paths read from the command line and matplotlib drawing on Agg so it runs unattended, nothing else changed, and his finder cut at its steps in `cabrera_pieces.py`. `check_reference.py` runs his whole script with FlowKit and checks that its masks equal his pieces' masks on the arrays the comparison reads. On the mini it matched on all four of the files it was given, masks and arrays both. FlowKit needs pandas below 3 and the lock has pandas 3, so it runs in a throwaway environment:
+
+```sh
+uv run --no-project --with flowkit --with openpyxl --with matplotlib --with flowio \
+    python benchmarks/flow/check_reference.py <metadata.xlsx> <folder>
+```
+
+`compare.py` runs his code and ours piece by piece on real FCS files, each piece on the same arrays on both sides, timed as the median of `--repeat` runs:
+
+```sh
+uv run python benchmarks/flow/compare.py <file.fcs | folder> --repeat 5
+uv run python benchmarks/flow/compare.py --metadata study.xlsx --dir <folder> --t0 22,20,18,18 --t00 0.25,0.5,0.5,0.5
+```
+
+On Windows, `.\benchmarks\flow\compare.ps1` takes the same arguments, `--metadata` and an unquoted `22,20,18,18` included, runs it in the repo's environment and opens the picture it wrote, and `-Mini` runs it on the Mac mini and copies the results back. For each file it prints a table like this one, from the mini on `202.fcs`:
+
+```text
+202.fcs: 282,270 events, t11=22 t21=0.25, median of 3
+  piece             his s     ours s   speedup  match
+  1 grid           0.0169     0.0017     10.0x  equal
+  2 maxima         0.0071     0.0001     50.5x  equal
+  3 peaks          0.0001     0.0001      1.2x  equal, 3 peaks
+  4 area           0.0004     0.0001      3.6x  his keeps 586 cells ours doesn't, ours 1485 his doesn't (the disc)
+  5 gate           3.1627     0.0436     72.6x  on his cells: equal
+  finder his       3.2071     0.0577     55.5x  his find_area: equal
+  finder fixed     3.2071     0.0599     53.5x  his 3 populations, ours 3, 107,909 events gated differently (the disc)
+  6 graph          0.4674     0.1451      3.2x  his masks both, mean pixel difference 0.05 of 255
+```
+
+`5 gate` runs his gate and ours on his area's cells. `finder his` runs our whole finder with his own `find_area` in place of ours, and `finder fixed` runs it as shipped, both against his finder end to end. `6 graph` draws both figures from his masks, so the difference is the drawing alone, and times each to the finished pixels. The picture, `<file>_compare.png`, shows his figure, ours from the shipped finder, and the events whose populations differ in red. Each piece's row goes into `summary.csv` as each file ends, a file that fails to run is reported and skipped, and over several files it prints each piece's median, smallest and largest speedup. It exits with 1 if a file fails to run, or if the grid, the maxima, the peaks, the gate on his cells or `finder his` differ, beyond events within 1e-9 of the data's range from the hull's edge.
+
+`stress.py <folder>` joins every file's events into one sample and runs both finders once on it, his in a child process stopped after `--cap` seconds, 30 minutes by default. It exits with 1 if his run fails, or if ours given his `find_area` differs from his beyond the hull's edge.
+
+### Speed
+
+On the mini, an Apple M4 with 16 GB, over all 44 files of the record: 10,183,290 events, 20,844 to 516,810 a file, each piece timed as the median of 5 runs.
+
+| Piece | His, median s | Ours, median s | Speedup, median | Smallest | Largest |
+| --- | --- | --- | --- | --- | --- |
+| `1 grid` | 0.0163 | 0.0014 | 11.4x | 7.9x | 12.0x |
+| `2 maxima` | 0.0077 | 0.0001 | 54.0x | 49.7x | 58.6x |
+| `3 peaks` | 0.0001 | 0.0001 | 1.1x | 0.9x | 1.2x |
+| `4 area` | 0.0003 | 0.0001 | 3.7x | 3.3x | 3.9x |
+| `5 gate` | 2.1350 | 0.0348 | 64.0x | 21.0x | 126.2x |
+| `finder his` | 2.1524 | 0.0458 | 49.7x | 18.1x | 93.0x |
+| `finder fixed` | 2.1524 | 0.0461 | 47.8x | 20.2x | 84.1x |
+| `6 graph` | 0.3797 | 0.1209 | 3.1x | 1.8x | 4.0x |
+
+The grid, the maxima and the peaks equal his on all 44 files. The gate on his cells and `finder his` equal his on 40, and on the other 4, `186`, `190`, `278` and `345`, one event each differs, lying exactly on the hull's edge. His finder took 100.2 s over the 44 files and ours 1.85 s. `3 peaks` takes a tenth of a millisecond on both sides, so its ratio is noise. The shipped finder, with the disc on the peak, gates 1.4% to 38.7% of a file's events differently from his, 8.0% at the median. `202.fcs`, at 38.2%, is second only to `193.fcs`.
+
+`stress.py` joined the 44 files into one sample of 10,183,290 events. Ours took 1.44 s and his 1190.0 s, about 20 minutes, so 827x. Ours given his `find_area` gave his masks exactly, every event, and the shipped finder gated 499,311 of them, 4.9%, differently. The speedup grows with the sample because his gate triangulates every kept event, 4,977,743 and 4,880,276 for the two populations here, where ours triangulates the 56 vertices of their hull, and tests each of the 10,000 grid cells once where his tests every event's bin.
+
+Flow data: [Zenodo record 22079206](https://zenodo.org/records/22079206), "Flow cytometry data of PBMC of critically ill, mechanically ventilated patients". It's licensed under CC BY 4.0. The fixtures in `tests/fixtures/flow/` are three of its files, thinned, with their own README.
+
 ## What was done
 
 The work landed in the order below. Most steps started from a written plan, linked in the table. Steps 4, 5, 10, 11 and 12 also had an independent review, and its findings were fixed or recorded. `RDraws` grew out of a spike and has no plan document, and the architecture document was written after the moves it describes.
@@ -301,6 +400,8 @@ Several tests target a specific wrong implementation and were seen to fail on it
 The package layout has its own tests: a bare `import datanuggets` in a fresh interpreter still binds the old module paths, and a pickle naming an old path still loads.
 
 The plot tests draw on matplotlib's Agg backend and check what was drawn on the artists, not pixels: the dendrogram's lines against R's to within 0.006 points, the nugget colors against R's hex strings, the `pch = 16` sizes against the disc R drew, and every other plot's offsets, sizes, colors, bar heights and arrow ends. `save` is checked on the PDF's page size and the PNG's pixel size. A matplotlib `UserWarning` fails them, since it means matplotlib had to guess what an argument meant. A test in a fresh interpreter blocks matplotlib's import and checks that `import datanuggets` still works and that `import datanuggets.plot` names the `plot` extra.
+
+The flow tests compare with three fixtures recorded from Prof. Cabrera's own Python on files of the Zenodo record, each thinned to 50,000 events. The grid, the focal maxima and the refined peaks must equal his exactly. `find_area` must equal the corrected rule written out as a plain distance test, and his recorded cells must equal the mirrored disc written out the same way. The gate on his cells must give his masks, and so must the whole finder given his area rule, or differ only on events within 1e-9 of the data's range from the hull's edge. The events the gate keeps by their bin must equal his exactly. His guards and his row and column limits are each tested on both sides of the line, so moving one of them by one fails a test. A test in a fresh interpreter runs the finder with matplotlib's import blocked and checks that `import datanuggets` doesn't load `datanuggets.flow`.
 
 ### Results at the merge
 
@@ -477,11 +578,13 @@ The plots depart from R's drawings in six ways:
 - numba compiles the kernels on first use and caches them. On my laptop, importing the package and making a first small call to each public function took 8.8 seconds with an empty cache and 0.9 seconds with a warm one on Python 3.14, and 8.3 and 0.9 seconds on 3.15. The cache is kept per Python version, so each new version compiles once. Where numba can't write its cache, every new process compiles again.
 - The plot tests check drawn coordinates and colors, not images. A change in how matplotlib renders them, such as its fonts or its antialiasing, wouldn't fail them.
 - Windows has no `os.fork`, so the two tests of forked children run only on macOS and Linux.
+- The flow finder's cutoffs are his: a peak's row above 10 and below 90 and its column below 90, with no lower limit on the column, the 0.85 and 0.9 quantiles, and `t11` to `t22`. They were tuned on his study. On the 44 PBMC files here his finder found 2 to 7 populations per file.
+- `datanuggets.flow` doesn't read FCS files. The example and the benchmark read them with flowio.
 - It isn't on PyPI, and it needs Python 3.12 or newer with numba.
 
 ## Open problems
 
-These are known and unsolved. Items 1 to 5 are tracked in the [R-compatibility record](docs/plans/2026-09-30-r-compat.md), which holds or links the evidence for each. Item 6 has its own plan, item 7 is the rest of the port and the rulings the `WCluster` port waits on, and items 8 and 9 came out of the reviews and the wheel check.
+These are known and unsolved. Items 1 to 5 are tracked in the [R-compatibility record](docs/plans/2026-09-30-r-compat.md), which holds or links the evidence for each. Item 6 has its own plan, item 7 is the rest of the port and the rulings the `WCluster` port waits on, items 8 and 9 came out of the reviews and the wheel check, and item 10 is the flow finder's [spec](docs/specs/2026-10-12-flow-gate-design.md).
 
 1. Nine breaking changes toward R's behavior are approved in principle and held until they're confirmed as a set. B1 makes R's draws the default for an integer seed. B2 returns `wmean` as `p` by `k`. B3 makes `wpca`'s scale a single 1.0. B4 and B5 adopt R's argument order for `cluster_predict` and `create_dn_centers`. B6 makes `progress` take bools only. B7 gives `to_frame()` R's 1-based ids and types. B8 makes `cluster_predict` return R's empty results instead of raising. B9 orders categorical labels by category.
 2. Eight compatibility tasks are pending. T4 accepts fractional and bool labels under `factor()`'s 15-digit rule and adds `cluster_levels`. Two recorded cases, `labels_faithful_float_merge` and `labels_faithful_big`, show a gap in that design. In both, `distw` builds three axes from the exact values where `factor()` makes two levels, so one list of levels can't describe both. T6 floors `dn_num1`, `dn_num2` and `dn_num` the way R does. T7 makes `refine_dn` accept any real `nstart` and return R's result, which leaves the nuggets unsplit when `kmeans` can't run. Today `refine_dn` raises `ValueError` on a NaN or infinite `nstart`, and the internal `kmeans` raises an `OverflowError` on an infinite one. T8 accepts R's other `corr` values. T9 exports `RDraws` and `cluster_levels`. T10 adds independent checks for the one-column `"random"` case of `create_dn`, where R's own table is malformed. T11 adds tests for the documented exceptions. T12 writes `docs/compatibility.md` and corrects the remaining docs.
@@ -498,6 +601,7 @@ These are known and unsolved. Items 1 to 5 are tracked in the [R-compatibility r
    - Three mutants from the WCluster review aren't killed. One in `r_weighted_mean` survives on the laptop, where its NaN and R's have the same bits, and it wasn't run on arm64, where it should fail. One moves `wpca`'s warning threshold below -1e-300, where no recorded input has an eigenvalue. One drops the orthonormality check from the eigen rule, which another check covers, though that isn't proven for tied eigenvalues.
    - `RDraws` isn't checked against R for a sample of more than 2^31 - 1 values from the hash sampler, which only a population of more than four billion would reach.
 9. A source distribution built from a working tree that holds the local `.superpowers/sdd/` scratch folder includes it. The folder ignores itself through its own nested `.gitignore`, which hatchling doesn't read. A fresh clone has no such folder, and the wheel isn't affected.
+10. `find_area`'s disc waits on a ruling. The port centres it on the peak, which changes which events each population holds, as Flow gates shows. Matching his output instead means the mirrored disc, which `tests/flowcases.py` states and `compare.py`'s `finder his` row runs.
 
 ## Development
 

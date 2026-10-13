@@ -10,7 +10,7 @@ Where the code, tests, fixtures and tools of datanuggets live, which way the imp
 | `tests/` | the pytest suite, `rfixtures.py` and the R fixtures it reads |
 | `r/` | the R scripts that record the fixtures, with setup in `r/README.md` |
 | `scripts/` | `parity_report.py`, which rebuilds the tables in `docs/validation/` |
-| `benchmarks/` | the Covertype benchmark in R and Python, the stopping-rule profiler and the memory meter |
+| `benchmarks/` | the Covertype benchmark in R and Python, the stopping-rule profiler and the memory meter, and in `benchmarks/flow/` Prof. Cabrera's flow script with the comparison against `datanuggets.flow` |
 | `docs/specs/` | the design specs, dated |
 | `docs/plans/` | implementation plans and decision records, dated |
 | `docs/reviews/` | review reports, dated and kept as written |
@@ -48,9 +48,15 @@ src/datanuggets/
     wkmeansjit.py      Wkmeans_single compiled, each trial move over two clusters' rows
     dn.py              dn_wkmeans, dn_whclust, dn_wpca and dn_cluster_predict (the DN wrappers)
     cutree.py          cut_tree (stats::cutree), and R's merge numbering from the port's
+  flow/                Prof. Cabrera's flow gate finder, never imported by the package itself
+    __init__.py        the public names
+    grid.py            f_plot and DensityGrid, his density grid counted with one bincount
+    peaks.py           local_maxima, search_ind, refine_peaks and find_area
+    gate.py            hull_gate and lymphmacro_finder
   plot/                the matplotlib views, never imported by the package itself
     __init__.py        the matplotlib check and the public names
     tree.py            dendrogram (plot.hclust's lines)
+    flow.py            gates, his figure of the finder's populations
     points.py          clusters and nuggets, the help examples' weight colors, the size rules
     pca.py             scores, scree and loadings, with the sign rule
     style.py           style, save, PAPER_RC and the palettes
@@ -80,7 +86,7 @@ src/datanuggets/
 
 ## Public and private
 
-The public API is `datanuggets.__all__`, imported from `datanuggets` as the README does. `datanuggets.nuggets` and `datanuggets.wcluster` re-export the same functions from the modules that define them. `result` and `exceptions` hold the public classes. `datanuggets.plot` is public too, with its own `__all__`, but it's imported only when asked for by name, since it needs matplotlib from the `plot` extra. Without matplotlib, importing it raises an `ImportError` that names the extra.
+The public API is `datanuggets.__all__`, imported from `datanuggets` as the README does. `datanuggets.nuggets` and `datanuggets.wcluster` re-export the same functions from the modules that define them. `result` and `exceptions` hold the public classes. `datanuggets.plot` is public too, with its own `__all__`, but it's imported only when asked for by name, since it needs matplotlib from the `plot` extra. Without matplotlib, importing it raises an `ImportError` that names the extra. `datanuggets.flow` is public in the same way, with its own `__all__`, and is imported only when asked for by name. Its own modules import numpy, scipy and `_validate`, though importing it runs `datanuggets/__init__.py`, numba included, as any submodule does.
 
 A module or package whose name starts with an underscore is private. It can change without notice, and code outside this repo shouldn't import it. `datanuggets._draws` is the one private path kept working on purpose, for the reasons below.
 
@@ -98,11 +104,12 @@ Imports run from the workflows down to the R-compatibility layer and never back 
 | `_clustering` | `_compat`, `_random` |
 | `wcluster` | `wcluster`, `_compat`, `_random`, `_validate`, `result`, `exceptions` |
 | `nuggets` | `nuggets`, `_clustering`, `_compat`, `_random`, `_defaults`, `_validate`, `result`, `exceptions` |
+| `flow` | `flow`, `_validate` |
 | `plot` | `plot`, `wcluster`, `_compat` |
 | the old paths: `create`, `refine`, `centers`, `means`, `complexity`, `_draws` | `nuggets`, `_random` |
 | `datanuggets/__init__.py` | `nuggets`, `wcluster`, the old paths, `result`, `exceptions` |
 
-So R's arithmetic and the draw sources never import a workflow, and new code in them can't create a cycle. Wkmeans draws its starts through `_random`, the other WCluster functions draw nothing, and `wcluster` never imports `nuggets`: the DN wrappers take a `DataNuggets` from `result`. `plot` sits on top: it imports `wcluster` for R's merge numbering and `_compat` for the sum and quantile in R's nugget colors, and nothing in the package imports it. The table is the whole import graph of the package by layer, imports inside a layer and inside functions included.
+So R's arithmetic and the draw sources never import a workflow, and new code in them can't create a cycle. Wkmeans draws its starts through `_random`, the other WCluster functions draw nothing, and `wcluster` never imports `nuggets`: the DN wrappers take a `DataNuggets` from `result`. `plot` sits on top: it imports `wcluster` for R's merge numbering and `_compat` for the sum and quantile in R's nugget colors, and nothing in the package imports it. `flow` sits beside the workflows and imports only `_validate`. `plot.gates` takes the finder's masks as an array, so `plot` doesn't import `flow` either. The table is the whole import graph of the package by layer, imports inside a layer and inside functions included.
 
 ## Where new code goes
 
@@ -110,7 +117,8 @@ So R's arithmetic and the draw sources never import a workflow, and new code in 
 |---|---|---|
 | a datanugget function | `nuggets/<name>.py` | export it from `nuggets/__init__.py` and `datanuggets/__init__.py` |
 | a WCluster function | `wcluster/` | the same two exports. A new cluster statistic joins `wstats.py` when it shares its helpers |
-| a plot | the `plot/` module for what it draws: trees in `tree`, points in `points`, PCA results in `pca`, settings and saving in `style` | export it from `plot/__init__.py` only. It takes `ax=`, returns the Axes, and checks its input before it draws anything |
+| a step of the flow gate finder | `flow/`: the grid in `grid`, peaks and areas in `peaks`, gating in `gate` | export it from `flow/__init__.py` only. `benchmarks/flow/compare.py` gets a row that times it against his piece and checks the output |
+| a plot | the `plot/` module for what it draws: trees in `tree`, points in `points`, PCA results in `pca`, the flow figure in `flow`, settings and saving in `style` | export it from `plot/__init__.py` only. It takes `ax=`, returns the Axes, and checks its input before it draws anything |
 | a piece of R arithmetic | the `_compat` module named for what it reproduces: sums and statistics in `arithmetic`, NA and NaN bits in `missing`, matrix products and eigen in `linalg`, index helpers in `indexing`, Rfast's code in `rfast` | keep it out of `_validate`, which only checks and converts arguments |
 | a compiled kernel | a module whose name ends in `jit`, made with `compiled` from `_compat/_compiled.py` | `tests/compat/test_compiled.py` finds the `*jit` modules at any depth and fails a numba decorator anywhere else |
 | a sampling routine or seed rule | `_random/`. A new source implements `Draws` from `interfaces.py`, and `seeds.as_draws` decides what `seed=` becomes | |
@@ -125,11 +133,12 @@ So R's arithmetic and the draw sources never import a workflow, and new code in 
 |---|---|
 | `tests/nuggets/` | `nuggets/` |
 | `tests/wcluster/` | `wcluster/`, the iterative functions in `test_whclust.py`, `test_wkmeans.py` and `test_wstatsjit.py`, the DN wrappers in `test_dn.py`, and `cut_tree` in `test_cutree.py` |
+| `tests/flow/` | `flow/`, against fixtures recorded from his own Python. `test_flow_import.py` runs the finder with matplotlib blocked |
 | `tests/plot/` | `plot/`, on matplotlib's Agg backend. Its `conftest.py` closes every figure and turns matplotlib's `UserWarning`s into failures |
 | `tests/compat/` | `_compat/` |
 | `tests/randomness/` | `_random/` |
 | `tests/clustering/` | `_clustering/` |
-| `tests/` | `test_result.py` (the result classes and the import paths), `test_validate.py` (`_validate`), `test_compat_inputs.py` (R's handling of inputs across the public functions, from the `compat` fixture group), `conftest.py` and `rfixtures.py` |
+| `tests/` | `test_result.py` (the result classes and the import paths), `test_validate.py` (`_validate`), `test_compat_inputs.py` (R's handling of inputs across the public functions, from the `compat` fixture group), `conftest.py`, `rfixtures.py`, and `flowcases.py`, which loads the flow fixtures and holds the flow tests' independent area rules and edge check |
 
 A test file holds the R parity cases and the unit cases for the module it covers. Each file mixes both against the same fixtures, so the suite is grouped by area and not into unit and parity folders. The long fuzz cases carry the `slow` mark and run with `pytest -m slow`.
 
@@ -142,6 +151,7 @@ A test file holds the R parity cases and the unit cases for the module it covers
 - Each case lives in `tests/fixtures/<group>/<case>/`: a `manifest.json` and its arrays as `.bin` files.
 - Tests read them through `rfixtures.py`, and `rfixtures.FIXTURE_ROOT` is the one place that names the location.
 - The `r/fixtures_*.R` scripts record the groups, each case through `write_case` in `r/fixture_io.R`, in the pinned R environment `r/README.md` describes. Most groups come from the script of the same name, and nine don't. `fixtures_rcompat.R` writes `rcompat_split_indices`, `rcompat_dist`, `rcompat_dista`, `rcompat_rowmins` and `rcompat_means`. `fixtures_rstats.R` writes `rcompat_stats` and `fixtures_rwstats.R` writes `rcompat_wstats`. `fixtures_kmeans.R` also writes `kmns`, and `fixtures_wstats.R` also writes `wstats_constructed`. To find the script for any group, search `r/` for its name. A script that reads another group's cases back names that group too, so `create_dn`, `kmeans` and `refine_dn` turn up in more than one script, and the one that records the group is the one whose cases go to `write_case` under that name.
+- The flow fixtures are the exception. `tests/fixtures/flow/` holds three `.npz` files recorded by `benchmarks/flow/record.py` from Prof. Cabrera's Python on real PBMC files, not from R, with their source and keys in its `README.md`.
 - Fixtures are evidence of what R did. They're never regenerated to make a test pass, and the reorganization left every fixture byte where it was.
 
 ## Retained import paths
