@@ -18,10 +18,23 @@ def _inside(vertices: np.ndarray, q: np.ndarray) -> np.ndarray:
     return Delaunay(vertices).find_simplex(q) >= 0
 
 
+def _bins(zz) -> np.ndarray:
+    """zz as f_plot gives it: one (x bin, y bin) row per event, integers counting from 1. A 0 bin
+    would read the grid's last cell, and silently."""
+    zz = np.asarray(zz)
+    if zz.ndim != 2 or zz.shape[1] != 2:
+        raise ValueError(f"zz must have two columns, an (x bin, y bin) per event, got {zz.shape}")
+    if not np.issubdtype(zz.dtype, np.integer):
+        raise ValueError(f"zz must be integer bins, got {zz.dtype}")
+    if len(zz) and zz.min() < 1:
+        raise ValueError("zz must count its bins from 1, as f_plot does")
+    return zz
+
+
 def bin_mask(zz, cells) -> np.ndarray:
     """The events whose bin is inside the convex hull of the cells. Each grid cell is tested once
     and looked up per event, since every event in a bin has the bin's coordinates."""
-    zz = np.asarray(zz)
+    zz = _bins(zz)
     cells = np.asarray(cells)
     if len(cells) <= MIN_POINTS:
         return np.zeros(len(zz), dtype=bool)
@@ -40,6 +53,8 @@ def hull_gate(fsc_a, ssc_a, zz, cells) -> np.ndarray:
     keeps, tested against a triangulation of that hull's vertices rather than of every kept
     event. Empty when the cells or the kept events can't make a hull."""
     raw = np.column_stack((np.asarray(fsc_a, dtype=float), np.asarray(ssc_a, dtype=float)))
+    if len(_bins(zz)) != len(raw):
+        raise ValueError(f"zz must have one row per event, {len(raw)}, got {len(zz)}")
     points = raw[bin_mask(zz, cells)]
     if len(points) <= MIN_POINTS:
         return np.zeros(len(raw), dtype=bool)

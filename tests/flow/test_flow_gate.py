@@ -123,6 +123,21 @@ def test_nearly_collinear_events_give_an_empty_population():
     assert not hull_gate(fsc, ssc, zz, cells).any()
 
 
+@pytest.mark.parametrize(
+    ("zz", "match"),
+    [
+        (np.zeros((5, 2), dtype=int), "bins from 1"),  # a 0 bin would read cell (-1, -1)
+        (np.ones((5, 2)), "integer"),
+        (np.ones((5, 3), dtype=int), "two columns"),
+        (np.ones((4, 2), dtype=int), "one row per event"),
+    ],
+)
+def test_hull_gate_rejects_bins_that_arent_the_grids(zz, match):
+    square = np.array([[40, 40], [40, 60], [60, 40], [60, 60]])
+    with pytest.raises(ValueError, match=match):
+        hull_gate(np.arange(5.0), np.arange(5.0), zz, square)
+
+
 @pytest.mark.parametrize("bad", [np.nan, np.inf])
 def test_finder_rejects_nan_and_inf(bad):
     fsc = np.arange(100.0)
