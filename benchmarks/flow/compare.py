@@ -1,16 +1,14 @@
 """Cabrera's gate finder against datanuggets.flow, piece by piece, on real FCS files. Each piece
 runs on the same arrays for his code and ours, timed as the median of --repeat runs, with whether
 the outputs match. Writes a picture per file, his figure, ours and the events gated differently,
-and appends a row per piece to summary.csv as each file ends. A file that raises is reported and
-skipped.
+and appends a row per piece to summary.csv.
 
 python benchmarks/flow/compare.py <file.fcs | folder> [--repeat 3] [--out tmp/flow] [--no-png]
 python benchmarks/flow/compare.py --metadata study.xlsx --dir <folder> --t0 22,20 --t00 0.25,0.5
 
 --t0 and --t00 are his loop's t11 and t21 per file, in the order the files run (the workbook's
 order with --metadata). Exit status 1 if the grid, maxima or peaks differ, or his gate on his cells,
-or his finder against ours given his find_area, differs by more than events on the hull's edge,
-or a file fails to run.
+or his finder against ours given his find_area, differs by more than events on the hull's edge.
 """
 
 import argparse
@@ -19,7 +17,6 @@ import re
 import statistics
 import sys
 import time
-import traceback
 from pathlib import Path
 
 import cabrera_pieces as his
@@ -117,8 +114,6 @@ def gate_match(fsc, ssc, zz, cells, got, want):
 
 def area_match(his_cells, ours):
     """Cells his find_area keeps and ours doesn't, and back, over the peaks."""
-    if len(his_cells) != len(ours):  # the peaks differ, which row 3 has said
-        return f"his {len(his_cells)} areas, ours {len(ours)}"
     his_only = ours_only = 0
     for h, o in zip(his_cells, ours, strict=True):
         hs, os_ = {tuple(r) for r in h.astype(int)}, {tuple(r) for r in o}
@@ -231,7 +226,7 @@ def summarize(rows):
     for piece in PIECES:
         s = [r["speedup"] for r in rows if r["piece"] == piece]
         if s:
-            print(f"  {piece:<12} {statistics.median(s):8.1f}x {min(s):8.1f}x {max(s):8.1f}x")
+            print(f"  {piece:<9} {statistics.median(s):8.1f}x {min(s):8.1f}x {max(s):8.1f}x")
 
 
 def numbers(tokens):
@@ -264,34 +259,23 @@ def main(argv=None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     plt.switch_backend("Agg")
 
-    summary = out / "summary.csv"
-    rows, ok, failed = [], True, []
+    rows, ok = [], True
     for f, t11, t21 in zip(files, t0, t00, strict=True):
-        try:
-            r, held = compare(f, t11, t21, args.repeat, out, not args.no_png)
-        except Exception:  # one file that can't run shouldn't cost the others their rows
-            traceback.print_exc()
-            failed.append(f.name)
-            continue
-        append(summary, r)  # as each file ends, so a stopped run keeps what it did
+        r, held = compare(f, t11, t21, args.repeat, out, not args.no_png)
         rows += r
         ok &= held
-    if len(files) > 1:
-        summarize(rows)
-    verdict = "pieces 1-3, 5 and finder his match" if ok else "A PIECE THAT MUST MATCH DIFFERS"
-    if failed:
-        verdict += f"; {len(failed)} FAILED TO RUN: {', '.join(failed)}"
-    print(f"\n{verdict}; rows in {summary}")
-    return 0 if ok and not failed else 1
-
-
-def append(summary, rows):
+    summary = out / "summary.csv"
     new = not summary.exists()
     with summary.open("a", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=FIELDS)
         if new:
             w.writeheader()
         w.writerows(rows)
+    if len(files) > 1:
+        summarize(rows)
+    verdict = "pieces 1-3, 5 and finder his match" if ok else "A PIECE THAT MUST MATCH DIFFERS"
+    print(f"\n{verdict}; rows in {summary}")
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
