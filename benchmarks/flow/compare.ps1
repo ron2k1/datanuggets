@@ -24,13 +24,14 @@ if ($Mini) {
     $out = Join-Path $out 'mini'
     New-Item -ItemType Directory -Force $out | Out-Null
     $bash = 'C:\Program Files\Git\bin\bash.exe'
-    # single quotes so Git Bash leaves a ~ for the mini to expand
-    $quoted = ($Rest | ForEach-Object { "'$_'" }) -join ' '
+    # single quotes so Git Bash leaves a ~ for the mini to expand, a ' inside one closed and reopened
+    $quoted = ($Rest | ForEach-Object { "'" + ($_ -replace "'", "'\''") + "'" }) -join ' '
     Push-Location $repo
     try {
         & $bash -c "~/.claude/tools/mini-run.sh uv run python benchmarks/flow/compare.py $quoted --out tmp/flow"
         $code = $LASTEXITCODE
-        scp -q 'mini:datanuggets/tmp/flow/*.png' 'mini:datanuggets/tmp/flow/*.csv' $out
+        # -p keeps the mini's times, so a picture left from an earlier run isn't opened as new
+        scp -q -p 'mini:datanuggets/tmp/flow/*.png' 'mini:datanuggets/tmp/flow/*.csv' $out
     } finally { Pop-Location }
 } else {
     New-Item -ItemType Directory -Force $out | Out-Null

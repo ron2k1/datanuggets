@@ -251,7 +251,9 @@ def main(argv=None) -> int:
     p.add_argument("--out", default="tmp/flow")
     p.add_argument("--no-png", action="store_true")
     args = p.parse_args(argv)
-    if (args.target is None) == (args.metadata is None or args.dir is None):
+    if args.target is not None and (args.metadata is not None or args.dir is not None):
+        p.error("give an FCS file or folder, or --metadata and --dir, not both")
+    if args.target is None and (args.metadata is None or args.dir is None):
         p.error("give an FCS file or folder, or --metadata and --dir")
     if args.repeat < 1:
         p.error("--repeat must be at least 1")
