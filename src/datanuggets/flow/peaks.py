@@ -1,5 +1,5 @@
 """The peaks of the density grid: his focal maxima, refined by search_ind and filtered the way he
-filters them."""
+filters them, and find_area, the cells around each."""
 
 from __future__ import annotations
 
@@ -45,3 +45,16 @@ def refine_peaks(x, candidates, *, threshold=2) -> np.ndarray:
     p = p[(p[:, 0] < ROW_MAX) & (p[:, 1] < COL_MAX) & (p[:, 0] > ROW_MIN)]
     p = p[x[p[:, 0] - 1, p[:, 1] - 1] > np.quantile(x, PEAK_QUANTILE)]
     return p[np.argsort(p[:, 0])]
+
+
+def find_area(x, idx, idy, t1=35, t2=0.85) -> np.ndarray:
+    """The 1-based cells (i, j) of x closer than t1 to the peak (idx, idy) with x[i, j] above t2
+    times the peak's density, column by column as his come. His version reads each cell's
+    density right but centres the distance on the mirrored peak (idy, idx), so off the diagonal
+    it keeps the wrong cells. This one centres it on the peak."""
+    x = np.asarray(x, dtype=float)
+    di = np.arange(1, x.shape[0] + 1)[:, None] - idx
+    dj = np.arange(1, x.shape[1] + 1)[None, :] - idy
+    keep = (np.sqrt(di * di + dj * dj) < t1) & (x > t2 * x[int(idx) - 1, int(idy) - 1])
+    j, i = np.nonzero(keep.T)
+    return np.column_stack((i, j)) + 1
