@@ -29,6 +29,15 @@ def test_f_plot_counts_and_transposes():
     assert g.y.tolist() == [0, 3]
 
 
+def test_f_plot_bins_float32_by_their_float64_values():
+    # 4,003,041 is bin 20's lower edge from 369,044 to 2**22. In float32, 20 times 3,633,997 rounds
+    # half to even down to 72,679,936, so float32 arithmetic would put the event in bin 19
+    x = np.array([369044, 4003041, 2**22], dtype=np.float32)
+    lo, hi = x.min(), x.max()
+    assert np.floor(20 * (x[1] - lo) / (hi - lo)) + 1 == 19
+    assert f_plot(x, [0, 1, 2]).zz[:, 0].tolist() == [1, 20, 20]
+
+
 def test_alpha_cuts_below_the_fraction_of_the_maximum():
     assert f_plot(X, Y, nr=2, nc=2, alpha=0.6).z.tolist() == [[0, 0], [2, 0]]
 
