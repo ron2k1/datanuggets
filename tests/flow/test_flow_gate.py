@@ -3,9 +3,10 @@ the corrected area end to end, his masks again when given his area rule, and the
 
 import numpy as np
 import pytest
+from scipy.spatial import ConvexHull, Delaunay
 
 from datanuggets.flow import hull_gate, lymphmacro_finder
-from datanuggets.flow.gate import _finder
+from datanuggets.flow.gate import _finder, bin_mask
 from flowcases import NAMES, FlowCase, assert_gate_close, load_case, mirrored_area
 
 
@@ -16,6 +17,15 @@ def test_hull_gate_on_his_cells_gives_his_masks(name):
         cells = FlowCase.cells(c.his_area, k)
         got = hull_gate(c.fsc, c.ssc, c.zz, cells)
         assert_gate_close(c.fsc, c.ssc, got, c.his_masks[:, k], c.zz, cells)
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_bin_mask_gives_his_kept_events(name):
+    c = load_case(name)
+    for k in range(len(c.peaks)):
+        cells = FlowCase.cells(c.his_area, k)
+        want = Delaunay(cells[ConvexHull(cells).vertices]).find_simplex(c.zz) >= 0  # his jj_type
+        assert np.array_equal(bin_mask(c.zz, cells), want)
 
 
 @pytest.mark.parametrize("name", NAMES)
@@ -46,6 +56,14 @@ def test_finder_takes_lists_and_float32():
     n = 5000
     got = lymphmacro_finder(c.fsc[:n].tolist(), c.ssc[:n].tolist())
     assert np.array_equal(got, lymphmacro_finder(c.fsc[:n], c.ssc[:n]))
+
+
+def test_finder_takes_pandas_columns_by_position():
+    pd = pytest.importorskip("pandas")
+    c = load_case(NAMES[0])
+    index = np.arange(len(c.fsc))[::-1]  # FlowKit hands over DataFrame columns; the index is unused
+    got = lymphmacro_finder(pd.Series(c.fsc, index=index), pd.Series(c.ssc, index=index))
+    assert np.array_equal(got, lymphmacro_finder(c.fsc, c.ssc))
 
 
 def test_no_peak_gives_zero_columns():
