@@ -23,7 +23,8 @@ def test_f_plot_equals_his_grid(name):
 def test_f_plot_counts_and_transposes():
     g = f_plot(X, Y, nr=2, nc=2, alpha=0)
     assert g.zz.tolist() == [[1, 1], [1, 2], [1, 2], [2, 2]]
-    assert g.z.tolist() == [[1, 0], [2, 1]]  # his table(zx, zy) is [[1, 2], [0, 1]], returned as t(z)
+    # his table(zx, zy) is [[1, 2], [0, 1]], returned as t(z)
+    assert g.z.tolist() == [[1, 0], [2, 1]]
     assert g.x.tolist() == [0, 3]
     assert g.y.tolist() == [0, 3]
 
