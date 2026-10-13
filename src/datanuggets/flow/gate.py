@@ -44,10 +44,9 @@ def hull_gate(fsc_a, ssc_a, zz, cells) -> np.ndarray:
     if len(points) <= MIN_POINTS:
         return np.zeros(len(raw), dtype=bool)
     try:
-        hull = ConvexHull(points)
-    except QhullError:  # kept events on one line: his Delaunay raises here
+        return _inside(points[ConvexHull(points).vertices], raw)
+    except QhullError:  # kept events on or within rounding of one line: his Delaunay raises here
         return np.zeros(len(raw), dtype=bool)
-    return _inside(points[hull.vertices], raw)
 
 
 def lymphmacro_finder(fsc_a, ssc_a, *, n_row=11, n_col=11, t11=22, t21=0.25, t12=20, t22=0.5):

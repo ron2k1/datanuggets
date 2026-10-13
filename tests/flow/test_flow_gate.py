@@ -76,6 +76,16 @@ def test_collinear_events_give_an_empty_population():
     assert not hull_gate(fsc, ssc, zz, cells).any()  # the kept events all have ssc 7
 
 
+def test_nearly_collinear_events_give_an_empty_population():
+    rng = np.random.default_rng(0)
+    n = 2000
+    fsc = rng.uniform(4e5, 1e6, n)
+    ssc = 3e5 + 1e-9 * rng.standard_normal(n)  # ConvexHull takes it, Delaunay calls it flat
+    zz = np.full((n, 2), 50)
+    cells = np.array([[40, 40], [40, 60], [60, 40], [60, 60]])
+    assert not hull_gate(fsc, ssc, zz, cells).any()
+
+
 @pytest.mark.parametrize("bad", [np.nan, np.inf])
 def test_finder_rejects_nan_and_inf(bad):
     fsc = np.arange(100.0)
