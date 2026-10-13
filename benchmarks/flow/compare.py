@@ -13,6 +13,7 @@ or his finder against ours given his find_area, differs by more than events on t
 
 import argparse
 import csv
+import re
 import statistics
 import sys
 import time
@@ -229,8 +230,9 @@ def summarize(rows):
 
 
 def numbers(tokens):
-    """--t0 22 20 and --t0 22,20 both give [22.0, 20.0]."""
-    return [float(v) for t in tokens or [] for v in t.split(",") if v]
+    """--t0 22 20 and --t0 22,20 both give [22.0, 20.0], and so does "22 20", the one string
+    PowerShell passes for an unquoted 22,20."""
+    return [float(v) for t in tokens or [] for v in re.split(r"[,\s]+", t) if v]
 
 
 def main(argv=None) -> int:
