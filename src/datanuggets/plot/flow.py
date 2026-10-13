@@ -6,19 +6,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # his scatter sizes, in points squared, and alphas. Drawn as Line2D markers with markersize the
-# square root of his s, and scatter's edge, 1 point in the face color, so a figure of a million
-# events draws as one path per population rather than one marker each
+# square root of his s, and scatter's edge, patch.linewidth points in the face color, so a figure
+# of a million events draws as one path per population rather than one marker each
 EVENT_SIZE = 0.5
 POP_SIZE = 5.0
 EVENT_ALPHA = 0.3
 POP_ALPHA = 0.8
-EDGE_WIDTH = 1.0
 
 
 def gates(fsc_a, ssc_a, masks, *, title=None, ax=None):
-    """His figure: every event in gray, then each population that has an event, in the color
-    cycle's order, so an empty population takes no color, as his scatter calls do. masks is the
-    finder's output, one bool column per population. Returns the axes."""
+    """His figure: every event in gray, then each population that has an event in the next color
+    of the axes' cycle, so an empty population takes no color, as his scatter calls do. masks is
+    the finder's output, one bool column per population. Returns the axes."""
     fsc = np.asarray(fsc_a, dtype=float)
     ssc = np.asarray(ssc_a, dtype=float)
     if fsc.ndim != 1 or fsc.shape != ssc.shape:
@@ -29,7 +28,7 @@ def gates(fsc_a, ssc_a, masks, *, title=None, ax=None):
     if len(m) != len(fsc):
         raise ValueError(f"masks must have one row per event, {len(fsc)}, got {len(m)}")
     ax = plt.gca() if ax is None else ax
-    style = {"ls": "none", "mew": EDGE_WIDTH, "rasterized": True}
+    style = {"ls": "none", "mew": plt.rcParams["patch.linewidth"], "rasterized": True}
     ax.plot(
         fsc,
         ssc,
@@ -41,22 +40,18 @@ def gates(fsc_a, ssc_a, masks, *, title=None, ax=None):
         gid="events",
         **style,
     )
-    cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
-    drawn = 0
     for j in range(m.shape[1]):
-        if m[:, j].any():
+        if m[:, j].any():  # no color given, so the axes' cycle gives the next one
             ax.plot(
                 fsc[m[:, j]],
                 ssc[m[:, j]],
                 "o",
                 ms=POP_SIZE**0.5,
-                color=cycle[drawn % len(cycle)],
                 alpha=POP_ALPHA,
                 label=f"Pop {j + 1}",
                 gid="population",
                 **style,
             )
-            drawn += 1
     if title is not None:
         ax.set_title(title)
     ax.set_xlabel("FSC-A")

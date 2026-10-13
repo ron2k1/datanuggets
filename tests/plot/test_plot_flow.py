@@ -1,8 +1,10 @@
 """gates: his figure as Line2D markers, his sizes, alphas and colors."""
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
+from matplotlib.colors import to_hex
 
 from datanuggets.plot import gates
 
@@ -44,6 +46,22 @@ def test_gates_skips_empty_populations_in_the_color_cycle():
     cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     _, *pops = gates(fsc, ssc, masks).get_lines()
     assert [p.get_color() for p in pops] == cycle[:2]  # Pop 3 takes the second color, as in his
+
+
+def test_gates_takes_the_axes_cycle_and_edge_width_his_scatter_takes():
+    fsc, ssc, masks = _data()
+    with mpl.rc_context({"patch.linewidth": 2.5}):
+        fig, (his, ours) = plt.subplots(1, 2)
+        for ax in (his, ours):
+            ax.set_prop_cycle(color=["k", "m"])
+        his.scatter(fsc, ssc, s=0.5, c="gray", alpha=0.3)  # his calls, as his script makes them
+        want = [his.scatter(fsc[masks[:, j]], ssc[masks[:, j]], s=5, alpha=0.8) for j in (0, 2)]
+        gates(fsc, ssc, masks, ax=ours)
+    _, *pops = ours.get_lines()
+    assert [to_hex(p.get_color()) for p in pops] == [to_hex(w.get_facecolor()[0]) for w in want]
+    assert [w.get_linewidths()[0] for w in want] == [2.5, 2.5]
+    assert [line.get_markeredgewidth() for line in ours.get_lines()] == [2.5, 2.5, 2.5]
+    plt.close(fig)
 
 
 def test_gates_with_no_population_draws_the_events():
