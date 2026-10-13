@@ -18,9 +18,9 @@ def read_fsc_ssc(path) -> tuple[np.ndarray, np.ndarray]:
 
 
 def fcs_files(target) -> list[Path]:
-    """One FCS file, or every *.fcs in a folder, sorted by name."""
+    """One FCS file, or every *.fcs in a folder, .FCS too, sorted by name."""
     p = Path(target).expanduser()
-    files = sorted(p.glob("*.fcs")) if p.is_dir() else [p]
+    files = sorted(p.glob("*.fcs", case_sensitive=False)) if p.is_dir() else [p]
     if not files or not all(f.is_file() for f in files):
         raise FileNotFoundError(f"no FCS file at {p}")
     return files

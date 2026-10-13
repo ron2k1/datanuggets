@@ -4,7 +4,7 @@ Nothing else is changed but trailing spaces. His loop reads the first four sampl
 order, which sorts by the $FIL keyword, and pairs them with t0 and t00. FlowKit needs pandas<3, so
 this runs outside the project's env:
 
-uv run --no-project --with flowkit --with openpyxl --with matplotlib     python benchmarks/flow/run_cabrera.py <metadata.xlsx> <folder>
+uv run --no-project --with flowkit --with openpyxl --with matplotlib python benchmarks/flow/run_cabrera.py <metadata.xlsx> <folder>
 """
 
 import sys  # changed: paths from the command line
