@@ -1,6 +1,7 @@
 """Every file's events joined into one sample and the gate finder run once on it: ours in this
 process, as shipped and given his find_area, and his in a child process stopped at --cap seconds,
-since his Delaunay of every kept event grows with the sample. Appends a row to stress.csv.
+since his Delaunay of every kept event grows with the sample. Appends a row to stress.csv. Exit
+status 1 if his run fails, or if ours given his find_area differs from his beyond the hull's edge.
 
 python benchmarks/flow/stress.py <folder> [--cap 1800] [--out tmp/flow]
 """
@@ -22,6 +23,7 @@ from datanuggets.flow.gate import MSIZE, _finder
 from datanuggets.flow.grid import sqrt_coords
 
 FIELDS = ["files", "events", "ours_s", "ours_his_area_s", "his_s", "his", "ours_vs_his"]
+STDERR_LINES = 15  # of a failed his run's stderr, printed
 
 
 def his_child(npy: Path) -> None:
@@ -74,26 +76,30 @@ def main(argv=None) -> int:
     print(f"ours given his find_area {ours_his_s:.2f} s")
 
     npy = out / "stress_events.npy"
+    masks_npy = npy.with_name("stress_his_masks.npy")
     np.save(npy, np.vstack((fsc, ssc)))
-    his_s, versus = None, ""
+    his_s, versus, ok = None, "", True
     cmd = [sys.executable, __file__, "--his", str(npy)]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=args.cap, check=True)
         his_s = float(r.stdout.split()[-1])
-        his = np.load(npy.with_name("stress_his_masks.npy"))
+        his = np.load(masks_npy)
         status = f"{his_s:.2f} s, {his.shape[1]} populations"
         if his.shape == ours_his.shape:
-            same, _ = gate_match(fsc, ssc, *his_cells(fsc, ssc), ours_his, his)
+            same, ok = gate_match(fsc, ssc, *his_cells(fsc, ssc), ours_his, his)
         else:
-            same = f"his {his.shape[1]} populations, ours {ours_his.shape[1]}"
+            same, ok = f"his {his.shape[1]} populations, ours {ours_his.shape[1]}", False
         moved = int(differ(his, ours).sum())
         versus = f"given his find_area: {same}; as shipped: {moved:,} events moved (the disc)"
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired:  # a measurement, his run is too slow to finish
         status = f"stopped at {args.cap / 60:g} min"
     except subprocess.CalledProcessError as exc:
-        status = f"his run failed, exit {exc.returncode}"
+        status = f"failed, exit {exc.returncode}"
+        print("\n".join(exc.stderr.splitlines()[-STDERR_LINES:]), file=sys.stderr)
+        ok = False
     finally:
         npy.unlink(missing_ok=True)
+        masks_npy.unlink(missing_ok=True)
     print(f"his {status}")
     if his_s is not None:
         print(f"ours against his {versus}")
@@ -109,7 +115,9 @@ def main(argv=None) -> int:
             w.writeheader()
         w.writerow(dict(zip(FIELDS, values, strict=True)))
     print(f"row in {csv_path}")
-    return 0
+    if not ok:
+        print("HIS FINDER AND OURS GIVEN HIS find_area DIFFER, or his run failed")
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
