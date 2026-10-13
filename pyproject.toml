@@ -24,7 +24,18 @@ progress = ["tqdm>=4.66"]
 plot = ["matplotlib>=3.9"]
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-xdist>=3.6", "ruff>=0.6", "pandas>=2.2", "tqdm>=4.66", "matplotlib>=3.9"]
+dev = [
+    "pytest>=8",
+    "pytest-xdist>=3.6",
+    "ruff>=0.6",
+    "pandas>=2.2",
+    "tqdm>=4.66",
+    "matplotlib>=3.9",
+    # the flow benchmark: FlowKit's own FCS reader, and the metadata workbook Cabrera's script
+    # reads. FlowKit itself needs pandas<3, so it only runs in uv run --no-project --with flowkit
+    "flowio>=1.4,<1.5",
+    "openpyxl>=3.1",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/datanuggets"]
@@ -37,4 +48,9 @@ markers = ["slow: the long long-double fuzz, 10,000,000 cases per operation (pyt
 [tool.ruff]
 line-length = 100
 src = ["src", "tests", "scripts", "benchmarks"]
-extend-exclude = ["docs"]  # prose with illustrative snippets, not sources
+extend-exclude = [
+    "docs",  # prose with illustrative snippets, not sources
+    # Cabrera's code word for word, kept as he wrote it
+    "benchmarks/flow/cabrera_reference.py",
+    "benchmarks/flow/run_cabrera.py",
+]
