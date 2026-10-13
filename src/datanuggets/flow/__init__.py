@@ -2,5 +2,6 @@
 from his Python port of his R code, checked piece by piece against it."""
 
 from datanuggets.flow.grid import DensityGrid, f_plot
+from datanuggets.flow.peaks import local_maxima, refine_peaks, search_ind
 
-__all__ = ["DensityGrid", "f_plot"]
+__all__ = ["DensityGrid", "f_plot", "local_maxima", "refine_peaks", "search_ind"]
