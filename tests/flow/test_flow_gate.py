@@ -62,7 +62,26 @@ def test_collinear_cells_give_an_empty_population():
     c = load_case(NAMES[0])
     line = np.column_stack((np.arange(40, 46), np.full(6, 50)))
     assert not hull_gate(c.fsc, c.ssc, c.zz, line).any()
-    assert not hull_gate(c.fsc, c.ssc, c.zz, line[:3]).any()  # his guard: more than 3 cells
+
+
+def test_his_guard_needs_more_than_3_cells():
+    rng = np.random.default_rng(0)
+    n = 200
+    fsc, ssc = rng.uniform(0, 100, n), rng.uniform(0, 100, n)
+    zz = np.tile([40, 50], (n, 1))
+    tri = np.array([[30, 30], [30, 70], [70, 50]])  # holds bin (40, 50) and could make a hull
+    assert not hull_gate(fsc, ssc, zz, tri).any()
+    assert hull_gate(fsc, ssc, zz, np.vstack((tri, [50, 50]))).all()  # the same hull, 4 cells
+
+
+def test_his_guard_needs_more_than_3_kept_events():
+    square = np.array([[40, 40], [40, 60], [60, 40], [60, 60]])
+    fsc = np.array([0.0, 10.0, 0.0, 2.0, 10.0])
+    ssc = np.array([0.0, 0.0, 10.0, 2.0, 10.0])
+    zz = np.array([[50, 50], [50, 50], [50, 50], [90, 90], [50, 50]])
+    # the first 3 events are kept and could make a hull holding event 4, whose bin isn't kept
+    assert not hull_gate(fsc[:4], ssc[:4], zz[:4], square).any()
+    assert hull_gate(fsc, ssc, zz, square).all()
 
 
 def test_collinear_events_give_an_empty_population():

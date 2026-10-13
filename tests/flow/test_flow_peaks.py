@@ -52,5 +52,15 @@ def test_refine_peaks_filters_and_sorts_as_he_does():
     assert peaks.tolist() == [[20, 30], [50, 50]]
 
 
+def test_refine_peaks_limits_sit_where_his_do():
+    x = np.zeros((100, 100))
+    # his limits are row > 10, row < 90 and column < 90, with no lower limit on the column
+    cells = [(10, 50), (11, 20), (89, 50), (90, 20), (50, 89), (40, 90), (30, 1)]
+    for i, j in cells:
+        x[i - 1, j - 1] = 9.0
+    peaks = refine_peaks(x, np.array(cells))
+    assert peaks.tolist() == [[11, 20], [30, 1], [50, 89], [89, 50]]
+
+
 def test_refine_peaks_with_no_candidate_is_empty():
     assert refine_peaks(np.ones((100, 100)), np.empty((0, 2), dtype=int)).shape == (0, 2)
