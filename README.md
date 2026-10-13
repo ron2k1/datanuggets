@@ -292,7 +292,7 @@ Flow data: [Zenodo record 22079206](https://zenodo.org/records/22079206), "Flow 
 
 ## What was done
 
-The work landed in the order below. Most steps started from a written plan, linked in the table. Steps 4, 5, 10, 11 and 12 also had an independent review, and its findings were fixed or recorded. `RDraws` grew out of a spike and has no plan document, and the architecture document was written after the moves it describes.
+The work landed in the order below. Most steps started from a written plan, linked in the table. Steps 4, 5, 10, 11, 12 and 13 also had an independent review, and its findings were fixed or recorded. `RDraws` grew out of a spike and has no plan document, and the architecture document was written after the moves it describes.
 
 | Step | Record | What it added |
 | --- | --- | --- |
@@ -308,6 +308,7 @@ The work landed in the order below. Most steps started from a written plan, link
 | 10 | [plan](docs/plans/2026-09-30-speed-next-targets.md), [review](docs/reviews/2026-10-09-speed-next-review.md) | Rfast's distances, `create.DNcenters`' deletion rounds and the Hartigan-Wong port compiled with numba, with the same bits. The deletion rounds work on one distance matrix instead of copying it every round. numba 0.68 in the lock, so the package runs on Python 3.15 |
 | 11 | [plan](docs/plans/2026-10-09-wcluster-iterative-port.md), [review](docs/reviews/2026-10-10-wcluster-iterative-review.md) | `Wkmeans`, `Whclust`, `DN.Wkmeans`, `DN.Whclust`, `DN.Wpca` and `DNcluster.predict`, with numba kernels that give the Python references' bits, R's quirks where it has them, and R's message in R's order where it stops. `Draws` gains `sample_replace`, so a hand-written `Draws` needs it too |
 | 12 | [spec](docs/specs/2026-10-10-plotting-design.md), [plan](docs/plans/2026-10-10-plotting.md), [review](docs/reviews/2026-10-10-plotting-review.md) | `cut_tree` and the `plot` package. R recorded `cutree`'s cuts and stops, `plot.hclust`'s lines read back from its PDF, and the nugget colors of the help examples |
+| 13 | [spec](docs/specs/2026-10-12-flow-gate-design.md), [plan](docs/plans/2026-10-12-flow-gate.md), [review](docs/reviews/2026-10-12-flow-gate-review.md) | `datanuggets.flow`, Prof. Cabrera's lymphocyte and macrophage gate finder from his Python, with the distance disc centred on the peak, and `plot.gates` for his figure. His script, word for word, recorded its pieces on three files of a public PBMC record, and `compare.py` and `compare.ps1` check ours against his piece by piece on any FCS file or folder |
 
 PRs #4 and #5 were opened against the speed branch, and both reached `main` together through the merge of this branch.
 
