@@ -4,7 +4,7 @@ the outputs match. Writes a picture per file, his figure, ours and the events ga
 and appends a row per piece to summary.csv.
 
 python benchmarks/flow/compare.py <file.fcs | folder> [--repeat 3] [--out tmp/flow] [--no-png]
-python benchmarks/flow/compare.py --metadata study.xlsx --dir <folder> --t0 22 20 --t00 0.25 0.5
+python benchmarks/flow/compare.py --metadata study.xlsx --dir <folder> --t0 22,20 --t00 0.25,0.5
 
 --t0 and --t00 are his loop's t11 and t21 per file, in the order the files run (the workbook's
 order with --metadata). Exit status 1 if the grid, maxima or peaks differ, or his gate on his cells,
@@ -228,13 +228,18 @@ def summarize(rows):
             print(f"  {piece:<9} {statistics.median(s):8.1f}x {min(s):8.1f}x {max(s):8.1f}x")
 
 
+def numbers(tokens):
+    """--t0 22 20 and --t0 22,20 both give [22.0, 20.0]."""
+    return [float(v) for t in tokens or [] for v in t.split(",") if v]
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description="Cabrera's gate finder against datanuggets.flow")
     p.add_argument("target", nargs="?", help="an FCS file or a folder of them")
     p.add_argument("--metadata", help="his study workbook, the files in its second sheet")
     p.add_argument("--dir", help="the folder the workbook's files are in")
-    p.add_argument("--t0", type=float, nargs="+", help="t11 per file, default 22")
-    p.add_argument("--t00", type=float, nargs="+", help="t21 per file, default 0.25")
+    p.add_argument("--t0", nargs="+", help="t11 per file, as 22 20 or 22,20, default 22")
+    p.add_argument("--t00", nargs="+", help="t21 per file, default 0.25")
     p.add_argument("--repeat", type=int, default=3)
     p.add_argument("--out", default="tmp/flow")
     p.add_argument("--no-png", action="store_true")
@@ -244,8 +249,8 @@ def main(argv=None) -> int:
     if args.repeat < 1:
         p.error("--repeat must be at least 1")
     files = study_files(args.metadata, args.dir) if args.target is None else fcs_files(args.target)
-    t0 = args.t0 or [22.0] * len(files)
-    t00 = args.t00 or [0.25] * len(files)
+    t0 = numbers(args.t0) or [22.0] * len(files)
+    t00 = numbers(args.t00) or [0.25] * len(files)
     if len(t0) != len(files) or len(t00) != len(files):
         p.error(f"--t0 and --t00 need one value per file, {len(files)}")
     out = Path(args.out).expanduser()
