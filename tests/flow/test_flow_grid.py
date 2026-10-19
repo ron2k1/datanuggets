@@ -17,6 +17,11 @@ def test_f_plot_equals_his_grid(name):
     g = f_plot(*sqrt_coords(c.fsc, c.ssc), nr=100, nc=100, scale="l")
     for got, want in ((g.z, c.z), (g.x, c.gx), (g.y, c.gy), (g.zz, c.zz)):
         assert got.dtype == want.dtype
+    # on an x86 CPU without AVX-512, numpy's log1p is the C library's, which differs from the
+    # recording's in the last bit on about 1 count in 100. The logs of two counts are many units
+    # apart, so 1 unit in the last place still pins every count
+    np.testing.assert_array_max_ulp(g.z, c.z, maxulp=1)
+    for got, want in ((g.x, c.gx), (g.y, c.gy), (g.zz, c.zz)):
         assert np.array_equal(got, want)
 
 
