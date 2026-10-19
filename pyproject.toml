@@ -9,7 +9,22 @@ description = "Native Python port of the R packages datanugget and WCluster (dat
 readme = "README.md"
 requires-python = ">=3.12"
 license = "GPL-2.0-only"
+license-files = ["LICENSE"]
 authors = [{ name = "Ronil Basu" }]
+keywords = ["data nuggets", "data reduction", "big data", "weighted clustering", "weighted PCA"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
 dependencies = [
     "numpy>=2.0",
     "joblib>=1.4",
@@ -17,6 +32,13 @@ dependencies = [
     "numba>=0.67",
     "numba>=0.68; python_version >= '3.15'",
 ]
+
+[project.urls]
+Source = "https://github.com/ron2k1/datanuggets"
+Issues = "https://github.com/ron2k1/datanuggets/issues"
+"datanugget (R)" = "https://CRAN.R-project.org/package=datanugget"
+"WCluster (R)" = "https://CRAN.R-project.org/package=WCluster"
+Paper = "https://doi.org/10.1080/10618600.2024.2341896"
 
 [project.optional-dependencies]
 frame = ["pandas>=2.2"]
@@ -39,6 +61,13 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/datanuggets"]
+
+# An allowlist: hatchling reads only the root .gitignore, so a folder that ignores itself through
+# its own would otherwise ship. scripts/check_dist.py holds the same list and checks the build.
+# tests/scripts tests that checker, which isn't shipped.
+[tool.hatch.build.targets.sdist]
+only-include = ["src/datanuggets", "tests", "r", "LICENSE", "README.md", "pyproject.toml"]
+exclude = ["tests/scripts"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
