@@ -10,8 +10,10 @@ The package builds, but nothing guards what the build puts in the sdist and whee
    - a file outside the allowlist, or a required file missing,
    - a cache file (`__pycache__`, `.pyc`, numba's `.nbi` and `.nbc`, OS litter),
    - an absolute path, a `..` part, or a link, in the archive,
-   - a home-folder path in any file's bytes (`X:\Users\name`, `/Users/name/`, `/home/name/`),
+   - a home-folder path in any file's bytes (`X:\Users\name`, `/Users/name`, `/home/name`),
    - a denied word in any file's bytes: tool and machine names from the development setup. The checker holds them only as SHA-256 digests, so it doesn't publish the words it hunts for,
+   - either of those in a tar or zip header (PAX values, comments, extra fields), or a tar entry with an owner,
+   - either of those inside a zip member such as numpy's `.npz`, which is opened, or any other compressed member (gzip, PNG, PDF and the like), which it can't read,
    - a version that differs between the sdist, the wheel and their metadata, or from `--expect-version`.
 
    A missing folder, a missing or extra archive, or an archive it can't read also fails. It runs on every PR and before every upload.
@@ -25,4 +27,4 @@ The package builds, but nothing guards what the build puts in the sdist and whee
 
 ## Already clean
 
-Checked on 2026-10-19 and kept by the checker: the wheel holds only the package's `.py` files and its metadata, the sdist's tar entries have uid and gid 0 and a fixed timestamp, the fixtures hold no user or path strings, and the metadata has no email.
+Checked on 2026-10-19: the wheel holds only the package's `.py` files and its metadata, the sdist's tar entries have uid and gid 0, no owner names and a fixed timestamp, the fixtures hold no user or path strings, and the metadata has no email. The checker keeps all of it but the timestamp, which is the build's own.

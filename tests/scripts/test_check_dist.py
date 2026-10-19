@@ -40,11 +40,14 @@ def _bytes(data):
     return data if isinstance(data, bytes) else data.encode()
 
 
-def _tar(path, files, links=()):
-    with tarfile.open(path, "w:gz") as tf:
+def _tar(path, files, links=(), attrs=None, pax=None):
+    """attrs sets TarInfo fields by member name; pax is the archive's global PAX header."""
+    with tarfile.open(path, "w:gz", format=tarfile.PAX_FORMAT, pax_headers=pax or {}) as tf:
         for name, data in files.items():
             info = tarfile.TarInfo(name)
             info.size = len(_bytes(data))
+            for field, value in (attrs or {}).get(name, {}).items():
+                setattr(info, field, value)
             tf.addfile(info, io.BytesIO(_bytes(data)))
         for name in links:
             info = tarfile.TarInfo(name)
@@ -53,13 +56,38 @@ def _tar(path, files, links=()):
             tf.addfile(info)
 
 
-def _zip(path, files):
-    with zipfile.ZipFile(path, "w") as zf:
+def _zip(path, files, compression=zipfile.ZIP_STORED, comment=b"", attrs=None):
+    """attrs sets ZipInfo fields, such as comment and extra, by member name."""
+    with zipfile.ZipFile(path, "w", compression) as zf:
+        zf.comment = comment
         for name, data in files.items():
             # ZipInfo turns os.sep into / on Windows, so a backslash name is set after it
             info = zipfile.ZipInfo("x")
             info.filename = name
+            info.compress_type = compression
+            for field, value in (attrs or {}).get(name, {}).items():
+                setattr(info, field, value)
             zf.writestr(info, _bytes(data))
+
+
+def _zip_bytes(files, compression=zipfile.ZIP_DEFLATED):
+    buf = io.BytesIO()
+    _zip(buf, files, compression)
+    return buf.getvalue()
+
+
+def _patch_central(path, name, offset, value):
+    """Overwrite 2 bytes of name's central directory entry: 8 is the flags, 10 the method."""
+    data = bytearray(path.read_bytes())
+    entry = data.find(b"PK\x01\x02")
+    while entry != -1:
+        size = int.from_bytes(data[entry + 28 : entry + 30], "little")
+        if data[entry + 46 : entry + 46 + size] == name.encode():
+            data[entry + offset : entry + offset + 2] = value.to_bytes(2, "little")
+            path.write_bytes(bytes(data))
+            return
+        entry = data.find(b"PK\x01\x02", entry + 4)
+    raise AssertionError(f"{name} not in {path}")
 
 
 def build(dist, version="1.0", wheel_version=None, sdist=None, wheel=None, drop=()):
@@ -121,6 +149,14 @@ def test_cache_files(tmp_path):
             sdist={
                 "src/datanuggets/__pycache__/create.cpython-314.pyc": b"\0",
                 "tests/.DS_Store": b"\0",
+                "tests/OLD.PYC": b"\0",
+                "tests/__PYCACHE__/a.py": b"\0",
+                "tests/.hypothesis/examples/x": b"\0",
+                "tests/.mypy_cache/x.json": b"\0",
+                "tests/.coverage": b"\0",
+                "r/.Rhistory": b"\0",
+                "r/setup.R.orig": b"\0",
+                "r/setup.R~": b"\0",
             },
             wheel={
                 "datanuggets/nuggets/create.create_dn-12.py314.nbi": b"\0",
@@ -135,9 +171,17 @@ def test_cache_files(tmp_path):
         "py314.nbi",
         "py314.1.nbc",
         "datanuggets/old.pyc",
+        "tests/OLD.PYC",
+        "tests/__PYCACHE__/a.py",
+        "tests/.hypothesis/examples/x",
+        "tests/.mypy_cache/x.json",
+        "tests/.coverage",
+        "r/.Rhistory",
+        "r/setup.R.orig",
+        "r/setup.R~",
     ):
         assert has(got, member, "cache file"), member
-    assert len(got) == 5
+    assert len(got) == 13
 
 
 def test_home_folder_paths(tmp_path):
@@ -148,15 +192,21 @@ def test_home_folder_paths(tmp_path):
         "c:/users/someone/x",
         "/Users/someone/repo",
         "/home/someone/repo",
+        # without a trailing separator, and a Windows path JSON-escaped twice
+        '{"cwd": "/Users/someone"}',
+        "HOME=/home/someone",
+        '"/home/someone"',
+        r'"C:\\\\Users\\\\someone\\\\x"',
         # not home folders
         "https://api.github.com/users/someone/repos",
+        "https://example.com/home/page and https://example.com/Users/page",
         "/usr/local/lib",
         "C:/Program Files/R",
     ]
     got = check_dist.check(build(tmp_path / "dist", sdist={"README.md": "\n".join(lines)}))
-    for line in (2, 3, 4, 5, 6):
+    for line in range(2, 11):
         assert has(got, f"README.md:{line}:", "home-folder path"), line
-    assert len(got) == 5
+    assert len(got) == 9
 
 
 def test_denied_words(tmp_path):
@@ -165,7 +215,7 @@ def test_denied_words(tmp_path):
         sdist={"tests/test_y.py": "a = 1\n# made with ZORBLAX\nb = 2\n# zorblax_helper again\n"},
         wheel={
             "datanuggets/zorblax_notes.py": "",
-            "datanuggets/fine.py": "zorblaxes zorblax9 xzorblax\n",
+            "datanuggets/fine.py": "zorblaxes xzorblax Zorblaxes\n",
         },
     )
     got = check_dist.check(dist, deny=FAKE)
@@ -264,6 +314,111 @@ def test_unreadable_archives(tmp_path):
     (dist / "datanuggets-1.0-py3-none-any.whl").write_bytes(b"PK\x03\x04 not a zip")
     got = check_dist.check(dist)
     assert has(got, ".tar.gz", "can't be read") and has(got, ".whl", "can't be read")
+
+
+def test_denied_words_inside_names(tmp_path):
+    dist = build(
+        tmp_path / "dist",
+        wheel={
+            "datanuggets/a.py": "ZorblaxHelper = 1\n",
+            "datanuggets/b.py": "x = 1\nhost = 'zorblax2'\n",
+            "datanuggets/ZorblaxTools.py": "",
+            "datanuggets/c.py": "Zorblaxes zorblaxes xzorblax ZORBLAXES\n",
+        },
+    )
+    got = check_dist.check(dist, deny=FAKE)
+    assert has(got, "datanuggets/a.py:1:", "denied word")
+    assert has(got, "datanuggets/b.py:2:", "denied word")
+    assert has(got, "datanuggets/***Tools.py", "denied word in the name")
+    assert not has(got, "c.py") and not has(got, "orblax")
+    assert len(got) == 3
+
+
+def test_compressed_members(tmp_path):
+    # numpy's savez_compressed writes deflated zips, which a scan of the raw bytes can't read
+    npz = _zip_bytes({"arr_0.npy": "x = /home/someone/data", "zorblax.npy": "1", "ok.npy": "1"})
+    got = check_dist.check(
+        build(
+            tmp_path / "dist",
+            sdist={
+                "tests/fixtures/a.npz": npz,
+                "tests/fixtures/nest.npz": _zip_bytes({"deep.npz": _zip_bytes({"x": "y"})}),
+                "tests/fixtures/broken.npz": b"PK\x03\x04 not a zip",
+                "tests/fixtures/b.gz": b"\x1f\x8b\x08\x00rest",
+                "tests/fixtures/c.png": b"\x89PNG\r\n\x1a\nrest",
+                "tests/fixtures/d.pdf": b"%PDF-1.7 rest",
+            },
+            wheel={"datanuggets/data.zip": _zip_bytes({"n.txt": r"C:\Users\someone\x"})},
+        ),
+        deny=FAKE,
+    )
+    assert has(got, ".tar.gz", "tests/fixtures/a.npz[arr_0.npy]:1:", "home-folder path")
+    assert has(got, "tests/fixtures/a.npz[***.npy]", "denied word in the name")
+    assert not has(got, "ok.npy")
+    assert has(got, "nest.npz[deep.npz]", "a zip inside a zip")
+    assert has(got, "broken.npz", "can't be read")
+    for member, kind in (("b.gz", "gzip"), ("c.png", "png"), ("d.pdf", "pdf")):
+        assert has(got, member, f"compressed ({kind})"), member
+    assert has(got, ".whl", "datanuggets/data.zip[n.txt]:1:", "home-folder path")
+    assert len(got) == 8
+
+
+def test_archive_metadata(tmp_path):
+    dist = build(tmp_path / "dist")
+    _tar(
+        dist / "datanuggets-1.0.tar.gz",
+        {f"datanuggets-1.0/{k}": v.replace("{v}", "1.0") for k, v in SDIST.items()},
+        attrs={
+            "datanuggets-1.0/LICENSE": {"uid": 1000, "uname": "someone"},
+            "datanuggets-1.0/README.md": {"pax_headers": {"comment": "made in /home/someone/x"}},
+        },
+        pax={"comment": "zorblax"},
+    )
+    _zip(
+        dist / "datanuggets-1.0-py3-none-any.whl",
+        {k.replace("{v}", "1.0"): v.replace("{v}", "1.0") for k, v in WHEEL.items()},
+        comment=b"zorblax",
+        attrs={
+            "datanuggets/__init__.py": {
+                "comment": rb"C:\Users\someone",
+                "extra": b"\xfe\xca\x07\x00zorblax",
+            }
+        },
+    )
+    got = check_dist.check(dist, deny=FAKE)
+    assert has(got, ".tar.gz", "LICENSE", "has an owner")
+    assert has(got, ".tar.gz", "README.md (tar header)", "home-folder path")
+    assert has(got, ".tar.gz", "(archive header)", "denied word")
+    assert has(got, ".whl", "(archive comment)", "denied word")
+    assert has(got, ".whl", "datanuggets/__init__.py (zip header)", "home-folder path")
+    assert has(got, ".whl", "datanuggets/__init__.py (zip header)", "denied word")
+    # the global header's keys show up in every member's, but are reported once
+    assert len(got) == 6
+
+
+def test_unreadable_wheel_members(tmp_path):
+    for flag_or_method, value in ((10, 99), (8, 1)):  # an unknown method, then encrypted
+        dist = build(tmp_path / f"dist{value}", wheel={"datanuggets/a.py": "x"})
+        _patch_central(
+            dist / "datanuggets-1.0-py3-none-any.whl", "datanuggets/a.py", flag_or_method, value
+        )
+        got = check_dist.check(dist)
+        assert has(got, ".whl", "can't be read"), value
+
+
+def test_dist_names_are_masked(tmp_path):
+    dist = build(tmp_path / "dist")
+    (dist / "zorblax.txt").write_text("x")
+    got = check_dist.check(dist, deny=FAKE)
+    assert has(got, "unexpected file ***.txt")
+    other = tmp_path / "other"
+    other.mkdir()
+    _tar(other / "zorblax-1.0.tar.gz", {})
+    _zip(other / "zorblax-1.0-py3-none-any.whl", {})
+    got += check_dist.check(other, deny=FAKE)
+    assert has(got, "***-1.0.tar.gz", "not an sdist")
+    assert has(got, "***-1.0-py3-none-any.whl", "not a pure-Python wheel")
+    assert not has(got, "zorblax")
 
 
 def test_command_line(tmp_path):
