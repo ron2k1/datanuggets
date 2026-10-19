@@ -21,11 +21,39 @@ defaults:
     shell: bash
 
 jobs:
+  # Before an hour of tests: the commit must be on main, and a tag must be v and the version in
+  # pyproject.toml. Environments' required reviewers need a public repo on this plan, so while
+  # it's private this is what stands between a pushed tag and PyPI.
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: On main, and the tag is the version
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_SHA isn't on main"
+            exit 1
+          fi
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+            if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+              echo "::error::the tag is $GITHUB_REF_NAME, and pyproject.toml says $version"
+              exit 1
+            fi
+          fi
+
   tests:
+    needs: gate
     uses: ./.github/workflows/tests.yml
   matrix:
+    needs: gate
     uses: ./.github/workflows/matrix.yml
   package:
+    needs: gate
     uses: ./.github/workflows/package.yml
 
   testpypi:

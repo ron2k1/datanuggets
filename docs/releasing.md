@@ -1,8 +1,10 @@
 # Releasing
 
-`release.yml` publishes the package. Run by hand from the Actions tab, it uploads to TestPyPI. A pushed `v*` tag uploads to PyPI. Either way it first runs `tests.yml` (Linux, 3.12 to 3.15), `matrix.yml` (Windows and macOS, 3.12 to 3.15) and `package.yml` (the build, `scripts/check_dist.py`, `twine check` and the installed-wheel test), and it uploads only the two files `package.yml` checked.
+`release.yml` publishes the package. Run by hand from the Actions tab, it uploads to TestPyPI. A pushed `v*` tag uploads to PyPI. Either way its first job, `gate`, stops the run unless the commit is on `main` and, for a tag, the tag is `v` and the version in `pyproject.toml`. Then it runs `tests.yml` (Linux, 3.12 to 3.15), `matrix.yml` (Windows and macOS, 3.12 to 3.15) and `package.yml` (the build, `scripts/check_dist.py`, `twine check` and the installed-wheel test), and it uploads only the two files `package.yml` checked.
 
-Both uploads use Trusted Publishing. No token is stored in the repo or its secrets. The index trusts a run of `release.yml` from this repo in a named GitHub environment, and the job gets a short-lived token for that one upload. The upload action also attaches a signed attestation of where each file was built.
+Both uploads use Trusted Publishing. No token is stored in the repo or its secrets. The index trusts a run of `release.yml` from this repo in a named GitHub environment, and the job gets a short-lived token for that one upload.
+
+By default the upload action also attaches attestations, signed records of the run that built each file. Each names the repo, the workflow file and the commit, and goes in Sigstore's public log, so those are public from the first upload even while the repo is private. `attestations: false` on the upload step turns them off.
 
 ## One-time setup
 
@@ -20,13 +22,15 @@ These need the account owner, and nothing can be uploaded until they're done.
 
    A pending publisher doesn't reserve the name. The first upload creates the project, so until then someone else can take `datanuggets`.
 
-2. In the repo's Settings, under Environments, create `testpypi` and `pypi`. On `pypi`, add yourself as a required reviewer and limit deployments to tags matching `v*`. Each PyPI upload then waits for your approval, and a run from a branch can't use the environment.
+2. In the repo's Settings, under Environments, create `testpypi` and `pypi`. Under Deployment branches and tags, limit `testpypi` to the branch `main` and `pypi` to tags matching `v*`.
+
+There's no approval step while the repo is private. On GitHub Pro, an environment's required reviewers work only on public repos. Until then, anyone who can push a `v*` tag to a commit on `main` can release, so keep write access to people who may. Once the repo is public, add yourself as a required reviewer on `pypi`, and every upload will wait for you.
 
 ## A dry run on TestPyPI
 
 GitHub lists a workflow under Run workflow only once its file is on the default branch, so this works after the branch that adds `release.yml` is merged.
 
-1. In Actions, pick release, then Run workflow on `main`.
+1. In Actions, pick release, then Run workflow on `main`. `gate` stops a run from any commit that isn't on `main`.
 2. When it finishes, the files are at [test.pypi.org/p/datanuggets](https://test.pypi.org/p/datanuggets). To install from there, with the dependencies from PyPI:
 
    ```sh
@@ -46,7 +50,7 @@ TestPyPI takes each version once, like PyPI. A second dry run needs a new versio
    git push origin v0.1.0
    ```
 
-4. Approve the `pypi` job when it asks. It runs the checker again on the downloaded files with `--expect-version 0.1.0`, so a tag that doesn't match the built version stops the upload. Then the files go up to [pypi.org/p/datanuggets](https://pypi.org/p/datanuggets).
+4. `gate` refuses a tag that isn't on `main` or doesn't match `pyproject.toml` before any tests run. After the tests, the `pypi` job runs the checker again on the downloaded files with `--expect-version 0.1.0`, so the files that go up are the version the tag names. Then they're at [pypi.org/p/datanuggets](https://pypi.org/p/datanuggets).
 
 A version can't be uploaded twice or replaced. A broken release is fixed with a new version, and the broken one can be yanked on PyPI, which keeps it installable only by its exact version.
 
