@@ -1,0 +1,58 @@
+# Builds the sdist and wheel and checks what a user would download, the way R CMD check reads the
+# built tarball: scripts/check_dist.py and twine read the two files, then the wheel is installed
+# alone in a new venv and the sdist's own tests run against it, with src/ deleted so nothing can
+# import the source tree. release.yml calls this and uploads the files it checked.
+name: package
+
+on:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+# github.workflow is the caller's name when release.yml calls this, so a run of its own on the
+# same ref can't cancel a release's
+concurrency:
+  group: package-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: "3.14"
+      - name: Build
+        run: uv build --out-dir dist
+      - name: Allowlist, caches, paths and denied words
+        run: uv run --no-project python scripts/check_dist.py dist
+      - name: Metadata
+        run: uvx --from twine==7.0.0 twine check --strict dist/*
+      - name: The sdist's tests on the installed wheel
+        run: |
+          mkdir -p tmp/sdist
+          tar -xzf dist/datanuggets-*.tar.gz -C tmp/sdist --strip-components 1
+          rm -rf tmp/sdist/src
+          uv venv tmp/wheel
+          wheel=$(echo dist/datanuggets-*-py3-none-any.whl)
+          uv pip install --python tmp/wheel "$wheel[frame,progress,plot]" pytest==9.1.1 pytest-xdist==3.8.0
+          cd tmp/sdist
+          ../wheel/bin/python -c "import datanuggets as d; assert 'site-packages' in d.__file__, d.__file__"
+          ../wheel/bin/python -m pytest -q -p no:cacheprovider -n 2 -m "not slow"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+          if-no-files-found: error
