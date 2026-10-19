@@ -47,7 +47,7 @@ Still to port: `datanugget`'s `optimal.DN`.
 
 ## Install
 
-Requires Python 3.12 or newer, `numpy >= 2.0`, `scipy >= 1.13`, `joblib >= 1.4` and `numba >= 0.67`. On Python 3.15 it needs `numba >= 0.68`, the first numba with 3.15 wheels. The suite passes on Python 3.14 and 3.15.
+Requires Python 3.12 or newer, `numpy >= 2.0`, `scipy >= 1.13`, `joblib >= 1.4` and `numba >= 0.67`. On Python 3.15 it needs `numba >= 0.68`, the first numba with 3.15 wheels. The suite passes on Python 3.14 and 3.15. Its default tier, without the long fuzz, also passes on 3.12 and 3.13.
 
 It isn't on PyPI. `pip install datanugget`, without the s, gets an unrelated package of code snippets.
 
@@ -309,6 +309,7 @@ The work landed in the order below. Most steps started from a written plan, link
 | 11 | [plan](docs/plans/2026-10-09-wcluster-iterative-port.md), [review](docs/reviews/2026-10-10-wcluster-iterative-review.md) | `Wkmeans`, `Whclust`, `DN.Wkmeans`, `DN.Whclust`, `DN.Wpca` and `DNcluster.predict`, with numba kernels that give the Python references' bits, R's quirks where it has them, and R's message in R's order where it stops. `Draws` gains `sample_replace`, so a hand-written `Draws` needs it too |
 | 12 | [spec](docs/specs/2026-10-10-plotting-design.md), [plan](docs/plans/2026-10-10-plotting.md), [review](docs/reviews/2026-10-10-plotting-review.md) | `cut_tree` and the `plot` package. R recorded `cutree`'s cuts and stops, `plot.hclust`'s lines read back from its PDF, and the nugget colors of the help examples |
 | 13 | [spec](docs/specs/2026-10-12-flow-gate-design.md), [plan](docs/plans/2026-10-12-flow-gate.md), [review](docs/reviews/2026-10-12-flow-gate-review.md) | `datanuggets.flow`, Prof. Cabrera's lymphocyte and macrophage gate finder from his Python, with the distance disc centred on the peak, and `plot.gates` for his figure. His script, word for word, recorded its pieces on three files of a public PBMC record, and `compare.py` and `compare.ps1` check ours against his piece by piece on any FCS file or folder |
+| 14 | [spec](docs/specs/2026-10-19-packaging-design.md), [plan](docs/plans/2026-10-19-packaging.md) | The sdist built from an allowlist, and `scripts/check_dist.py`, which reads the built sdist and wheel and fails on a file off the list, a cache file, a home-folder path, a name from the development setup, or versions that disagree. `package.yml` runs the sdist's tests on the installed wheel, the Linux tests cover 3.12 to 3.15, `matrix.yml` adds Windows and macOS on a label, and `release.yml` publishes through Trusted Publishing. The version is written once, in `pyproject.toml` |
 
 PRs #4 and #5 were opened against the speed branch, and both reached `main` together through the merge of this branch.
 
@@ -585,7 +586,7 @@ The plots depart from R's drawings in six ways:
 
 ## Open problems
 
-These are known and unsolved. Items 1 to 5 are tracked in the [R-compatibility record](docs/plans/2026-09-30-r-compat.md), which holds or links the evidence for each. Item 6 has its own plan, item 7 is the rest of the port and the rulings the `WCluster` port waits on, items 8 and 9 came out of the reviews and the wheel check, and item 10 is the flow finder's [spec](docs/specs/2026-10-12-flow-gate-design.md).
+These are known and unsolved. Items 1 to 5 are tracked in the [R-compatibility record](docs/plans/2026-09-30-r-compat.md), which holds or links the evidence for each. Item 6 has its own plan, item 7 is the rest of the port and the rulings the `WCluster` port waits on, item 8 came out of the reviews, item 9 out of the [packaging spec](docs/specs/2026-10-19-packaging-design.md), and item 10 is the flow finder's [spec](docs/specs/2026-10-12-flow-gate-design.md).
 
 1. Nine breaking changes toward R's behavior are approved in principle and held until they're confirmed as a set. B1 makes R's draws the default for an integer seed. B2 returns `wmean` as `p` by `k`. B3 makes `wpca`'s scale a single 1.0. B4 and B5 adopt R's argument order for `cluster_predict` and `create_dn_centers`. B6 makes `progress` take bools only. B7 gives `to_frame()` R's 1-based ids and types. B8 makes `cluster_predict` return R's empty results instead of raising. B9 orders categorical labels by category.
 2. Eight compatibility tasks are pending. T4 accepts fractional and bool labels under `factor()`'s 15-digit rule and adds `cluster_levels`. Two recorded cases, `labels_faithful_float_merge` and `labels_faithful_big`, show a gap in that design. In both, `distw` builds three axes from the exact values where `factor()` makes two levels, so one list of levels can't describe both. T6 floors `dn_num1`, `dn_num2` and `dn_num` the way R does. T7 makes `refine_dn` accept any real `nstart` and return R's result, which leaves the nuggets unsplit when `kmeans` can't run. Today `refine_dn` raises `ValueError` on a NaN or infinite `nstart`, and the internal `kmeans` raises an `OverflowError` on an infinite one. T8 accepts R's other `corr` values. T9 exports `RDraws` and `cluster_levels`. T10 adds independent checks for the one-column `"random"` case of `create_dn`, where R's own table is malformed. T11 adds tests for the documented exceptions. T12 writes `docs/compatibility.md` and corrects the remaining docs.
@@ -601,7 +602,7 @@ These are known and unsolved. Items 1 to 5 are tracked in the [R-compatibility r
    - The `create_dn`, `create_dn_centers`, `refine_dn`, `kmeans` and Rfast tests compare with `assert_array_equal`, which can't tell -0.0 from 0.0. A wrong sign of zero there would pass the suite. For `create_dn` and `refine_dn` it would show when the parity tables are rebuilt.
    - Three mutants from the WCluster review aren't killed. One in `r_weighted_mean` survives on the laptop, where its NaN and R's have the same bits, and it wasn't run on arm64, where it should fail. One moves `wpca`'s warning threshold below -1e-300, where no recorded input has an eigenvalue. One drops the orthonormality check from the eigen rule, which another check covers, though that isn't proven for tied eigenvalues.
    - `RDraws` isn't checked against R for a sample of more than 2^31 - 1 values from the hash sampler, which only a population of more than four billion would reach.
-9. A source distribution built from a working tree that holds the local `.superpowers/sdd/` scratch folder includes it. The folder ignores itself through its own nested `.gitignore`, which hatchling doesn't read. A fresh clone has no such folder, and the wheel isn't affected.
+9. This README is the package's page on PyPI, where its relative links, to `docs/` and `r/README.md`, lead nowhere. The sdist leaves `docs/` out as well. Links to the repo would work for readers only once it's public, so this waits on that, or on a shorter description written for PyPI.
 10. `find_area`'s disc waits on a ruling. The port centres it on the peak, which changes which events each population holds, as Flow gates shows. Matching his output instead means the mirrored disc, which `tests/flowcases.py` states and `compare.py`'s `finder his` row runs.
 
 ## Development
@@ -624,6 +625,15 @@ tmp/venv315/Scripts/python -m pytest
 That's the Windows path. On macOS and Linux it's `tmp/venv315/bin/python`. numba compiles every kernel again for a new Python version, so the first run there is slower.
 
 [docs/architecture.md](docs/architecture.md) shows where each part of the code, tests and fixtures lives, and where new work goes.
+
+To check a build the way CI does, build into an empty folder and run the checker on it:
+
+```sh
+uv build --out-dir tmp/dist
+uv run --no-project python scripts/check_dist.py tmp/dist
+```
+
+The checker opens the sdist and the wheel. It fails on a file outside the allowlist in `pyproject.toml`, a cache file, a home-folder path, a name from the development setup, or versions that disagree. The `package` workflow also runs `twine check` and runs the sdist's tests against the installed wheel. [docs/releasing.md](docs/releasing.md) covers publishing.
 
 Tests use fixtures in `tests/fixtures/` generated by running the R packages. Running tests doesn't need R. Regenerating fixtures needs R 4.6.1. The generators are in `r/`, with instructions in [r/README.md](r/README.md).
 
