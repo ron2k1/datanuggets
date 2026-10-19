@@ -13,11 +13,11 @@ on:
 permissions:
   contents: read
 
-# not cancel-in-progress: adding another label starts a run whose job is skipped, and that run
-# mustn't cancel this one
+# Each label gets its own group, so a newer "matrix" run cancels an older one, and the run any
+# other label starts, whose job is skipped, can't cancel or queue behind it
 concurrency:
-  group: matrix-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  group: matrix-${{ github.workflow }}-${{ github.ref }}-${{ github.event.label.name || github.event_name }}
+  cancel-in-progress: true
 
 defaults:
   run:
