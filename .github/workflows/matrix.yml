@@ -1,0 +1,45 @@
+# The default tier on Windows and macOS, on every Python the package claims. The repo is private,
+# and macOS minutes bill at 10 times and Windows at 2, so a full run costs about 110 minutes of
+# the month's 3,000. It runs when a pull request gets the "matrix" label (remove and add it again
+# to rerun on a later push), by hand once this file is on main, and inside every release.
+name: matrix
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+# not cancel-in-progress: adding another label starts a run whose job is skipped, and that run
+# mustn't cancel this one
+concurrency:
+  group: matrix-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  pytest:
+    if: github.event_name != 'pull_request' || github.event.label.name == 'matrix'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+        python: ["3.12", "3.13", "3.14", "3.15"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --locked
+      - name: Default tier
+        run: uv run pytest -q -p no:cacheprovider -n 2 -m "not slow"
