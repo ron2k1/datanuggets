@@ -2,7 +2,7 @@
 
 A flow cytometry sample holds hundreds of thousands to millions of events, and a study holds many samples. Weighted hierarchical clustering and the other methods of the R package `WCluster` can't run on that many rows directly. Data nuggets (Beavers et al., cited below) reduce the data to a few thousand weighted points first. Each nugget has a center, a row count and a scale, and the analysis runs on the nuggets with their row counts as weights.
 
-This package is a native Python port of CRAN's `datanugget` 1.5.0 and `WCluster` 1.3.0, so that work runs without R. Its tests check it against 544 cases recorded from R. It matches R bit for bit on them, except for the eigen solver's output and the differences listed in [docs/compatibility.md](docs/compatibility.md). It also includes Prof. Cabrera's flow cytometry gate finder, ported from his Python. A command line tool, `datanuggets-flow`, gates FCS files, asks which cell populations to keep, and clusters the kept cells.
+This package is a native Python port of CRAN's `datanugget` 1.5.0 and `WCluster` 1.3.0, so that work runs without R. Its tests check it against 544 cases recorded from R. It matches R bit for bit on them, except for the eigen solver's output and the differences listed in [docs/compatibility.md](docs/compatibility.md). It also includes Prof. Cabrera's flow cytometry gate finder, ported from its Python version. A command line tool, `datanuggets-flow`, gates FCS files, asks which cell populations to keep, and clusters the kept cells.
 
 Version `0.1.0.dev0` is in development and isn't on PyPI. `pip install datanugget`, without the s, installs an unrelated package.
 
@@ -47,7 +47,7 @@ Point `datanuggets-flow` at a folder of FCS files:
 datanuggets-flow path/to/fcs_folder
 ```
 
-It gates each file on FSC-A against SSC-A and shows every file's numbered populations in one figure, with their event counts and median FSC-A and SSC-A. Then it asks, file by file, which populations to keep. The kept cells are clustered on their fluorescence channels, `arcsinh(x / 6000)` by default, with nuggets per file and weighted Ward clustering of all the files' nuggets together, so a cluster means the same cells in every file. Tables and figures go to `datanuggets-out/`.
+It gates each file on FSC-A against SSC-A, draws every file's numbered populations in one figure, and prints each population's event count and its median FSC-A and SSC-A. Then it asks, file by file, which populations to keep. The kept cells are clustered on their fluorescence channels, `arcsinh(x / 6000)` by default, with nuggets per file and one weighted Ward clustering of all the files' nuggets together, so every file's cells are labelled with the same set of clusters. Tables and figures go to `datanuggets-out/`.
 
 Files from other instruments may need these flags:
 
@@ -58,7 +58,7 @@ datanuggets-flow path/to/fcs_folder --cofactor 150 --k 10           # another ar
 datanuggets-flow path/to/fcs_folder --pops "1,2" --no-show          # no questions: Pop 1 and 2 of every file
 ```
 
-Channels are named as the file's `$PnN` keywords name them, such as `FJComp-FITC-A`, not by marker. A file without one of the named channels stops the run with a list of the channels it has. The gate finder's thresholds were tuned on Prof. Cabrera's study, so check `gates.png` before trusting the populations on other data, and adjust `--t11` and `--t21` if they look wrong. [docs/cli.md](docs/cli.md) documents every flag, the prompt, the outputs and the errors.
+Channels are named as the file's `$PnN` keywords name them, such as `FJComp-FITC-A`, not by marker. A file without one of the named channels stops the run with a list of the channels it has. The gate finder's thresholds are Prof. Cabrera's and have not been tuned for other panels or instruments, so check `gates.png` before trusting the populations on your data, and adjust `--t11` and `--t21` if they look wrong. [docs/cli.md](docs/cli.md) documents every flag, the prompt, the outputs and the errors.
 
 To try it without data of your own, [docs/quickstart.md](docs/quickstart.md) runs it on a public file from [Zenodo record 22079206](https://zenodo.org/records/22079206).
 
@@ -76,7 +76,7 @@ To try it without data of your own, [docs/quickstart.md](docs/quickstart.md) run
 
 ## Citing the method
 
-Beavers, T. E., Cheng, G., Duan, Y., Cabrera, J., Lubomirski, M., Amaratunga, D., and Teigler, J. E. "Data Nuggets: A Method for Reducing Big Data While Preserving Data Structure." Journal of Computational and Graphical Statistics 34(1), 2025. Published online in 2024.
+Beavers, T. E., Cheng, G., Duan, Y., Cabrera, J., Lubomirski, M., Amaratunga, D., and Teigler, J. E. "Data Nuggets: A Method for Reducing Big Data While Preserving Data Structure." Journal of Computational and Graphical Statistics 34(1), 330-342, 2025. Published online in 2024.
 
 DOI: `10.1080/10618600.2024.2341896`. arXiv: `2403.03099`.
 
@@ -88,4 +88,4 @@ The `datanugget` authors are Rituparna Dey (maintainer), Yajie Duan, Traymon Bea
 
 The `WCluster` authors are Rituparna Dey (maintainer), Yajie Duan, Javier Cabrera and Ge Cheng.
 
-The flow gate finder is Prof. Javier Cabrera's, from his Python port of his R code.
+The flow gate finder is Prof. Javier Cabrera's. The port here follows Prof. Cabrera's Python translation of the original R code.

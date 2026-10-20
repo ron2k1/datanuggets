@@ -75,7 +75,7 @@ The `WCluster` functions treat each row as a point with a weight. On nuggets, th
 
 ### The gate finder
 
-`datanuggets.flow.lymphmacro_finder` is Prof. Cabrera's gate finder for the lymphocyte and macrophage populations, ported from his Python, which is his port of his R code. It works on two channels, FSC-A and SSC-A:
+`datanuggets.flow.lymphmacro_finder` is Prof. Cabrera's gate finder for the lymphocyte and macrophage populations, ported from its Python version, which is Cabrera's own port of the original R code. It works on two channels, FSC-A and SSC-A:
 
 1. Both channels are shifted by the smaller of their two minimums, plus 3, and square rooted.
 2. `f_plot` bins them into a 100 by 100 grid, each bin `floor(100 * (v - min) / (max - min)) + 1` clipped to 1 to 100, counts the events per cell, takes `log(1 + count)`, and sets cells below 0.1 times the largest to 0. Grid rows are SSC-A bins and columns are FSC-A bins.
@@ -84,25 +84,25 @@ The `WCluster` functions treat each row as a point with a weight. On nuggets, th
 5. `find_area` keeps the cells closer than `t1` cells to the peak whose density is above `t2` times the peak's. The first peak takes `t11=22` and `t21=0.25`, the others `t12=20` and `t22=0.5`.
 6. `hull_gate` takes the convex hull of the area's cells and keeps the events whose bin lies inside it. The population is every event inside the convex hull of those events, in FSC-A and SSC-A. It needs more than 3 cells and more than 3 kept events.
 
-The result has one row per event and one column per population, in peak order. An event can be in more than one population, or in none. With the shipped finder on `202.fcs`, 57,797 of its 282,270 events are in more than one and 29,065 in none. The cutoffs are his and aren't retuned here.
+The result has one row per event and one column per population, in peak order. An event can be in more than one population, or in none. With the shipped finder on `202.fcs`, 57,797 of its 282,270 events are in more than one and 29,065 in none. The cutoffs are Prof. Cabrera's and aren't retuned here.
 
 ### Where the finder departs from Cabrera's code
 
-1. `find_area` centres its distance disc on the peak. His code builds the grid row by row and flattens the density column by column, so its density test reads the right cell while its disc sits on the mirrored cell `(idy, idx)`. On `202.fcs` this puts 107,909 of the 282,270 events in a different set of populations: his three hold 225,770, 58,245 and 27,590 events, the corrected ones 214,085, 66,149 and 37,742. On a peak on the diagonal the two agree. It's the one change in output, and it waits on a ruling.
-2. `hull_gate` tests each grid cell once and looks the answer up per event, and tests the events against a triangulation of their hull's vertices, where his triangulates every kept event. Both cover the same polygon, so they can differ only on an event within rounding of the hull's edge.
-3. With no peak left after his filters, the finder returns zero columns. His raises `IndexError`.
-4. An area whose cells or kept events lie on one line, or so near one that Qhull calls them flat, gives an empty population. His raises `QhullError`.
-5. NaN or infinite values, or a channel with one value, raise `ValueError`. His code bins them or divides by zero.
-6. His unused `plot=False` argument is dropped, and `plot.gates` draws his figure with one matplotlib artist per population.
+1. `find_area` centres its distance disc on the peak. Cabrera's code builds the grid row by row and flattens the density column by column, so its density test reads the right cell while its disc sits on the mirrored cell `(idy, idx)`. On `202.fcs` this puts 107,909 of the 282,270 events in a different set of populations: the reference finder's three hold 225,770, 58,245 and 27,590 events, the corrected ones 214,085, 66,149 and 37,742. On a peak on the diagonal the two agree. It's the one change in output, and it waits on a ruling.
+2. `hull_gate` tests each grid cell once and looks the answer up per event, and tests the events against a triangulation of their hull's vertices, where the reference code triangulates every kept event. Both cover the same polygon, so they can differ only on an event within rounding of the hull's edge.
+3. With no peak left after the reference code's filters, the finder returns zero columns. The reference code raises `IndexError`.
+4. An area whose cells or kept events lie on one line, or so near one that Qhull calls them flat, gives an empty population. The reference code raises `QhullError`.
+5. NaN or infinite values, or a channel with one value, raise `ValueError`. The reference code bins them or divides by zero.
+6. The reference finder's unused `plot=False` argument is dropped, and `plot.gates` draws the reference code's figure with one matplotlib artist per population.
 
 ### The disc: `--disc his` and `--disc peak`
 
-Whether the disc should sit on the peak or where his code puts it is an open ruling ([limitations.md](limitations.md#open-problems), problem 10). The library and the command line take different sides of it for now:
+Whether the disc should sit on the peak or where Cabrera's code puts it is an open ruling ([limitations.md](limitations.md#open-problems), problem 10). The library and the command line take different sides of it for now:
 
-- `lymphmacro_finder` uses the corrected `find_area`, with the disc on the peak.
-- `datanuggets-flow` defaults to `--disc his`, which gates with a copy of his `find_area` in `datanuggets.flow.pick`, so the populations and their numbers are the ones his figures show. `--disc peak` uses the corrected `find_area`.
+- `lymphmacro_finder` uses the corrected `find_area`, with the disc on the peak, unless it's given `area=mirrored_area`.
+- `datanuggets-flow` defaults to `--disc his`, which gates with `datanuggets.flow.mirrored_area`, a copy of `cfc.py`'s `find_area`, so the populations and their numbers are the ones `cfc.py`'s figures show. `--disc peak` uses the corrected `find_area`.
 
-The choice changes which events the clustering sees. In the comparison run on the Mac mini (Apple M4, 16 GB) over the 44 files of the record, the corrected disc gates 1.4% to 38.7% of a file's events differently from his, 8.0% at the median.
+The choice changes which events the clustering sees. In the comparison run on the Mac mini (Apple M4, 16 GB) over the 44 files of the record, the corrected disc gates 1.4% to 38.7% of a file's events differently from the mirrored disc, 8.0% at the median.
 
 ### The `datanuggets-flow` pipeline
 
@@ -165,10 +165,17 @@ Beavers et al. (2025) define data nuggets (Algorithms 1 and 2, Section 3), weigh
 | Transform | none stated | `arcsinh(x / 6000)` by default |
 | Nuggets | one set for the whole dataset, then refined | one set per file, not refined |
 | `create_dn` settings | C = 0.01, M = 2,000 | the package defaults, C = 0.1, and 1,000 nuggets a file |
-| Clustering | weighted k-means, k chosen from WWCSS | weighted Ward on the pooled nuggets, cut at a given k |
+| Clustering | weighted k-means with "ten initial centers", the configuration with the least WWCSS kept, k from 5 to 15 compared by WWCSS, 12 chosen by a "second difference method" | weighted Ward on the pooled nuggets, cut at a given k |
+| Weights across files | not applicable, one dataset | each nugget weighs its event count, so a file with more kept events weighs more in the tree |
 | PCA | weighted PCA compared with PCA of the data | a weighted PCA figure of the nuggets |
 
+The paper reports that the first three principal components are "moderately recovered" with the 2,000 nuggets before refinement and "strongly recovered" with the 3,135 refined ones (Section 4). `datanuggets-flow` doesn't refine. `refine_dn(x, dn, ev_tol=0.25, min_nugget_size=2)` runs the paper's refinement on one file's nuggets, with the threshold fixed before the first round as described above.
+
+The paper says Section 3.1 describes its second difference method, but Section 3.1 doesn't. For a tree over `n` rows, `whclust`'s heights give the WWCSS of every cut from 1 to `n - 1` clusters without reclustering: the height of merge `n - k`, counted from 1, equals `wwcss(x, cut_tree(tree, k=k), w)`, which is `tree.height[n - k - 1]` in Python. These are the WWCSS of Ward's nested cuts, not of a k-means fit at each k, so a rule applied to them needn't choose the paper's k.
+
 The gate finder isn't in the paper. It comes from Prof. Cabrera's own scripts.
+
+Cherasia, Cabrera, Fernholz and Fernholz (2023) use data nuggets for regression. They build the nuggets from the features alone, without the response. Of the three estimators they compare, weighted least squares on the nugget centers and mean responses, with the row counts as weights, performs best. In Section 6 they propose, without an example, keeping each nugget's count of each class for a binary or categorical response, and for a binary one splitting nuggets until none mixes outcomes. Their standard errors assume i.i.d. errors. In `datanuggets-flow` every nugget holds the events of one file, so each nugget belongs to one sample and one condition. The chapter doesn't treat replicate samples, and nothing in this package compares conditions or tests a difference between them.
 
 A manuscript in revision by Dastgiri, Cabrera and coauthors applies data nuggets to flow cytometry in another way. It compresses the events with data nuggets and then uses differential projection pursuit, a search for projections that maximize an index of the difference between two conditions' densities. This package doesn't implement that analysis.
 
@@ -205,34 +212,36 @@ These results hold for one reference environment. The port doesn't use the host'
 
 ### Against Cabrera's script
 
-The reference for the flow finder is Prof. Cabrera's Python, not his R code. `benchmarks/flow/` holds his functions word for word, his whole script with only its two paths read from the command line, and his finder cut at its steps. `check_reference.py` runs his whole script with FlowKit and checks that its masks equal his pieces' masks. On the Mac mini (Apple M4, 16 GB) it matched on all four files it was given.
+The reference for the flow finder is Prof. Cabrera's Python, not the original R code. `benchmarks/flow/` holds the reference functions word for word, the whole reference script with only its two paths read from the command line, and the reference finder cut at its steps. `check_reference.py` runs the whole reference script with FlowKit and checks that its masks equal the masks of those pieces. On the Mac mini (Apple M4, 16 GB) it matched on all four files it was given.
 
-The suite compares with three fixtures recorded from his code on files of the record, each thinned to 50,000 events:
+The suite compares with three fixtures recorded from the reference code on files of the record, each thinned to 50,000 events:
 
-- The grid's bins and coordinates, the focal maxima and the refined peaks must equal his exactly. The grid's log counts must equal his to 1 unit in the last place, since on an x86 CPU without AVX-512 numpy's `log1p` is the C library's, which can differ in the last bit.
-- `find_area` must equal the corrected rule written out as a plain distance test, and his recorded cells must equal the mirrored disc written out the same way.
-- The gate on his cells must give his masks, and so must the whole finder given his area rule, or differ only on events within 1e-9 of the data's range from the hull's edge.
-- His guards and his row and column limits are each tested on both sides of the line.
+- The grid's bins and coordinates, the focal maxima and the refined peaks must equal the reference values exactly. The grid's log counts must equal the reference counts to 1 unit in the last place, since on an x86 CPU without AVX-512 numpy's `log1p` is the C library's, which can differ in the last bit.
+- `find_area` must equal the corrected rule written out as a plain distance test, and the reference code's recorded cells must equal the mirrored disc written out the same way.
+- The gate on the reference cells must give the reference masks, and so must the whole finder given the reference area rule, or differ only on events within 1e-9 of the data's range from the hull's edge.
+- The reference code's guards and its row and column limits are each tested on both sides of the line.
 
-`compare.py` runs his code and ours piece by piece on any FCS file or folder, on the same arrays on both sides, and exits with 1 if a piece differs beyond the hull's edge. It pairs per-sample thresholds with the workbook's rows, where his script pairs them with the samples in FlowKit's `$FIL` order. On the same machine over all 44 files, the grid, the maxima and the peaks equal his on every file. The gate on his cells and the finder with his `find_area` equal his on 40, and on the other 4 one event each differs, lying exactly on the hull's edge. `stress.py` joined the 44 files into one sample of 10,183,290 events, and ours given his `find_area` gave his masks for every event. The record has no reference gates, so whether the gates are biologically right isn't checked, and the [flow gate spec](specs/2026-10-12-flow-gate-design.md) lists that as a non-goal. [reproducibility.md](reproducibility.md#flow-comparepy-piece-by-piece) has the comparison runs.
+`compare.py` runs the reference code and ours piece by piece on any FCS file or folder, on the same arrays on both sides, and exits with 1 if a piece differs beyond the hull's edge. It pairs per-sample thresholds with the workbook's rows, where the reference script pairs them with the samples in FlowKit's `$FIL` order. On the same machine over all 44 files, the grid, the maxima and the peaks equal the reference output on every file. The gate on the reference cells and the finder with the reference `find_area` equal the reference output on 40, and on the other 4 one event each differs, lying exactly on the hull's edge. `stress.py` joined the 44 files into one sample of 10,183,290 events, and ours given the reference `find_area` gave the reference masks for every event. The record has no reference gates, so whether the gates are biologically right isn't checked, and the [flow gate spec](specs/2026-10-12-flow-gate-design.md) lists that as a non-goal. [reproducibility.md](reproducibility.md#flow-comparepy-piece-by-piece) has the comparison runs.
 
 ### What is tested and what is not
 
 | Part | Status |
 | --- | --- |
 | Data nuggets, the `WCluster` functions, `cut_tree` | ported, and checked against R's recorded output |
-| The gate finder's pieces | ported, and checked against his code on the fixtures and on the 44 files |
-| `find_area`'s disc on the peak | a correction of his code, tested against an independent statement of the corrected rule. Whether it stands is an open ruling |
-| `--disc his`, the copy of his `find_area` in `pick.py` | no test of its own. A check run on the laptop while this page was written found it giving his recorded cells, and with them his recorded masks, on all three fixtures |
-| `datanuggets-flow`'s argument and population parsing, the union of picks, the file listing | unit tests in `tests/flow/test_flow_pick.py` |
-| `datanuggets-flow`'s transform, per-file nuggets, pooling, Ward and `k` | design choices. No test runs the command end to end on FCS files, and no result in the repository validates the clusters |
+| The gate finder's pieces | ported, and checked against the reference code on the fixtures and on the 44 files |
+| `find_area`'s disc on the peak | a correction of the reference code, tested against an independent statement of the corrected rule. Whether it stands is an open ruling |
+| `--disc his`, `datanuggets.flow.mirrored_area` | `tests/flow/test_flow_area.py` checks it gives the reference code's recorded cells on all three fixtures, and `test_flow_gate.py` that the finder takes it as `area=` |
+| `datanuggets-flow`'s argument and population parsing, the union of picks, the file listing, the prompt | unit tests in `tests/flow/test_flow_pick.py` |
+| `datanuggets-flow`'s transform, per-file nuggets, pooling, Ward and `k` | design choices. `test_flow_pick.py` runs the command end to end on 50,000 real events of `202.fcs` from the fixtures, not on an FCS file, and pins its tables' digests, which catches a change in the output but doesn't show the clusters are right. No result in the repository validates the clusters |
 | The paper's claims about structure preservation | not tested here |
 
 The clustering steps of `datanuggets-flow` call `create_dn`, `whclust`, `cut_tree` and `wmean`, which are the R-checked functions above. What isn't checked is the pipeline that composes them.
 
 ## References
 
-Beavers, T. E., Cheng, G., Duan, Y., Cabrera, J., Lubomirski, M., Amaratunga, D., and Teigler, J. E. "Data Nuggets: A Method for Reducing Big Data While Preserving Data Structure." Journal of Computational and Graphical Statistics 34(1), 2025. Published online in 2024. DOI: `10.1080/10618600.2024.2341896`. arXiv: `2403.03099`.
+Beavers, T. E., Cheng, G., Duan, Y., Cabrera, J., Lubomirski, M., Amaratunga, D., and Teigler, J. E. "Data Nuggets: A Method for Reducing Big Data While Preserving Data Structure." Journal of Computational and Graphical Statistics 34(1), 330-342, 2025. Published online in 2024. DOI: `10.1080/10618600.2024.2341896`. arXiv: `2403.03099`.
+
+Cherasia, K. E., Cabrera, J., Fernholz, L. T., and Fernholz, R. "Data Nuggets in Supervised Learning." In M. Yi and K. Nordhausen (eds.), *Robust and Multivariate Statistical Methods: Festschrift in Honor of David E. Tyler*, 429-449. Springer, 2023. Published online in 2022. DOI: `10.1007/978-3-031-22687-8_20`.
 
 Dastgiri, M., Cabrera, J., et al. "Novel Machine Learning Approach to Differential Cell Flow Cytometry Analysis Based on Projection Pursuit." Manuscript in revision.
 

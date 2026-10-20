@@ -197,7 +197,7 @@ Output:
 41306 4154
 ```
 
-`masks` has one row per event and one column per population, in his order. The first population's area takes `t11` and `t21`, the others `t12` and `t22`, with his defaults. An event can be in more than one population, as in his code: here 41,306 of the 50,000 events are, and 4,154 are in none. These masks equal the fixture's `fixed_masks`, his gate run on the cells of the disc centred on the peak, except for one event on the hull's edge that ours keeps and his doesn't. [methodology.md](methodology.md#where-the-finder-departs-from-cabreras-code) explains both departures. `plot.gates(fsc, ssc, masks, title=..., ax=...)` draws his figure from the masks.
+`masks` has one row per event and one column per population, in the reference finder's order. The first population's area takes `t11` and `t21`, the others `t12` and `t22`, with the reference defaults. An event can be in more than one population, as in the reference code: here 41,306 of the 50,000 events are, and 4,154 are in none. These masks equal the fixture's `fixed_masks`, the reference gate run on the cells of the disc centred on the peak, except for one event on the hull's edge that ours keeps and the reference gate doesn't. [methodology.md](methodology.md#where-the-finder-departs-from-cabreras-code) explains both departures. `plot.gates(fsc, ssc, masks, title=..., ax=...)` draws the reference code's figure from the masks.
 
 ### From an FCS file
 

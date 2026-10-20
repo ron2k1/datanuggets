@@ -1,6 +1,6 @@
 # The datanuggets-flow command
 
-`datanuggets-flow` runs the flow cytometry study from FCS files. It gates each file on FSC-A against SSC-A with Prof. Cabrera's gate finder, shows every file's numbered populations, asks which of them hold the cells you want, and clusters those cells: data nuggets of each file's kept events, then one weighted Ward tree over all the files' nuggets, so a cluster is the same cells in every file. [methodology.md](methodology.md#the-datanuggets-flow-pipeline) explains the method and its design choices.
+`datanuggets-flow` runs the flow cytometry analysis from FCS files. It gates each file on FSC-A against SSC-A with Prof. Cabrera's gate finder, shows every file's numbered populations, asks which of them hold the cells you want, and clusters those cells: data nuggets of each file's kept events, then one weighted Ward tree over all the files' nuggets, so a cluster is the same cells in every file. [methodology.md](methodology.md#the-datanuggets-flow-pipeline) explains the method and its design choices.
 
 The command needs the `flow` extra, which adds flowio, matplotlib and pandas ([installation.md](installation.md#extras)). In a clone, `uv sync` installs them and `uv run datanuggets-flow` runs it. [quickstart.md](quickstart.md#a-first-datanuggets-flow-run) has a first run on a public file.
 
@@ -44,7 +44,7 @@ On the files of the Zenodo record the default channels are the 32 unmixed `FJCom
 
 ### Per-file thresholds
 
-`--t11` and `--t21` take one number for every file, or a comma-separated list with one number per file in file order. Any other count stops the run. The peaks after the first use his `t12` of 20 and `t22` of 0.5, and the finder's 100 by 100 grid and the 11 by 11 window of its focal maxima are fixed too. None of these has a flag.
+`--t11` and `--t21` take one number for every file, or a comma-separated list with one number per file in file order. Any other count stops the run. The peaks after the first use the reference finder's `t12` of 20 and `t22` of 0.5, and the finder's 100 by 100 grid and the 11 by 11 window of its focal maxima are fixed too. None of these has a flag.
 
 Cabrera's `cfc.py` sets the first peak's thresholds file by file. For a folder of four files:
 
@@ -52,11 +52,11 @@ Cabrera's `cfc.py` sets the first peak's thresholds file by file. For a folder o
 datanuggets-flow <folder> --t11 22,20,18,18 --t21 0.25,0.5,0.5,0.5
 ```
 
-His script pairs these values with the samples in the order FlowKit returns them, by their `$FIL` keyword, which may not be the order of his workbook ([methodology.md](methodology.md#against-cabreras-script)). Here they follow file order, so check the `File N` lines against the values you meant.
+`cfc.py` pairs these values with the samples in the order FlowKit returns them, by their `$FIL` keyword, which may not be the order of the workbook it reads ([methodology.md](methodology.md#against-cabreras-script)). Here they follow file order, so check the `File N` lines against the values you meant.
 
 ### --disc
 
-- `his`, the default, gates with a copy of `cfc.py`'s own `find_area`, whose distance disc sits on the mirrored cell. The populations and their numbers are the ones his figures show.
+- `his`, the default, gates with `datanuggets.flow.mirrored_area`, a copy of `cfc.py`'s own `find_area`, whose distance disc sits on the mirrored cell. The populations and their numbers are the ones `cfc.py`'s figures show.
 - `peak` gates with `datanuggets.flow.find_area`, which centres the disc on the peak, as `lymphmacro_finder` does.
 
 On `202.fcs`, `his` gives populations of 225,770, 58,245 and 27,590 events and `peak` gives 214,085, 66,149 and 37,742. Which rule is right is open problem 10 in [limitations.md](limitations.md#open-problems). [methodology.md](methodology.md#the-disc---disc-his-and---disc-peak) explains the difference.
