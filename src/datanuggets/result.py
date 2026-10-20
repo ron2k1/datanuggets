@@ -96,3 +96,57 @@ class WpcaResult(_ArrayFields):
     scale: np.ndarray
     wrow: np.ndarray
     wcol: np.ndarray
+
+
+@dataclass(frozen=True, eq=False)
+class WkmeansResult(_ArrayFields):
+    """wkmeans output. labels is each row's cluster, R's label minus one. R can leave a label
+    empty, and then labels has a gap there too. centers (one row per label present, in label
+    order) and wwcss (one value per label present) follow R's wmean and wwcss, and total_wwcss
+    is their sum as R adds it, a 0-d float64."""
+
+    labels: np.ndarray
+    centers: np.ndarray
+    wwcss: np.ndarray
+    total_wwcss: np.ndarray
+
+
+@dataclass(frozen=True, eq=False)
+class DnWkmeansResult(_ArrayFields):
+    """dn_wkmeans output: wkmeans' four fields for the nuggets, plus row_labels, each original
+    row's cluster, which is the cluster of the nugget it belongs to."""
+
+    labels: np.ndarray
+    centers: np.ndarray
+    wwcss: np.ndarray
+    total_wwcss: np.ndarray
+    row_labels: np.ndarray
+
+
+@dataclass(frozen=True, eq=False)
+class WhclustResult(_ArrayFields):
+    """whclust output in scipy's numbering. Row s of merge joins two clusters, where cluster r
+    below n is row r and cluster n + s is the one row s made, and each row keeps R's column
+    order. height is R's total WWCSS after each merge, and order is the rows in dendrogram order,
+    0-based. When weights cancel, R can merge a cluster with itself, and then order repeats or
+    drops rows, as R's does."""
+
+    merge: np.ndarray
+    height: np.ndarray
+    order: np.ndarray
+
+    def to_linkage(self) -> np.ndarray:
+        """scipy's (n-1, 4) linkage: merge, height and each new cluster's size, for
+        scipy.cluster.hierarchy.dendrogram. Raises ValueError for a self-merge, which a scipy
+        linkage can't hold. The heights are R's as they are: negative weights can give negative
+        ones, which scipy's dendrogram and fcluster reject with ValueError, and zero weights can
+        give NaN ones, which scipy takes without a word."""
+        n = self.merge.shape[0] + 1
+        if np.any(self.merge[:, 0] == self.merge[:, 1]):
+            raise ValueError("merge joins a cluster with itself, which a scipy linkage can't hold")
+        size = np.ones(2 * n - 1)
+        z = np.empty((n - 1, 4))
+        for s, (a, b) in enumerate(self.merge.tolist()):
+            size[n + s] = size[a] + size[b]
+            z[s] = (a, b, self.height[s], size[n + s])
+        return z

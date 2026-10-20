@@ -97,9 +97,14 @@ class Case:
     def draws(self) -> list[DrawRecord]:
         sizes = self.array("draw_size")
         values = self.array("draw_values").astype(np.int64)
+        flags = (
+            self.array("draw_replace").astype(bool).tolist()
+            if self.has("draw_replace")
+            else [False] * sizes.size
+        )
         records, pos = [], 0
-        for n, size in zip(self.array("draw_n").tolist(), sizes.tolist(), strict=True):
-            records.append(DrawRecord(n, size, values[pos : pos + size]))
+        for n, size, rep in zip(self.array("draw_n").tolist(), sizes.tolist(), flags, strict=True):
+            records.append(DrawRecord(n, size, values[pos : pos + size], rep))
             pos += size
         assert pos == values.size, f"{self.id}: draw_values has {values.size - pos} extra entries"
         return records

@@ -136,6 +136,16 @@ class RDraws:
             )
         return np.fromiter(self._values(n, size, r_use_hash(n, size)), dtype=np.intp, count=size)
 
+    def sample_replace(self, n: int, size: int) -> np.ndarray:
+        """sample.int(n, size, replace = TRUE): do_sample's replace branch, one R_unif_index(n)
+        per value. R never hashes a replace draw."""
+        n, size = int(n), int(size)
+        if n < 0 or n > 4.5e15 or (size > 0 and n == 0):
+            raise ValueError("invalid first argument")
+        if size < 0:
+            raise ValueError("invalid 'size' argument")
+        return np.fromiter((self._unif_index(n) for _ in range(size)), dtype=np.intp, count=size)
+
     def permutation(self, n: int) -> np.ndarray:
         return self.sample(n, n)
 

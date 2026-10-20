@@ -21,6 +21,7 @@ CREATE = {c.id: c for c in load_group("create_dn")}
 SEEDS = [c for c in GROUP.values() if c.id.startswith("seed_") and c.id != "seed_invalid"]
 SWITCH = [c for c in GROUP.values() if c.id.startswith("switch_")]
 SIZE = [c for c in GROUP.values() if c.id.startswith("size_")]
+REPLACE = [c for c in GROUP.values() if c.id.startswith("replace_")]
 REFINE = {c.id: c for c in load_group("refine_dn")}
 RULE = "(n > 1e+07 && !replace && is.null(prob) && size <= n/2)"
 SAMPLE_INT = [
@@ -53,6 +54,14 @@ def test_every_case_is_recorded():
     assert {c.id for c in SIZE} == {"size_5000001_of_10000002", "size_5000002_of_10000002"}
     assert len(SEEDS) == 12 and "use_hash_table" in GROUP and "seed_invalid" in GROUP
     assert "bits_2p49p1" in GROUP
+    assert {c.id for c in REPLACE} == {
+        "replace_k3_size147",
+        "replace_k4_size6",
+        "replace_k1_size5",
+        "replace_k7_size1",
+        "replace_intmax_size3",
+        "replace_k5_size0",
+    }
     # the cases tell the branches apart where they should
     differ = {c.id for c in SWITCH if c.manifest["branches_differ"]}
     assert differ == {"switch_2p24p1_size2", "switch_1e7_size1200", "switch_1e7p1_size1200"}
@@ -275,3 +284,24 @@ def test_create_dn_reseeds_an_rdraws_like_set_seed():
 def test_numpy_stays_the_default():
     assert isinstance(as_draws(5), NumpyDraws)
     assert isinstance(as_draws(np.random.default_rng(5)), NumpyDraws)
+
+
+@by_id(REPLACE)
+def test_sample_replace_matches_r(case):
+    draws = RDraws(case.args["seed"])
+    assert ints(case, "state0") == draws.random_seed().tolist()
+    got = draws.sample_replace(case.args["n"], case.args["size"]) + 1
+    assert got.tolist() == ints(case, "first")
+    assert draws.random_seed().tolist() == ints(case, "state1")
+    assert (draws.sample(10, 10) + 1).tolist() == ints(case, "then")
+    assert draws.random_seed().tolist() == ints(case, "state2")
+
+
+def test_sample_replace_rejects_what_r_rejects():
+    with pytest.raises(ValueError, match="invalid first argument"):
+        RDraws(1).sample_replace(0, 2)
+    with pytest.raises(ValueError, match="invalid first argument"):
+        RDraws(1).sample_replace(-1, 0)
+    with pytest.raises(ValueError, match="invalid 'size' argument"):
+        RDraws(1).sample_replace(3, -1)
+    assert RDraws(1).sample_replace(0, 0).shape == (0,)

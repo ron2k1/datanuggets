@@ -1,6 +1,6 @@
 # datanuggets
 
-A native Python port of CRAN's `datanugget` 1.5.0 and `WCluster` 1.3.0. It runs without R. Its tests check it against 482 cases recorded from R itself and a few values checked by hand in R, and the port matches R bit for bit on them except for the eigen solver's output and the differences documented below.
+A native Python port of CRAN's `datanugget` 1.5.0 and `WCluster` 1.3.0. It runs without R. Its tests check it against 526 cases recorded from R itself and a few values checked by hand in R, and the port matches R bit for bit on them except for the eigen solver's output and the differences documented below.
 
 Data nuggets reduce a dataset to groups described by a center, a row count and a scale. Scale measures spread as the average variance across columns. Centers are chosen by repeatedly removing one point from the closest pair, which spreads them across the data instead of concentrating them in dense regions. Each row joins its nearest center.
 
@@ -8,7 +8,7 @@ Beavers et al. (cited below) run weighted PCA and weighted k-means on the nugget
 
 ## Status
 
-Version `0.1.0.dev0` is in development. Eleven functions are ported:
+Version `0.1.0.dev0` is in development. Seventeen functions are ported:
 
 | Python | R | R package |
 | --- | --- | --- |
@@ -23,14 +23,22 @@ Version `0.1.0.dev0` is in development. Eleven functions are ported:
 | `distw` | `distw` | `WCluster` |
 | `wpca` | `Wpca` | `WCluster` |
 | `cluster_predict` | `cluster.predict` | `WCluster` |
+| `wkmeans` | `Wkmeans` | `WCluster` |
+| `whclust` | `Whclust` | `WCluster` |
+| `dn_wkmeans` | `DN.Wkmeans` | `WCluster` |
+| `dn_whclust` | `DN.Whclust` | `WCluster` |
+| `dn_wpca` | `DN.Wpca` | `WCluster` |
+| `dn_cluster_predict` | `DNcluster.predict` | `WCluster` |
 
 `refine_dn` splits nuggets that are spread out or elongated with 2-means, through a port of the Hartigan-Wong k-means in R's `stats::kmeans`. `get_dn_means` averages the rows in each nugget. `arithmetic_complexity` gives the arithmetic cost of a `create_dn` call on a log10 scale, from the shape of the data alone.
 
 The `WCluster` functions treat each row as a point with a weight, such as a nugget with its row count. `wmean` gives each cluster's weighted mean and `wss` the weighted sum of squares around the weighted mean. `wwcss` adds up each cluster's `wss`, and `distw` gives how much merging two clusters adds to it. `cluster_predict` sends new rows to the nearest weighted cluster mean. `wpca` is principal components with a weight per row and per column.
 
-`RDraws` reproduces R's `set.seed` and `sample.int`. Passed as `seed=RDraws(291102)`, it makes `create_dn` and `refine_dn` draw what R's `create.DN` and `refine.DN` draw with that seed. It isn't exported from `datanuggets` yet, so import it from `datanuggets._random.r_draws`.
+`wkmeans` is weighted k-means and `whclust` is weighted Ward hierarchical clustering, both as `WCluster` computes them, quirks included. The four `dn_` functions are `WCluster`'s wrappers that run `wkmeans`, `whclust`, `wpca` and `cluster_predict` on a `DataNuggets`, with the nugget centers as the data and the nugget weights as the row weights. `dn_wkmeans` also gives each original row the cluster of its nugget. They take `datanugget`'s output, but `datanugget` 1.5.0 doesn't define them, so they're listed under `WCluster`.
 
-Still to port: `WCluster`'s `Wkmeans` and `Whclust`, then `datanugget`'s `DN.Wkmeans`, `DN.Whclust` and `optimal.DN`.
+`RDraws` reproduces R's `set.seed` and `sample.int`. Passed as `seed=RDraws(291102)`, it makes `create_dn`, `refine_dn`, `wkmeans` and `dn_wkmeans` draw what R's `create.DN`, `refine.DN`, `Wkmeans` and `DN.Wkmeans` draw with that seed. It isn't exported from `datanuggets` yet, so import it from `datanuggets._random.r_draws`.
+
+Still to port: `datanugget`'s `optimal.DN`.
 
 ## Install
 
@@ -108,9 +116,33 @@ Output:
 
 `cluster_predict` returns each new row's 0-based position among the sorted labels. The labels here are 0 and 1, so the positions equal the labels.
 
+`dn_wkmeans` and `dn_whclust` cluster the nuggets, weighted by their row counts. With `seed=RDraws(291102)`, `dn_wkmeans` draws its starts as R's `DN.Wkmeans` does with seed 291102, so the same nuggets give R's clusters:
+
+```python
+from datanuggets import dn_whclust, dn_wkmeans
+from datanuggets._random.r_draws import RDraws
+
+km = dn_wkmeans(dn, 3, seed=RDraws(291102))
+print(km.wwcss, km.total_wwcss)
+print(np.bincount(km.row_labels))
+
+hc = dn_whclust(dn)
+print(hc.merge[-1], hc.height[-1])
+```
+
+Output:
+
+```text
+[52989.7953179  54819.45581478 57960.64673812] 165769.8978708033
+[31348 32229 36423]
+[397 396] 268304.21872574475
+```
+
+`row_labels` puts each of the 100,000 rows in its nugget's cluster, so the counts add up to 100,000. `merge` is in scipy's numbering, so the last merge joins clusters 396 and 397, the ones made at 0-based steps 196 and 197, and `height` ends at the total WWCSS of all 200 nuggets as one cluster. `hc.to_linkage()` gives the linkage that `scipy.cluster.hierarchy.dendrogram` takes.
+
 ## What was done
 
-The work landed in the order below. Most steps started from a written plan, linked in the table. Steps 4, 5 and 10 also had an independent review, and its findings were fixed or recorded. `RDraws` grew out of a spike and has no plan document, and the architecture document was written after the moves it describes.
+The work landed in the order below. Most steps started from a written plan, linked in the table. Steps 4, 5, 10 and 11 also had an independent review, and its findings were fixed or recorded. `RDraws` grew out of a spike and has no plan document, and the architecture document was written after the moves it describes.
 
 | Step | Record | What it added |
 | --- | --- | --- |
@@ -124,6 +156,7 @@ The work landed in the order below. Most steps started from a written plan, link
 | 8 | [plan](docs/plans/2026-09-30-eigen-reference-solver.md) | A measured spike with no code shipped: R's own LAPACK reproduces R's eigen output on every input tried, where scipy's doesn't. It sets out the options for a reference solver |
 | 9 | [architecture](docs/architecture.md) | The package split into `nuggets/`, `wcluster/`, `_compat/`, `_random/` and `_clustering/`, with the tests in matching folders. The five old public module paths and the private `datanuggets._draws` still import. The other moved private modules are reachable only at their new paths |
 | 10 | [plan](docs/plans/2026-09-30-speed-next-targets.md), [review](docs/reviews/2026-10-09-speed-next-review.md) | Rfast's distances, `create.DNcenters`' deletion rounds and the Hartigan-Wong port compiled with numba, with the same bits. The deletion rounds work on one distance matrix instead of copying it every round. numba 0.68 in the lock, so the package runs on Python 3.15 |
+| 11 | [plan](docs/plans/2026-10-09-wcluster-iterative-port.md), [review](docs/reviews/2026-10-10-wcluster-iterative-review.md) | `Wkmeans`, `Whclust`, `DN.Wkmeans`, `DN.Whclust`, `DN.Wpca` and `DNcluster.predict`, with numba kernels that give the Python references' bits, R's quirks where it has them, and R's message in R's order where it stops. `Draws` gains `sample_replace`, so a hand-written `Draws` needs it too |
 
 PRs #4 and #5 were opened against the speed branch, and both reached `main` together through the merge of this branch.
 
@@ -155,7 +188,15 @@ Logical data and vectors follow R too. In the `WCluster` functions and `get_dn_m
 
 `wpca` has 29 recorded cases, from iris, mtcars, faithful, quakes, volcano, trees and npk, from the same nuggets, and five constructed weight vectors that pin R's long double `sum(wrow)`, two of which make R stop. The table reports 25 of them, 4 with `corr=True`. Everything up to the matrix R hands to `eigen()` matches R bit for bit in all 25: the center, the scale, the column and row weights, the centered data and the eigen input. The eigen output isn't compared bit for bit, because LAPACK builds round it differently. A rule holds it to R's instead, and passes in all 25. The rotation must be orthonormal, and each column must solve the eigen input for R's eigenvalue within 1024 machine epsilons times the largest eigenvalue. Eigenvalues closer than 1e-12 times the largest form a cluster whose subspace has to match R's, since the vectors inside it aren't determined. The scores must be R's matrix product of the centered data and the port's rotation. Four cases aren't reported. R stops in `eigen()` on three of them, and the port raises there too. The fourth is the one-column `corr=True` case, where the port departs from R on purpose. The table is in [docs/validation/wpca.md](docs/validation/wpca.md).
 
-`RDraws` is checked on 21 recorded cases of `set.seed` and `sample.int`, with `.Random.seed` read before and after each call, so the state it leaves and the draws that follow are compared too. The cases cover both sides of R's switch to the hash sampler, at 1e7 and 1e7 + 1 values. It also reproduces every draw recorded in the `create_dn` fixtures, and `refine_dn` with `RDraws` returns R's nuggets on all 128 recorded `refine.DN` cases. Two workers give the same result as one.
+`whclust` has 14 recorded cases. R returns on 11 of them: iris with unit weights, which has a duplicate row and so zero distances and ties, iris and the first 200 rows of quakes with the weights 1, 3, 7, 2 repeating, a duplicated whole-number grid where many distances tie, one column, three rows, and data with one or two zero-weight rows. The other three go where R's `which.min` is left with only infinite distances to pick from. In two of them R merges a cluster with itself: weights of 1 and -1 do it at the last step, and three pairs of rows 1e160 apart, whose distances overflow, do it in the middle. The last is three rows whose distances all overflow. In all 11 the port's `merge` and `order` equal R's and `height` matches bit for bit. A zero weight makes a row's distances NaN, so R merges that row only once its `which.min` is left to pick an infinite distance, and the port makes the same pick. R stops on the other three, one row, two rows and a step where every distance left is NaN, and the port raises there with R's message.
+
+`wkmeans` has 15 recorded cases: iris with k = 3, with one start and with five, k = 1, one iteration, user centers, one column of faithful, 500 rows of quakes with k = 4 and weights, nine rows with k = 4, on which R redraws its start 123 times, and small cases built to reach R's quirks. R refreshes its table of cluster sizes only when it takes a move, and reads it by position, so the table goes stale. In the recorded cases a Lloyd step is undone, the stale table decides a move, a cluster empties and comes back, labels are left with a gap, and the stale table runs past its end, where R stops. R returns on 12 cases. In all of them the labels equal R's, gap included, and the centers, each cluster's WWCSS and the total match bit for bit. So do each start's random labels, its refined labels and WWCSS, and the passes it made, which R prints as "Iteration" messages and the port logs at debug level. The port reads every draw R made, in R's order, with none left over. R stops on the other three: the stale table past its end, a cluster whose weights sum to zero, which gives a NaN WWCSS, and user centers that leave a cluster empty. The port raises on each with R's message. A table of 28 more runs on the 12-point grid records where R stops on its arguments: fewer than `k` rows, a `k` below 1, a NaN or infinite `k`, `num.init` or `max.iterations`, and centers given as a vector. Where two of them meet, R stops on the one it reaches first, and so does the port, with R's message. Given centers, R ignores `num.init`, so a NaN or infinite one returns R's labels in both.
+
+Each case named for a quirk was recorded only after a copy of R's function with counters added showed that the case reaches it. The port's reference implementations count the same quirks, and their counts must equal R's in every case.
+
+The four `dn_` functions run on a datanugget that R's `create.DN` made of quakes, 150 nuggets of 1,000 rows, the same one the `create_dn` group records. The tests build the `DataNuggets` from R's recorded table, so they don't depend on `create_dn`. `dn_wkmeans` with k = 3 matches R's labels, centers, WWCSS and total bit for bit, reads R's draws in R's order, and gives each of the 1,000 rows R's cluster. `dn_whclust` matches R's `merge`, `height` and `order`. `dn_wpca` passes the checks `wpca` gets, with and without `corr`. `dn_cluster_predict` matches R's positions for a data frame of 100 new rows, and for a second datanugget of 60 nuggets as the new rows.
+
+`RDraws` is checked on 27 recorded cases of `set.seed` and `sample.int`, six of them with `replace = TRUE`, with `.Random.seed` read before and after each call, so the state it leaves and the draws that follow are compared too. The cases cover both sides of R's switch to the hash sampler, at 1e7 and 1e7 + 1 values. It also reproduces every draw recorded in the `create_dn` fixtures, and `refine_dn` with `RDraws` returns R's nuggets on all 128 recorded `refine.DN` cases. Two workers give the same result as one, and so do four threads in `wkmeans`.
 
 Getting the last bit right meant copying how R adds things up. Rfast keeps two running sums for distance terms, one over even columns and one over odd. R's `colMeans` and `rowMeans` add in 80-bit x87 precision before rounding to double. The port repeats that arithmetic exactly in 64-bit integer code that numba compiles. `refine_dn` needs R's `cov`, `mean`, `median`, `mad` and `quantile` too, which also add in long double. The `WCluster` functions add through R's `%*%`, which the reference BLAS sums in its own order, and through `weighted.mean` and `sum`, which add in long double.
 
@@ -165,7 +206,7 @@ Parity is against R 4.6.1 on x86-64 Windows with `datanugget` 1.5.0, `WCluster` 
 
 ### What R recorded
 
-Every R result the tests compare with comes from R itself. A few were checked by hand in an R session and written into the tests, such as the cancelling-weight cases in `tests/wcluster/test_wstats.py` and `arithmetic_complexity` on an `x` with no rows or no columns. The long double fuzz below checks against a Python reference instead of R. Everything else comes from the scripts in `r/`. They run R 4.6.1 with the pinned packages, trace the functions under test without modifying them, and write the inputs, the outputs, every random draw and the internal values that matter into `tests/fixtures/`. Each case carries a manifest with the R version, the package versions, the BLAS and the long double width. Running the tests doesn't need R. Fixtures are recorded on one machine only, the laptop with the pinned R. There are 482 cases in 18 groups:
+Every R result the tests compare with comes from R itself. A few were checked by hand in an R session and written into the tests, such as the cancelling-weight cases in `tests/wcluster/test_wstats.py` and `arithmetic_complexity` on an `x` with no rows or no columns. The long double fuzz below checks against a Python reference instead of R. Everything else comes from the scripts in `r/`. They run R 4.6.1 with the pinned packages, trace the functions under test without modifying them, and write the inputs, the outputs, every random draw and the internal values that matter into `tests/fixtures/`. Each case carries a manifest with the R version, the package versions, the BLAS and the long double width. Running the tests doesn't need R. Fixtures are recorded on one machine only, the laptop with the pinned R. There are 526 cases in 22 groups:
 
 | Group | Script in `r/` | Cases | What R recorded |
 | --- | --- | --- | --- |
@@ -179,8 +220,12 @@ Every R result the tests compare with comes from R itself. A few were checked by
 | `rcompat_wstats` | `fixtures_rwstats.R` | 36 | `%*%` under the reference BLAS, `weighted.mean`, and vectors that pin the order of R's long double `sum()` and where it overflows |
 | `wstats`, `wstats_constructed` | `fixtures_wstats.R` | 49, 17 | the five `WCluster` statistics on real data, and on built ties, heavy weights and overflowing rows |
 | `wpca` | `fixtures_wpca.R` | 29 | `Wpca`'s outputs and the locals it hands to `eigen()` |
-| `rsample` | `fixtures_rsample.R` | 21 | `set.seed` and `sample.int`, with `.Random.seed` before and after |
+| `rsample` | `fixtures_rsample.R` | 27 | `set.seed` and `sample.int`, with and without `replace = TRUE`, with `.Random.seed` before and after |
 | `compat` | `fixtures_compat.R` | 46 | the evidence behind the R-compatibility decisions: labels, logical and vector data, predictions with no answer, `corr` values, `nstart` and fractional nugget counts |
+| `whclust` | `fixtures_whclust.R` | 14 | `Whclust`'s `merge`, `height` and `order` or R's message where it stops, and how often each quirk fired in a copy of `Whclust` with counters |
+| `wkmeans` | `fixtures_wkmeans.R` | 15 | `Wkmeans`' every draw, each start's labels from `init`, each start's refined labels and WWCSS, the "Iteration" messages R prints, the outputs or R's message, and the quirk counts |
+| `wkmeans_args` | `fixtures_wkmeans.R` | 1 | 28 `Wkmeans` runs on arguments R stops on, with R's message, or its labels where it returns |
+| `dn_wcluster` | `fixtures_dn_wcluster.R` | 8 | two quakes datanuggets and a data frame of new rows, `DN.Wkmeans`, `DN.Whclust`, `DN.Wpca` and `DNcluster.predict` on them, and R's messages and outputs on a datanugget with one variable and on a matrix `newx` |
 
 ### How the tests compare
 
@@ -195,6 +240,8 @@ Parity tests feed R's recorded draws back through `ReplayDraws`. It raises if th
 The compiled long double kernels are checked against a slower reference written with Python integers, on a fixed-seed fuzz aimed at exact ties, sticky bits and exponent edges. The default run tries 200,000 cases per operation. The slow run, `pytest -m slow`, tries 10 million per operation for each of the seven operations. Another test finds every compiled module by itself, checks that each kernel is made through the package's shared `compiled` wrapper, and checks that the kernels cache where numba can and still compile where it can't.
 
 The compiled distance, deletion-round and Hartigan-Wong kernels each keep the Python code they replaced in the package, as `_cross_distances_py`, `_select_centers_py` and `_kmns_py`. Their tests compare the two bit for bit on fuzzed data built for ties: whole-number grids, duplicated centers, values near overflow and subnormals, widths on both sides of dista's 32-column switch, and Hartigan-Wong problems that reach all five of its fault codes.
+
+The compiled `whclust` and `wkmeans` keep the same kind of reference, `_whclust_py` and `_wkmeans_py`, which follow R's code statement by statement and pass every recorded case themselves. On fuzzed small inputs built for ties (whole-number grids, duplicate rows, values near overflow, and weights that are whole, zero, negative or of both signs), the compiled path and the reference give the same bits, or stop at the same point with the same message. The fuzz fails unless the reference's counters show that every one of R's quirks ran: for `whclust` the infinite pick and the self-merge, and for `wkmeans` all eight, from a redrawn start through a label gap to R's stops on a stale table and on a NaN WWCSS. The default run tries a fast slice, and `pytest -m slow` a larger one.
 
 Several tests target a specific wrong implementation and were seen to fail on it: `math.fsum` in place of R's long double `sum(wrow)` in `wpca`, numpy's +NaN in place of R's -NaN for an empty nugget, `RDraws` taking the wrong side of R's hash switch, and a matrix product that returns -0.0 where R's starts from +0. Reviews also ran mutants against the suite and turned most survivors into tests. The [WCluster review](docs/reviews/2026-09-30-wcluster-leaves-review.md) lists the ones it ran, and the survivors are under Open problems.
 
@@ -239,6 +286,27 @@ Every run was pinned to one thread on each of the laptop's six performance cores
 Peak memory was 2072, 2092 and 2183 MiB in R at the three sizes, measured in an earlier sitting. In Python it was 1501, 1511 and 1559 MiB before and 887, 896 and 944 MiB now, with 3.15 within 2 MiB of 3.14. That's the peak working set of the whole process, data load included. It hardly grows with the row count. The biggest object is the 10,000 by 10,000 distance matrix between the first-stage centers, which is the same size every time. The compiled deletion rounds work on it in place, where the Python code before copied the surviving rows and columns every round.
 
 They ran on my laptop (i7-13650HX, 16 GB, Windows 11). R was 4.6.1 with `datanugget` 1.5.0 and its reference BLAS. Python was 3.14.3 and 3.15.0, each with numpy 2.5.3, scipy 1.18.1 and numba 0.68.0.
+
+### WCluster
+
+`whclust` and `wkmeans` ran on the first n rows of R's `quakes` with the weights 1, 3, 7, 2 repeating, `wkmeans` with k = 4 and R's draws replayed. These are the workloads behind the spec's speed gates. R's `Whclust` was timed once, since it takes minutes. Everything else is the best of 3 when a run takes under a second. Seconds, on the laptop and on a Mac mini (Apple M4, macOS arm64, R 4.6.1, Python 3.14.3):
+
+| Workload | R, laptop | Python, laptop | R, mini | Python, mini |
+| --- | --- | --- | --- | --- |
+| `whclust`, 200 rows | 102.2 | 0.0107 | 40.0 | 0.0070 |
+| `whclust`, 400 rows | 534.2 | 0.0454 | 166.2 | 0.0278 |
+| `whclust`, 800 rows | 2951 | 0.186 | 682.9 | 0.111 |
+| `wkmeans`, 100 rows | 2.42 | 0.0017 | 0.82 | 0.0011 |
+| `wkmeans`, 250 rows | 8.25 | 0.0057 | 3.00 | 0.0046 |
+| `wkmeans`, 500 rows | 4.70 | 0.0081 | 2.03 | 0.0068 |
+| `wkmeans`, 1,000 rows | 10.06 | 0.0218 | 4.33 | 0.0189 |
+| `whclust`, 2,000 Covertype rows | not run | 1.34 | not run | 0.97 |
+| `wkmeans`, 10,000 Covertype rows | not run | 5.00 | not run | 5.38 |
+| `dn_whclust`, 2,000 nuggets of 100,000 Covertype rows | not run | 1.49 | not run | 1.03 |
+
+The laptop's R times run high. The laptop had between 0.2 and 1.5 GB free while R ran, so R spent part of the time waiting on memory, and its `Whclust` at 800 rows took 49 minutes where the mini took 11. So the laptop's ratios, 9,500 to 15,800 times for `whclust` and 460 to 1,450 for `wkmeans`, are higher than a quiet machine gives. The mini's, 5,700 to 6,200 and 230 to 730, are the fairer measure. On both machines the times clear every gate's limit: `whclust` under a second at 800 rows and `wkmeans` at least 50 times faster at each n.
+
+On the laptop every output was bit for bit R's. On the mini, R's merges, orders and labels were the port's, but some heights and centers differ in the last bits, under 1e-15 relative. R on arm64 macOS has no 80-bit long double, so its sums round to double at every step, while the port reproduces x86 R's 80-bit sums everywhere. The gates that also ask for R's exact bits fail there for that reason only. R wasn't run on the Covertype rows, whose gates are plain time limits. By its growth from 400 to 800 rows, R's `Whclust` on 2,000 would take about 75 minutes on the mini.
 
 Covertype data: Blackard, J. (1998). [Covertype](https://doi.org/10.24432/C50K5N) [Dataset]. UCI Machine Learning Repository. It's licensed under CC BY 4.0.
 
@@ -312,6 +380,22 @@ In the `WCluster` functions `Wpca` becomes `wpca`, `cluster.predict` becomes `cl
 
 `wpca`'s `rotation` columns, and the scores with them, can have the opposite sign from R's, since LAPACK picks each column's sign.
 
+`Wkmeans` becomes `wkmeans` and `Whclust` becomes `whclust`. In `wkmeans`, R's `dataset`, `cl.centers`, `obs.weights`, `num.init` and `max.iterations` become `x`, `centers`, `w`, `num_init` and `max_iter`, and `k` and `seed` keep their names. Every argument after `k` is keyword-only. R's order puts `cl.centers` before the weights, so a call written in R's order fails instead of taking the weights as centers. `whclust(x, w=None)` keeps R's names. The `dn_` functions take a `DataNuggets` as `dn` where R takes a datanugget, and `dn_wkmeans` names its other arguments like `wkmeans`, keyword-only too. `w=None` means unit weights, `n_jobs` is new and never changes the result, and the other defaults are R's. The other differences are these:
+
+| Item | R | Python |
+| --- | --- | --- |
+| `Wkmeans` and `DN.Wkmeans` labels | 1-based | 0-based, R's label minus one. A gap in R's labels stays a gap |
+| `Whclust` `merge` | a single row as its negative row number, a merged cluster as the 1-based step that made it | scipy's numbering, one to one: row `r` is `r`, and the cluster made at 0-based step `s` is `n + s`. `to_linkage()` gives the linkage that `scipy.cluster.hierarchy.dendrogram` takes |
+| `Whclust` `order` | 1-based | 0-based |
+| `Wkmeans` `cl.centers` | `p` rows by `k` columns | `centers`, `(k, p)` |
+| `Wkmeans` output | prints each start's WWCSS, and sends "Iteration" lines to `message()` | `logging.debug` on the `datanuggets` logger |
+| `Wkmeans` without user centers on at least `k` but fewer than `2k` rows, or on fewer than `k` distinct pairs of a row and its weight | draws starts forever | `ValueError` |
+| `Wkmeans` starts that keep missing `k` clusters | keeps drawing, maybe forever | `ValueError` after `MAX_STARTS`, 10,000 starts |
+| `num.init` or `max.iterations` below 1 | `1:0` runs the loop twice | `ValueError` |
+| `DNcluster.predict` with a matrix `newx` | stops ("newdata should be either a data frame or a datanugget object.") | runs, as `cluster_predict` does |
+
+The `dn_` functions stop where R's do on a datanugget with one variable, where R's `[, 2:2]` drops the table to a vector: `dn_wkmeans` always, `dn_wpca` without `wcol`, and `dn_cluster_predict` with a `DataNuggets` as `newx`. `dn_whclust` runs, as R's does. The `one_variable` case records R's messages there, and what R returns where it runs. `dn_cluster_predict` reads a `DataNuggets` given as `newx` the way R reads a datanugget there. It takes as many columns of `newx`'s table as `dn` has variables, so a wider `newx` gives its first variables, and a narrower one passes its weights and scales as data. Both stop when the table runs out of columns.
+
 ## Limitations
 
 - Parity means one reference environment: R 4.6.1 on x86-64 with the reference BLAS, R's internal LAPACK and the x87 long double. Results from an R built another way can differ in the last bits, and on tied data that can move rows between nuggets.
@@ -319,6 +403,9 @@ In the `WCluster` functions `Wpca` becomes `wpca`, `cluster.predict` becomes `cl
 - An integer seed or a NumPy `Generator` draws from NumPy, so the nuggets differ from R's for the same seed. Only `RDraws` gives R's draws, and it isn't exported from `datanuggets` yet.
 - NaN and infinite values in the data or the weights raise everywhere. R's behavior with them is recorded only for `cluster.predict` so far, so the rest keep raising until it is.
 - Labels must be whole numbers smaller than 1e15. Fractional, bool and text labels raise.
+- `whclust` keeps an `n` by `n` float64 matrix of merge costs, as R's `Whclust` does: 32 MB at 2,000 rows and 800 MB at 10,000.
+- When weights of both signs make R merge a cluster with itself, `whclust` reruns the whole call through its plain-Python reference, which follows R's matrix steps one by one and is far slower than the compiled path.
+- `wkmeans` gives up after 10,000 starts that miss `k` clusters, where R keeps drawing. On an input where R would return after more starts than that, the port raises instead. No such input is known.
 - `create_dn` builds a `dn_num1` by `dn_num1` distance matrix in its second stage. At the default 10,000 that's 800 MB of float64, whatever the row count, and the process peaked near 0.9 GB on Covertype.
 - `refine_dn` without shape splits is slower than R on the full Covertype data, 1.5 seconds to 0.9. Two thirds of its time there goes to the long double means and covariances. R gets those from the x87 unit's hardware long double, and the port repeats them in 64-bit integer code.
 - numba compiles the kernels on first use and caches them. On my laptop, importing the package and making a first small call to each public function took 8.8 seconds with an empty cache and 0.9 seconds with a warm one on Python 3.14, and 8.3 and 0.9 seconds on 3.15. The cache is kept per Python version, so each new version compiles once. Where numba can't write its cache, every new process compiles again.
@@ -327,7 +414,7 @@ In the `WCluster` functions `Wpca` becomes `wpca`, `cluster.predict` becomes `cl
 
 ## Open problems
 
-These are known and unsolved. Items 1 to 5 are tracked in the [R-compatibility record](docs/plans/2026-09-30-r-compat.md), which holds or links the evidence for each. Item 6 has its own plan, item 7 is the rest of the port, and items 8 and 9 came out of the reviews and the wheel check.
+These are known and unsolved. Items 1 to 5 are tracked in the [R-compatibility record](docs/plans/2026-09-30-r-compat.md), which holds or links the evidence for each. Item 6 has its own plan, item 7 is the rest of the port and the rulings the `WCluster` port waits on, and items 8 and 9 came out of the reviews and the wheel check.
 
 1. Nine breaking changes toward R's behavior are approved in principle and held until they're confirmed as a set. B1 makes R's draws the default for an integer seed. B2 returns `wmean` as `p` by `k`. B3 makes `wpca`'s scale a single 1.0. B4 and B5 adopt R's argument order for `cluster_predict` and `create_dn_centers`. B6 makes `progress` take bools only. B7 gives `to_frame()` R's 1-based ids and types. B8 makes `cluster_predict` return R's empty results instead of raising. B9 orders categorical labels by category.
 2. Eight compatibility tasks are pending. T4 accepts fractional and bool labels under `factor()`'s 15-digit rule and adds `cluster_levels`. Two recorded cases, `labels_faithful_float_merge` and `labels_faithful_big`, show a gap in that design. In both, `distw` builds three axes from the exact values where `factor()` makes two levels, so one list of levels can't describe both. T6 floors `dn_num1`, `dn_num2` and `dn_num` the way R does. T7 makes `refine_dn` accept any real `nstart` and return R's result, which leaves the nuggets unsplit when `kmeans` can't run. Today `refine_dn` raises `ValueError` on a NaN or infinite `nstart`, and the internal `kmeans` raises an `OverflowError` on an infinite one. T8 accepts R's other `corr` values. T9 exports `RDraws` and `cluster_levels`. T10 adds independent checks for the one-column `"random"` case of `create_dn`, where R's own table is malformed. T11 adds tests for the documented exceptions. T12 writes `docs/compatibility.md` and corrects the remaining docs.
@@ -335,7 +422,7 @@ These are known and unsolved. Items 1 to 5 are tracked in the [R-compatibility r
 4. R's behavior with NaN, NA and infinite values isn't recorded for `create_dn`, `refine_dn`, `create_dn_centers`, `arithmetic_complexity` or `get_dn_means`, so they keep raising until it is. The `WCluster` statistics need NA and NaN recorded separately before they can pass them through with R's payloads.
 5. A reference eigen solver needs approval. In the spike, R's own `Rlapack` reproduced R on all 420 rank-deficient `wpca` inputs, where scipy matched 9, on 100 of 100 refine cases against scipy's 63, and on all 43 `wpca` rotation and score cases against 16. The recommended option builds R's LAPACK sources with R's flags for Windows x64 first. It needs the R source and Rtools downloads, platform wheels in place of the pure-Python one, and a license review. Nothing was measured on Linux, macOS arm64 or another R version.
 6. The speed work goes past the design spec's text in five places, which wait on a ruling. The stopping rule itself passes: no Python function takes more than 10% of wall time on Covertype, at 100,000 rows (5.8% for `create_dn`, 3.6% for `refine_dn`) or at full size (7.0% and 1.1%). The [follow-up plan](docs/plans/2026-09-30-speed-next-targets.md) lists the five. Each deletion round is compiled whole, marking loop included, because the profile flagged the function and not the loop. The surviving rows are kept as a list of row numbers rather than a mask, and a row's nearest neighbour is searched again only when it was deleted. The row minimum keeps four running minima instead of being vectorized, which gives the same first index. Stage 1 has always run on threads, where the spec says loky, and the kernels release the GIL, so with `n_jobs` above 1 its threads now run them at once. `DIST_BLOCK_ROWS` and `ASSIGN_BLOCK_ROWS` are gone, since the kernels make no numpy temporaries to bound.
-7. `Wkmeans`, `Whclust`, `DN.Wkmeans`, `DN.Whclust` and `optimal.DN` aren't ported.
+7. `optimal.DN` isn't ported. It gets its own spec. The `wkmeans`, `whclust` and `dn_` port goes past its [spec](docs/specs/2026-10-09-wcluster-iterative-port-design.md)'s text in five places, which wait on a ruling. The [plan](docs/plans/2026-10-09-wcluster-iterative-port.md) lists the first four. `wkmeans` gives up after 10,000 starts without `k` clusters, where R keeps drawing. The `dn_` functions stop where R does on a datanugget with one variable, instead of reading the one column as data. `dn_cluster_predict` reads a `DataNuggets` given as `newx` by `dn`'s width, as R does, where the spec says it uses `newx`'s centers. `whclust` keeps R's `n` by `n` matrix without chunking it. The fifth came up in the build: `dn_cluster_predict` takes a matrix `newx`, where R stops, so that it matches `cluster_predict`.
 8. Some behavior isn't covered by a recorded case or a test:
    - R hasn't recorded zero-column inputs or centers with no rows. The compiled distance functions raise `ValueError` on both, and no public call reaches them.
    - A process that launches numba threads under GNU OpenMP and then forks, before it has ever imported the moments module, leaves the child without the hook that makes it run serially. Neither test machine has GNU OpenMP.
@@ -384,6 +471,18 @@ uv run python benchmarks/covertype.py 10000
 Use `10000`, `100000` or `all` for the size. Add `noshape` to the `Rscript` line to skip shape splits. The R script writes to `tmp/covertype/out/`. The Python script reads those outputs and prints a JSON report.
 
 To report wall time and peak memory, prefix either command with `uv run --with psutil python benchmarks/measure.py`. It reads the peak working set, so it only works on Windows.
+
+The `WCluster` benchmark times R's `Whclust` and `Wkmeans` on quakes, then the port on the same inputs and on Covertype rows, and checks every output against R's bit for bit:
+
+```sh
+Rscript benchmarks/wcluster.R whclust200
+Rscript benchmarks/wcluster.R whclust400
+Rscript benchmarks/wcluster.R whclust800
+Rscript benchmarks/wcluster.R wkmeans
+uv run python benchmarks/wcluster.py
+```
+
+`whclust800` is the long one in R: 11 minutes on the M4 mini, and 49 on the laptop when it was short of memory. The Python script needs the Covertype file above and the `covertype.R 100000` outputs for its `dn_whclust` row. It prints a table and one PASS or FAIL line per speed gate, and exits with 1 on a FAIL.
 
 ## Citing the method
 

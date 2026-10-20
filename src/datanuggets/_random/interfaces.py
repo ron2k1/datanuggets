@@ -21,6 +21,10 @@ class Draws(Protocol):
         """R's sample.int(n, size): size distinct values from range(n), 0-based."""
         ...
 
+    def sample_replace(self, n: int, size: int) -> np.ndarray:
+        """R's sample.int(n, size, replace = TRUE): size values from range(n), 0-based."""
+        ...
+
     def fork(self) -> Draws:
         """The stream for one refine_dn split, where R calls set.seed(seed) again."""
         ...

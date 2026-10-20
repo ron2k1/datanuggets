@@ -125,3 +125,25 @@ write_case("rsample", "use_hash_table", no_args,
                 with_replace = tab$with_replace, with_prob = tab$with_prob),
            extra = list(rng = rng))
 cat(sprintf("use_hash table: %d rows, %d hash\n", nrow(tab), sum(tab$use_hash)))
+
+# sample.int(n, size, replace = TRUE): do_sample's replace branch, one R_unif_index(n) per value,
+# then sample.int(10, 10) to show the state it leaves. Wkmeans' init draws
+# sample(k, n - k, replace = TRUE).
+replace_case <- function(id, n, size, seed) {
+  set.seed(seed)
+  s0 <- seed_now()
+  first <- sample.int(n, size, replace = TRUE)
+  s1 <- seed_now()
+  then <- sample.int(10, 10)
+  write_case("rsample", paste0("replace_", id), list(n = n, size = size, seed = seed),
+             list(state0 = s0, first = first, state1 = s1, then = then, state2 = seed_now()),
+             extra = list(rng = rng))
+  cat(sprintf("replace %-14s %s
+", id, paste(head(first, 8), collapse = " ")))
+}
+replace_case("k3_size147", 3, 147, 291102)            # iris with k = 3
+replace_case("k4_size6", 4, 6, 55)
+replace_case("k1_size5", 1, 5, 2)                     # rbits(0) still reads one uniform per value
+replace_case("k7_size1", 7, 1, 291102)
+replace_case("intmax_size3", 2147483647, 3, 291102)   # 31 bits, two uniforms per value
+replace_case("k5_size0", 5, 0, 291102)
