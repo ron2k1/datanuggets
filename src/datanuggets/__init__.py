@@ -1,5 +1,7 @@
 """Native Python port of the R packages datanugget and WCluster."""
 
+from importlib.metadata import version as _version
+
 # The old module paths stay bound as attributes of the package, as they were when this file
 # imported them directly, so `import datanuggets; datanuggets.create.create_dn` still works.
 from datanuggets import _draws, centers, complexity, create, means, refine  # noqa: F401
@@ -36,7 +38,8 @@ from datanuggets.wcluster import (
     wwcss,
 )
 
-__version__ = "0.1.0.dev0"
+# pyproject.toml holds the version; this reads it back from the installed metadata
+__version__ = _version("datanuggets")
 
 __all__ = [
     "CentersResult",

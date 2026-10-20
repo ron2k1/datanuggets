@@ -1,16 +1,21 @@
 # The test suite on x86 Linux, which the laptop (Windows x86) and the mini (macOS arm64) don't
-# cover. The tests read the recorded R fixtures, so R isn't installed here.
+# cover, on every Python the package claims. The tests read the recorded R fixtures, so R isn't
+# installed here. The slow tier runs on the two newest. matrix.yml runs Windows and macOS, and
+# release.yml calls both.
 name: tests
 
 on:
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
+# github.workflow is the caller's name when release.yml calls this, so a run of its own on the
+# same ref can't cancel a release's
 concurrency:
-  group: tests-${{ github.ref }}
+  group: tests-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 defaults:
@@ -24,9 +29,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.14", "3.15"]
+        python: ["3.12", "3.13", "3.14", "3.15"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           python-version: ${{ matrix.python }}
@@ -34,4 +41,5 @@ jobs:
       - name: Default tier
         run: uv run pytest -q -p no:cacheprovider -n 2 -m "not slow"
       - name: Slow tier
+        if: matrix.python == '3.14' || matrix.python == '3.15'
         run: uv run pytest -q -p no:cacheprovider -n 2 -m slow
