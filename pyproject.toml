@@ -21,9 +21,10 @@ dependencies = [
 [project.optional-dependencies]
 frame = ["pandas>=2.2"]
 progress = ["tqdm>=4.66"]
+plot = ["matplotlib>=3.9"]
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-xdist>=3.6", "ruff>=0.6", "pandas>=2.2", "tqdm>=4.66"]
+dev = ["pytest>=8", "pytest-xdist>=3.6", "ruff>=0.6", "pandas>=2.2", "tqdm>=4.66", "matplotlib>=3.9"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/datanuggets"]

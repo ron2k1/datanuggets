@@ -22,6 +22,7 @@ from datanuggets.result import (
 )
 from datanuggets.wcluster import (
     cluster_predict,
+    cut_tree,
     distw,
     dn_cluster_predict,
     dn_whclust,
@@ -50,6 +51,7 @@ __all__ = [
     "cluster_predict",
     "create_dn",
     "create_dn_centers",
+    "cut_tree",
     "distw",
     "dn_cluster_predict",
     "dn_whclust",

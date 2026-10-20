@@ -11,7 +11,7 @@ Where the code, tests, fixtures and tools of datanuggets live, which way the imp
 | `r/` | the R scripts that record the fixtures, with setup in `r/README.md` |
 | `scripts/` | `parity_report.py`, which rebuilds the tables in `docs/validation/` |
 | `benchmarks/` | the Covertype benchmark in R and Python, the stopping-rule profiler and the memory meter |
-| `docs/specs/` | the design spec |
+| `docs/specs/` | the design specs, dated |
 | `docs/plans/` | implementation plans and decision records, dated |
 | `docs/reviews/` | review reports, dated and kept as written |
 | `docs/validation/` | one parity table per public function, written by `scripts/parity_report.py` |
@@ -47,6 +47,13 @@ src/datanuggets/
     wkmeans.py         wkmeans (Wkmeans): its random starts, and the plain-Python reference
     wkmeansjit.py      Wkmeans_single compiled, each trial move over two clusters' rows
     dn.py              dn_wkmeans, dn_whclust, dn_wpca and dn_cluster_predict (the DN wrappers)
+    cutree.py          cut_tree (stats::cutree), and R's merge numbering from the port's
+  plot/                the matplotlib views, never imported by the package itself
+    __init__.py        the matplotlib check and the public names
+    tree.py            dendrogram (plot.hclust's lines)
+    points.py          clusters and nuggets, the help examples' weight colors, the size rules
+    pca.py             scores, scree and loadings, with the sign rule
+    style.py           style, save, PAPER_RC and the palettes
   _compat/             R's arithmetic and numerics, bit for bit
     arithmetic.py      long double sums, mean, cov, median, mad, quantile type 7, weighted.mean
     missing.py         R's NA and NaN bits, and sums that meet a non-finite value
@@ -73,11 +80,11 @@ src/datanuggets/
 
 ## Public and private
 
-The public API is `datanuggets.__all__`, imported from `datanuggets` as the README does. `datanuggets.nuggets` and `datanuggets.wcluster` re-export the same functions from the modules that define them. `result` and `exceptions` hold the public classes.
+The public API is `datanuggets.__all__`, imported from `datanuggets` as the README does. `datanuggets.nuggets` and `datanuggets.wcluster` re-export the same functions from the modules that define them. `result` and `exceptions` hold the public classes. `datanuggets.plot` is public too, with its own `__all__`, but it's imported only when asked for by name, since it needs matplotlib from the `plot` extra. Without matplotlib, importing it raises an `ImportError` that names the extra.
 
 A module or package whose name starts with an underscore is private. It can change without notice, and code outside this repo shouldn't import it. `datanuggets._draws` is the one private path kept working on purpose, for the reasons below.
 
-`datanuggets/__init__.py` imports the two workflow packages, the result and warning classes and the six old module paths, and does nothing else. Importing an old path binds it as an attribute of the package, as the old `__init__` did when it imported those modules directly, so `datanuggets.create.create_dn` works after a bare `import datanuggets`. Importing the package compiles no kernel, starts no thread or process and draws no random number.
+`datanuggets/__init__.py` imports the two workflow packages, the result and warning classes and the six old module paths, and does nothing else. Importing an old path binds it as an attribute of the package, as the old `__init__` did when it imported those modules directly, so `datanuggets.create.create_dn` works after a bare `import datanuggets`. Importing the package compiles no kernel, starts no thread or process, draws no random number and doesn't import matplotlib.
 
 ## Dependency direction
 
@@ -91,10 +98,11 @@ Imports run from the workflows down to the R-compatibility layer and never back 
 | `_clustering` | `_compat`, `_random` |
 | `wcluster` | `wcluster`, `_compat`, `_random`, `_validate`, `result`, `exceptions` |
 | `nuggets` | `nuggets`, `_clustering`, `_compat`, `_random`, `_defaults`, `_validate`, `result`, `exceptions` |
+| `plot` | `plot`, `wcluster`, `_compat` |
 | the old paths: `create`, `refine`, `centers`, `means`, `complexity`, `_draws` | `nuggets`, `_random` |
 | `datanuggets/__init__.py` | `nuggets`, `wcluster`, the old paths, `result`, `exceptions` |
 
-So R's arithmetic and the draw sources never import a workflow, and new code in them can't create a cycle. Wkmeans draws its starts through `_random`, the other WCluster functions draw nothing, and `wcluster` never imports `nuggets`: the DN wrappers take a `DataNuggets` from `result`. The table is the whole import graph of the package by layer, imports inside a layer and inside functions included.
+So R's arithmetic and the draw sources never import a workflow, and new code in them can't create a cycle. Wkmeans draws its starts through `_random`, the other WCluster functions draw nothing, and `wcluster` never imports `nuggets`: the DN wrappers take a `DataNuggets` from `result`. `plot` sits on top: it imports `wcluster` for R's merge numbering and `_compat` for the sum and quantile in R's nugget colors, and nothing in the package imports it. The table is the whole import graph of the package by layer, imports inside a layer and inside functions included.
 
 ## Where new code goes
 
@@ -102,6 +110,7 @@ So R's arithmetic and the draw sources never import a workflow, and new code in 
 |---|---|---|
 | a datanugget function | `nuggets/<name>.py` | export it from `nuggets/__init__.py` and `datanuggets/__init__.py` |
 | a WCluster function | `wcluster/` | the same two exports. A new cluster statistic joins `wstats.py` when it shares its helpers |
+| a plot | the `plot/` module for what it draws: trees in `tree`, points in `points`, PCA results in `pca`, settings and saving in `style` | export it from `plot/__init__.py` only. It takes `ax=`, returns the Axes, and checks its input before it draws anything |
 | a piece of R arithmetic | the `_compat` module named for what it reproduces: sums and statistics in `arithmetic`, NA and NaN bits in `missing`, matrix products and eigen in `linalg`, index helpers in `indexing`, Rfast's code in `rfast` | keep it out of `_validate`, which only checks and converts arguments |
 | a compiled kernel | a module whose name ends in `jit`, made with `compiled` from `_compat/_compiled.py` | `tests/compat/test_compiled.py` finds the `*jit` modules at any depth and fails a numba decorator anywhere else |
 | a sampling routine or seed rule | `_random/`. A new source implements `Draws` from `interfaces.py`, and `seeds.as_draws` decides what `seed=` becomes | |
@@ -115,7 +124,8 @@ So R's arithmetic and the draw sources never import a workflow, and new code in 
 | Folder | Covers |
 |---|---|
 | `tests/nuggets/` | `nuggets/` |
-| `tests/wcluster/` | `wcluster/`, the iterative functions in `test_whclust.py`, `test_wkmeans.py` and `test_wstatsjit.py`, and the DN wrappers in `test_dn.py` |
+| `tests/wcluster/` | `wcluster/`, the iterative functions in `test_whclust.py`, `test_wkmeans.py` and `test_wstatsjit.py`, the DN wrappers in `test_dn.py`, and `cut_tree` in `test_cutree.py` |
+| `tests/plot/` | `plot/`, on matplotlib's Agg backend. Its `conftest.py` closes every figure and turns matplotlib's `UserWarning`s into failures |
 | `tests/compat/` | `_compat/` |
 | `tests/randomness/` | `_random/` |
 | `tests/clustering/` | `_clustering/` |

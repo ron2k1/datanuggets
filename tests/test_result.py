@@ -23,6 +23,7 @@ from datanuggets.result import (
 # datanuggets.wcluster.
 WCLUSTER_LEAVES = {
     "cluster_predict": "datanuggets.wcluster.predict",
+    "cut_tree": "datanuggets.wcluster.cutree",
     "distw": "datanuggets.wcluster.wstats",
     "dn_cluster_predict": "datanuggets.wcluster.dn",
     "dn_whclust": "datanuggets.wcluster.dn",

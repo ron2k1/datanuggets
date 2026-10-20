@@ -1,6 +1,6 @@
 # datanuggets
 
-A native Python port of CRAN's `datanugget` 1.5.0 and `WCluster` 1.3.0. It runs without R. Its tests check it against 526 cases recorded from R itself and a few values checked by hand in R, and the port matches R bit for bit on them except for the eigen solver's output and the differences documented below.
+A native Python port of CRAN's `datanugget` 1.5.0 and `WCluster` 1.3.0. It runs without R. Its tests check it against 544 cases recorded from R itself and a few values checked by hand in R, and the port matches R bit for bit on them except for the eigen solver's output and the differences documented below.
 
 Data nuggets reduce a dataset to groups described by a center, a row count and a scale. Scale measures spread as the average variance across columns. Centers are chosen by repeatedly removing one point from the closest pair, which spreads them across the data instead of concentrating them in dense regions. Each row joins its nearest center.
 
@@ -8,7 +8,7 @@ Beavers et al. (cited below) run weighted PCA and weighted k-means on the nugget
 
 ## Status
 
-Version `0.1.0.dev0` is in development. Seventeen functions are ported:
+Version `0.1.0.dev0` is in development. Eighteen functions are ported:
 
 | Python | R | R package |
 | --- | --- | --- |
@@ -29,12 +29,15 @@ Version `0.1.0.dev0` is in development. Seventeen functions are ported:
 | `dn_whclust` | `DN.Whclust` | `WCluster` |
 | `dn_wpca` | `DN.Wpca` | `WCluster` |
 | `dn_cluster_predict` | `DNcluster.predict` | `WCluster` |
+| `cut_tree` | `cutree` | `stats` |
 
 `refine_dn` splits nuggets that are spread out or elongated with 2-means, through a port of the Hartigan-Wong k-means in R's `stats::kmeans`. `get_dn_means` averages the rows in each nugget. `arithmetic_complexity` gives the arithmetic cost of a `create_dn` call on a log10 scale, from the shape of the data alone.
 
 The `WCluster` functions treat each row as a point with a weight, such as a nugget with its row count. `wmean` gives each cluster's weighted mean and `wss` the weighted sum of squares around the weighted mean. `wwcss` adds up each cluster's `wss`, and `distw` gives how much merging two clusters adds to it. `cluster_predict` sends new rows to the nearest weighted cluster mean. `wpca` is principal components with a weight per row and per column.
 
 `wkmeans` is weighted k-means and `whclust` is weighted Ward hierarchical clustering, both as `WCluster` computes them, quirks included. The four `dn_` functions are `WCluster`'s wrappers that run `wkmeans`, `whclust`, `wpca` and `cluster_predict` on a `DataNuggets`, with the nugget centers as the data and the nugget weights as the row weights. `dn_wkmeans` also gives each original row the cluster of its nugget. They take `datanugget`'s output, but `datanugget` 1.5.0 doesn't define them, so they're listed under `WCluster`.
+
+`cut_tree` is R's `stats::cutree` for a `whclust` or `dn_whclust` tree, which the `WCluster` examples use to cut a tree into clusters. The `datanuggets.plot` package draws the trees, clusters, nuggets and weighted PCA results, the plots R's help examples draw among them. It's described under [Plots](#plots).
 
 `RDraws` reproduces R's `set.seed` and `sample.int`. Passed as `seed=RDraws(291102)`, it makes `create_dn`, `refine_dn`, `wkmeans` and `dn_wkmeans` draw what R's `create.DN`, `refine.DN`, `Wkmeans` and `DN.Wkmeans` draw with that seed. It isn't exported from `datanuggets` yet, so import it from `datanuggets._random.r_draws`.
 
@@ -58,7 +61,11 @@ cd datanuggets
 uv sync
 ```
 
-The `frame` extra adds pandas for `DataNuggets.to_frame()`. The `progress` extra adds tqdm for `progress=True`.
+The `frame` extra adds pandas for `DataNuggets.to_frame()`. The `progress` extra adds tqdm for `progress=True`. The `plot` extra adds matplotlib 3.9 or newer for `datanuggets.plot`:
+
+```sh
+pip install "datanuggets[plot] @ git+https://github.com/ron2k1/datanuggets.git"
+```
 
 ## Example
 
@@ -140,9 +147,53 @@ Output:
 
 `row_labels` puts each of the 100,000 rows in its nugget's cluster, so the counts add up to 100,000. `merge` is in scipy's numbering, so the last merge joins clusters 396 and 397, the ones made at 0-based steps 196 and 197, and `height` ends at the total WWCSS of all 200 nuggets as one cluster. `hc.to_linkage()` gives the linkage that `scipy.cluster.hierarchy.dendrogram` takes.
 
+## Plots
+
+`datanuggets.plot` draws with matplotlib, from the `plot` extra. `import datanuggets` doesn't import it, so the rest of the package runs without matplotlib. Continuing the example, this cuts the nuggets' tree into three clusters and draws four views of them in the paper style:
+
+```python
+import matplotlib.pyplot as plt
+from datanuggets import cut_tree, dn_whclust, dn_wpca, wmean
+from datanuggets import plot
+
+hc = dn_whclust(dn)
+labels = cut_tree(hc, k=3)
+print(np.bincount(labels))
+pca = dn_wpca(dn)
+centers = wmean(dn.centers, labels, dn.weights)
+
+with plot.style():
+    fig, axs = plt.subplots(2, 2)
+    plot.dendrogram(hc, labels=False, ax=axs[0, 0])
+    plot.nuggets(dn, ax=axs[0, 1])
+    plot.clusters(dn.centers, labels, w=dn.weights, centers=centers, ax=axs[1, 0])
+    plot.scores(pca, w=dn.weights, labels=labels, rows=x, ax=axs[1, 1])
+    plot.save(fig, "nuggets.pdf", width="double", height=5.5)
+```
+
+Output:
+
+```text
+[107  58  35]
+```
+
+That's how many of the 200 nuggets each cluster holds. Every plot function takes `ax=`, draws on `plt.gca()` without it, and returns the Axes it drew on.
+
+`dendrogram(tree)` draws a `whclust` or `dn_whclust` tree as R's `plot.hclust` does. Leaves sit at 1 to n in the tree's `order` and each merge is a bar at its height. A leaf hangs below its parent's bar by `hang`, 0.1 by default, times the last height minus the first, and a negative `hang` puts every leaf at 0. On the eight recorded trees R draws, and on one of them again with `hang` at -1 and 0.5 and with its heights out of order, every line matches the polylines R wrote into a PDF to within 0.006 points, where R's PDF rounds to 0.005. Leaves are labelled with their 0-based row numbers, or with a list of names, or not at all with `labels=False`. It stops where `plot.hclust` stops, with R's message.
+
+`cut_tree(tree, k=None, h=None)` cuts a tree into `k` clusters or at height `h`, as R's `cutree` does, and returns each row's 0-based cluster, numbered in the order the clusters first appear along the rows. On 13 trees R's `Whclust` and `DN.Whclust` made, it matches R at every `k` from 1 to n, 940 cuts, and at 1,729 values of `h`: every merge height, the midpoints between them, values below and above them all, and both infinities. It stops where R stops, with R's message.
+
+`nuggets(dn)` draws the nugget centers on two columns as the `DN.Whclust` and `DN.Wkmeans` examples do, R's `pch = 16` at `cex = 0.5`, a disc 2.7 points across, the size R's own PDF draws. Without labels it uses the examples' colors, `rgb(0, min(t, 1), 0)` with `t` a nugget's share of the weight over the 80% quantile of the shares, so a lighter green means more rows. Those colors equal the hex strings R gives for the 150 quakes nuggets the `dn_` tests use, for a weight vector with ties, and for the 32 fractional weights of `mtcars$wt`, and the values of `t` behind them equal R's bit for bit. On `mtcars$wt` numpy's pairwise sum would break that, though a plain left-to-right sum wouldn't, so R's long double sum is left to the tests aimed at it. With `labels`, each nugget takes its cluster's color.
+
+`clusters(x, labels, w=None, centers=None)` is the `Whclust` and `Wkmeans` examples' `plot(x, col = labels)` with the centers on top: the rows on two columns in their cluster's color, sized by weight, and each cluster's center as a star with a white edge. By default a point's area is proportional to its weight. `size="log"` gives R's `cex = log(w)`.
+
+`scores(pca)`, `scree(pca)` and `loadings(pca)` draw a `wpca` or `dn_wpca` result: the scores on two components, with raw rows in gray behind them when `rows` is given, each component's share of the variance as a bar, and each variable's loadings as an arrow. R's examples draw no PCA plot. The views flip each component so its largest loading is positive, so they don't change with the sign LAPACK happens to pick. The result itself keeps R's signs.
+
+`style()` is a `with` block in which new figures take a paper style: 7 to 9 point fonts, thin lines, the Okabe-Ito colors, which color-blind readers can tell apart, and TrueType fonts embedded in the PDF. `save(fig, path, width="single")` sizes the figure to one journal column, 3.5 inches wide, or two with `"double"`, 7 inches, or any width in inches, with the height 0.75 times the width unless it's given. It saves at 300 dpi in the format the path's suffix names, such as `.pdf` or `.png`, and stops on a path without one. A PDF's page is exactly that size. A PNG's sides are the inches times 300, rounded down, so the default single-column PNG, 3.5 by 2.625 inches, is 1050 by 787 pixels. A `colors` list must hold at least one matplotlib color, and every entry is checked before anything is drawn. `colors=R_PALETTE` gives R's default `palette()`, and since the port's labels are R's minus one, label `l` then gets R's `col = l + 1`.
+
 ## What was done
 
-The work landed in the order below. Most steps started from a written plan, linked in the table. Steps 4, 5, 10 and 11 also had an independent review, and its findings were fixed or recorded. `RDraws` grew out of a spike and has no plan document, and the architecture document was written after the moves it describes.
+The work landed in the order below. Most steps started from a written plan, linked in the table. Steps 4, 5, 10, 11 and 12 also had an independent review, and its findings were fixed or recorded. `RDraws` grew out of a spike and has no plan document, and the architecture document was written after the moves it describes.
 
 | Step | Record | What it added |
 | --- | --- | --- |
@@ -157,6 +208,7 @@ The work landed in the order below. Most steps started from a written plan, link
 | 9 | [architecture](docs/architecture.md) | The package split into `nuggets/`, `wcluster/`, `_compat/`, `_random/` and `_clustering/`, with the tests in matching folders. The five old public module paths and the private `datanuggets._draws` still import. The other moved private modules are reachable only at their new paths |
 | 10 | [plan](docs/plans/2026-09-30-speed-next-targets.md), [review](docs/reviews/2026-10-09-speed-next-review.md) | Rfast's distances, `create.DNcenters`' deletion rounds and the Hartigan-Wong port compiled with numba, with the same bits. The deletion rounds work on one distance matrix instead of copying it every round. numba 0.68 in the lock, so the package runs on Python 3.15 |
 | 11 | [plan](docs/plans/2026-10-09-wcluster-iterative-port.md), [review](docs/reviews/2026-10-10-wcluster-iterative-review.md) | `Wkmeans`, `Whclust`, `DN.Wkmeans`, `DN.Whclust`, `DN.Wpca` and `DNcluster.predict`, with numba kernels that give the Python references' bits, R's quirks where it has them, and R's message in R's order where it stops. `Draws` gains `sample_replace`, so a hand-written `Draws` needs it too |
+| 12 | [spec](docs/specs/2026-10-10-plotting-design.md), [plan](docs/plans/2026-10-10-plotting.md), [review](docs/reviews/2026-10-10-plotting-review.md) | `cut_tree` and the `plot` package. R recorded `cutree`'s cuts and stops, `plot.hclust`'s lines read back from its PDF, and the nugget colors of the help examples |
 
 PRs #4 and #5 were opened against the speed branch, and both reached `main` together through the merge of this branch.
 
@@ -206,7 +258,7 @@ Parity is against R 4.6.1 on x86-64 Windows with `datanugget` 1.5.0, `WCluster` 
 
 ### What R recorded
 
-Every R result the tests compare with comes from R itself. A few were checked by hand in an R session and written into the tests, such as the cancelling-weight cases in `tests/wcluster/test_wstats.py` and `arithmetic_complexity` on an `x` with no rows or no columns. The long double fuzz below checks against a Python reference instead of R. Everything else comes from the scripts in `r/`. They run R 4.6.1 with the pinned packages, trace the functions under test without modifying them, and write the inputs, the outputs, every random draw and the internal values that matter into `tests/fixtures/`. Each case carries a manifest with the R version, the package versions, the BLAS and the long double width. Running the tests doesn't need R. Fixtures are recorded on one machine only, the laptop with the pinned R. There are 526 cases in 22 groups:
+Every R result the tests compare with comes from R itself. A few were checked by hand in an R session and written into the tests, such as the cancelling-weight cases in `tests/wcluster/test_wstats.py` and `arithmetic_complexity` on an `x` with no rows or no columns. The long double fuzz below checks against a Python reference instead of R. Everything else comes from the scripts in `r/`. They run R 4.6.1 with the pinned packages, trace the functions under test without modifying them, and write the inputs, the outputs, every random draw and the internal values that matter into `tests/fixtures/`. Each case carries a manifest with the R version, the package versions, the BLAS and the long double width. Running the tests doesn't need R. Fixtures are recorded on one machine only, the laptop with the pinned R. There are 544 cases in 23 groups:
 
 | Group | Script in `r/` | Cases | What R recorded |
 | --- | --- | --- | --- |
@@ -226,6 +278,7 @@ Every R result the tests compare with comes from R itself. A few were checked by
 | `wkmeans` | `fixtures_wkmeans.R` | 15 | `Wkmeans`' every draw, each start's labels from `init`, each start's refined labels and WWCSS, the "Iteration" messages R prints, the outputs or R's message, and the quirk counts |
 | `wkmeans_args` | `fixtures_wkmeans.R` | 1 | 28 `Wkmeans` runs on arguments R stops on, with R's message, or its labels where it returns |
 | `dn_wcluster` | `fixtures_dn_wcluster.R` | 8 | two quakes datanuggets and a data frame of new rows, `DN.Wkmeans`, `DN.Whclust`, `DN.Wpca` and `DNcluster.predict` on them, and R's messages and outputs on a datanugget with one variable and on a matrix `newx` |
+| `plot` | `fixtures_plot.R` | 18 | `cutree` at every `k` and at every height, the midpoints and both infinities on the 13 trees of the `whclust` and `dn_wcluster` groups, the lines `plot.hclust` drew for each tree it draws, read back from its PDF, and for one of them again at two other hangs and with its heights out of order, the disc `pch = 16` draws at `cex` 1 and 0.5, the help examples' nugget colors, and R's stops in all three |
 
 ### How the tests compare
 
@@ -246,6 +299,8 @@ The compiled `whclust` and `wkmeans` keep the same kind of reference, `_whclust_
 Several tests target a specific wrong implementation and were seen to fail on it: `math.fsum` in place of R's long double `sum(wrow)` in `wpca`, numpy's +NaN in place of R's -NaN for an empty nugget, `RDraws` taking the wrong side of R's hash switch, and a matrix product that returns -0.0 where R's starts from +0. Reviews also ran mutants against the suite and turned most survivors into tests. The [WCluster review](docs/reviews/2026-09-30-wcluster-leaves-review.md) lists the ones it ran, and the survivors are under Open problems.
 
 The package layout has its own tests: a bare `import datanuggets` in a fresh interpreter still binds the old module paths, and a pickle naming an old path still loads.
+
+The plot tests draw on matplotlib's Agg backend and check what was drawn on the artists, not pixels: the dendrogram's lines against R's to within 0.006 points, the nugget colors against R's hex strings, the `pch = 16` sizes against the disc R drew, and every other plot's offsets, sizes, colors, bar heights and arrow ends. `save` is checked on the PDF's page size and the PNG's pixel size. A matplotlib `UserWarning` fails them, since it means matplotlib had to guess what an argument meant. A test in a fresh interpreter blocks matplotlib's import and checks that `import datanuggets` still works and that `import datanuggets.plot` names the `plot` extra.
 
 ### Results at the merge
 
@@ -396,6 +451,17 @@ In the `WCluster` functions `Wpca` becomes `wpca`, `cluster.predict` becomes `cl
 
 The `dn_` functions stop where R's do on a datanugget with one variable, where R's `[, 2:2]` drops the table to a vector: `dn_wkmeans` always, `dn_wpca` without `wcol`, and `dn_cluster_predict` with a `DataNuggets` as `newx`. `dn_whclust` runs, as R's does. The `one_variable` case records R's messages there, and what R returns where it runs. `dn_cluster_predict` reads a `DataNuggets` given as `newx` the way R reads a datanugget there. It takes as many columns of `newx`'s table as `dn` has variables, so a wider `newx` gives its first variables, and a narrower one passes its weights and scales as data. Both stop when the table runs out of columns.
 
+`cut_tree` takes one `k` or one `h` and returns one label per row, where R's `cutree` also takes a vector of them and returns a matrix with a column per cut. Its labels are R's minus one. With both `k` and `h`, `k` wins and `h` is ignored, as in R. A fractional `k` is truncated, as `as.integer` does.
+
+The plots depart from R's drawings in six ways:
+
+1. Leaf labels and cluster labels are 0-based, like every row number in the port.
+2. Points are sized by area by default. R's `cex = log(w)` hides points of weight 1 and gives weights below 1 a negative size. It's still there as `size="log"`.
+3. There are no titles by default, and the dendrogram's y range is matplotlib's. R sizes its window from the width of the leaf labels.
+4. The PCA views flip each component's sign so its largest loading is positive.
+5. `dendrogram` raises `ValueError` on a tree with NaN or infinite heights, which `whclust` gives when a row's weight is 0 or infinite. R's `plot.hclust` warns and writes `-nan(ind)`, or coordinates far off the page, into the PDF, so there's no figure to match.
+6. Centers are stars of a fixed size, in their cluster's color with a white edge. R's examples draw them as discs or asterisks at `cex = 5`, which cover the points around them.
+
 ## Limitations
 
 - Parity means one reference environment: R 4.6.1 on x86-64 with the reference BLAS, R's internal LAPACK and the x87 long double. Results from an R built another way can differ in the last bits, and on tied data that can move rows between nuggets.
@@ -409,6 +475,7 @@ The `dn_` functions stop where R's do on a datanugget with one variable, where R
 - `create_dn` builds a `dn_num1` by `dn_num1` distance matrix in its second stage. At the default 10,000 that's 800 MB of float64, whatever the row count, and the process peaked near 0.9 GB on Covertype.
 - `refine_dn` without shape splits is slower than R on the full Covertype data, 1.5 seconds to 0.9. Two thirds of its time there goes to the long double means and covariances. R gets those from the x87 unit's hardware long double, and the port repeats them in 64-bit integer code.
 - numba compiles the kernels on first use and caches them. On my laptop, importing the package and making a first small call to each public function took 8.8 seconds with an empty cache and 0.9 seconds with a warm one on Python 3.14, and 8.3 and 0.9 seconds on 3.15. The cache is kept per Python version, so each new version compiles once. Where numba can't write its cache, every new process compiles again.
+- The plot tests check drawn coordinates and colors, not images. A change in how matplotlib renders them, such as its fonts or its antialiasing, wouldn't fail them.
 - Windows has no `os.fork`, so the two tests of forked children run only on macOS and Linux.
 - It isn't on PyPI, and it needs Python 3.12 or newer with numba.
 
