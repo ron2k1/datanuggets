@@ -195,7 +195,7 @@ That's how many of the 200 nuggets each cluster holds. Every plot function takes
 
 ## Flow gates
 
-`datanuggets.flow` is Prof. Cabrera's gate finder for the lymphocyte and macrophage populations of a flow cytometry sample, from his Python port of his R code. It finds the dense peaks of FSC-A against SSC-A on a 100 by 100 grid and gates the events around each one. Its own modules import numpy, scipy and the package's input checks, and `import datanuggets` doesn't import it, though importing it loads the package, numba included. The package doesn't read FCS files. flowio reads the events the way FlowKit's raw events hold them:
+`datanuggets.flow` is Prof. Cabrera's gate finder for the lymphocyte and macrophage populations of a flow cytometry sample, from his Python port of his R code. It finds the dense peaks of FSC-A against SSC-A on a 100 by 100 grid and gates the events around each one. Its own modules import numpy, scipy and the package's input checks, and `import datanuggets` doesn't import it, though importing it loads the package, numba included. Only `datanuggets-flow` reads FCS files, with flowio from the `flow` extra. flowio reads the events the way FlowKit's raw events hold them:
 
 ```python
 import flowio
@@ -233,6 +233,19 @@ They depart from his code in six places:
 6. His unused `plot=False` argument is dropped. `plot.gates` draws the figure with matplotlib `Line2D` markers in place of his `scatter`, at his sizes, alphas and colors, so each population is one artist rather than a collection that keeps a size and a color per event.
 
 His script pairs `t0[i]` and `t00[i]` with the `i`-th sample FlowKit returns, and FlowKit orders the samples by their `$FIL` keyword, not by the rows of his workbook. So his thresholds go to the files in `$FIL` order, which may not be the order he meant. `benchmarks/flow/compare.py` pairs `--t0` and `--t00` with the workbook's rows.
+
+### Picking the cells to cluster
+
+`datanuggets-flow` runs the whole study from FCS files: it gates each file, shows every file's numbered populations in one figure with their counts and median FSC-A and SSC-A, asks which populations hold the cells you want, file by file (one, several such as `1,2`, a range, `all`, or `none` to leave a file out), and clusters the kept cells. The kept cells' fluorescence channels, `arcsinh(x / 6000)`, go into data nuggets per file and weighted Ward clustering of all the files' nuggets together, so a cluster is the same cells in every file. It needs the `flow` extra, which adds flowio, matplotlib and pandas:
+
+```sh
+pip install "datanuggets[flow] @ git+https://github.com/ron2k1/datanuggets.git"
+datanuggets-flow <folder>                                          # asks which populations to keep
+datanuggets-flow <folder> --t11 22,20,18,18 --t21 0.25,0.5,0.5,0.5  # cfc.py's thresholds, file by file
+datanuggets-flow <folder> --pops "1,2"                             # no questions: Pop 1 and 2 of every file
+```
+
+A folder's files go in name order, and per-file thresholds and `--pops "1;1,2;..."` follow it. `--disc his`, the default, gates with cfc.py's own `find_area`, so the populations and their numbers are the ones his figures show; `--disc peak` uses `datanuggets.flow.find_area`, which centres the disc on the peak (open problem 10). The outputs go to `datanuggets-out/`, or `--out`: `gates.png`, `selection.csv` (what was kept from each file), `nuggets_N.csv` and `events_N.csv` for file N (`event0` is the event's row in the file, numbered from 0, with its nugget and cluster), `cluster_summary.csv`, `cluster_centers.csv`, and the dendrogram, PCA and cluster-center figures. `--k`, `--cofactor`, `--dn-num2` and `--channels` change the clustering; `datanuggets-flow --help` lists them all. Events are clustered as stored, uncompensated, and a file whose spillover matrix isn't the identity gets a warning: spectral files are unmixed already.
 
 ### Comparing with his script
 
@@ -581,7 +594,7 @@ The plots depart from R's drawings in six ways:
 - The plot tests check drawn coordinates and colors, not images. A change in how matplotlib renders them, such as its fonts or its antialiasing, wouldn't fail them.
 - Windows has no `os.fork`, so the two tests of forked children run only on macOS and Linux.
 - The flow finder's cutoffs are his: a peak's row above 10 and below 90 and its column below 90, with no lower limit on the column, the 0.85 and 0.9 quantiles, and `t11` to `t22`. They were tuned on his study. On the 44 PBMC files here his finder found 2 to 7 populations per file.
-- `datanuggets.flow` doesn't read FCS files. The example and the benchmark read them with flowio.
+- Apart from `datanuggets-flow`, `datanuggets.flow` doesn't read FCS files. The example and the benchmark read them with flowio.
 - It isn't on PyPI, and it needs Python 3.12 or newer with numba.
 
 ## Open problems
