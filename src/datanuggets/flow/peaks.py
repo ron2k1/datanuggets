@@ -9,16 +9,16 @@ import math
 import numpy as np
 from scipy.ndimage import maximum_filter
 
-ROW_MIN = 10  # his filters on a refined peak: row > 10, row < 90, column < 90
+ROW_MIN = 10  # cfc.py's filters on a refined peak: row > 10, row < 90, column < 90
 ROW_MAX = 90
 COL_MAX = 90
 PEAK_QUANTILE = 0.9  # a peak's density must be above this quantile of the grid
 
 
 def local_maxima(z, *, n_row=11, n_col=11, quantile=0.85) -> np.ndarray:
-    """His focal step: the 1-based (row, col) of every cell equal to the maximum of the n_row by
-    n_col window around it, when that maximum is above the quantile of z. maximum_filter's reflect
-    edges are generic_filter's, so the windows are his."""
+    """cfc.py's focal step: the 1-based (row, col) of every cell equal to the maximum of the n_row
+    by n_col window around it, when that maximum is above the quantile of z. maximum_filter's
+    reflect edges are generic_filter's, so the windows are cfc.py's."""
     z = np.asarray(z, dtype=float)
     m = maximum_filter(z, size=(n_row, n_col), mode="reflect")
     return np.argwhere(z == np.where(m > np.quantile(z, quantile), m, -1.0)) + 1
@@ -26,7 +26,7 @@ def local_maxima(z, *, n_row=11, n_col=11, quantile=0.85) -> np.ndarray:
 
 def search_ind(x, idx, idy, threshold=2) -> np.ndarray:
     """The 1-based cell of the largest x in the window of half width threshold around (idx, idy),
-    clipped to the grid, the first in row order on a tie, as his argmax takes it."""
+    clipped to the grid, the first in row order on a tie, as cfc.py's argmax takes it."""
     r, c = math.ceil(idx), math.ceil(idy)
     r0, r1 = max(r - threshold, 1), min(r + threshold, x.shape[0])
     c0, c1 = max(c - threshold, 1), min(c + threshold, x.shape[1])
@@ -36,8 +36,8 @@ def search_ind(x, idx, idy, threshold=2) -> np.ndarray:
 
 
 def refine_peaks(x, candidates, *, threshold=2) -> np.ndarray:
-    """His peak step: search_ind from each candidate, np.unique, his row and column limits, a
-    density above the 0.9 quantile, then np.argsort on the row. The same calls in his order,
+    """cfc.py's peak step: search_ind from each candidate, np.unique, its row and column limits, a
+    density above the 0.9 quantile, then np.argsort on the row. The same calls in its order,
     since unique's sort and argsort decide which peak comes first and gets t11 and t21."""
     x = np.asarray(x, dtype=float)
     if len(candidates) == 0:
@@ -50,7 +50,7 @@ def refine_peaks(x, candidates, *, threshold=2) -> np.ndarray:
 
 def find_area(x, idx, idy, t1=35, t2=0.85) -> np.ndarray:
     """The 1-based cells (i, j) of x closer than t1 to the peak (idx, idy) with x[i, j] above t2
-    times the peak's density, column by column as his come. His version reads each cell's
+    times the peak's density, column by column as cfc.py's come. cfc.py's version reads each cell's
     density right but centres the distance on the mirrored peak (idy, idx), so off the diagonal
     it keeps the wrong cells. This one centres it on the peak."""
     x = np.asarray(x, dtype=float)

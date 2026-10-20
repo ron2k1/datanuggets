@@ -9,12 +9,13 @@ from scipy.spatial import ConvexHull, Delaunay, QhullError
 from datanuggets.flow.grid import channel, f_plot, sqrt_coords
 from datanuggets.flow.peaks import find_area, local_maxima, refine_peaks
 
-MSIZE = 100  # his grid, 100 by 100 bins
-MIN_POINTS = 3  # his guard: a hull needs more than 3 cells, and more than 3 kept events
+MSIZE = 100  # cfc.py's grid, 100 by 100 bins
+MIN_POINTS = 3  # cfc.py's guard: a hull needs more than 3 cells, and more than 3 kept events
 
 
 def _inside(vertices: np.ndarray, q: np.ndarray) -> np.ndarray:
-    """His test, Delaunay(...).find_simplex(q) >= 0, on a triangulation of the hull's vertices."""
+    """cfc.py's test, Delaunay(...).find_simplex(q) >= 0, on a triangulation of the hull's
+    vertices."""
     return Delaunay(vertices).find_simplex(q) >= 0
 
 
@@ -40,7 +41,7 @@ def bin_mask(zz, cells) -> np.ndarray:
         return np.zeros(len(zz), dtype=bool)
     try:
         hull = ConvexHull(cells)
-    except QhullError:  # cells on one line: his ConvexHull raises here
+    except QhullError:  # cells on one line: cfc.py's ConvexHull raises here
         return np.zeros(len(zz), dtype=bool)
     nr, nc = int(zz[:, 0].max()), int(zz[:, 1].max())
     a, b = np.indices((nr, nc)) + 1
@@ -49,7 +50,7 @@ def bin_mask(zz, cells) -> np.ndarray:
 
 
 def hull_gate(fsc_a, ssc_a, zz, cells) -> np.ndarray:
-    """His gate for one population: the events inside the convex hull of the events bin_mask
+    """cfc.py's gate for one population: the events inside the convex hull of the events bin_mask
     keeps, tested against a triangulation of that hull's vertices rather than of every kept
     event. Empty when the cells or the kept events can't make a hull."""
     raw = np.column_stack((np.asarray(fsc_a, dtype=float), np.asarray(ssc_a, dtype=float)))
@@ -60,7 +61,7 @@ def hull_gate(fsc_a, ssc_a, zz, cells) -> np.ndarray:
         return np.zeros(len(raw), dtype=bool)
     try:
         return _inside(points[ConvexHull(points).vertices], raw)
-    except QhullError:  # kept events on or within rounding of one line: his Delaunay raises here
+    except QhullError:  # points on or within rounding of one line: cfc.py's Delaunay raises here
         return np.zeros(len(raw), dtype=bool)
 
 

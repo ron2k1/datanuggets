@@ -5,8 +5,8 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 import numpy as np
 
-# his scatter sizes, in points squared, and alphas. Drawn as Line2D markers with markersize the
-# square root of his s, and scatter's edge, patch.linewidth points in the face color, so a figure
+# cfc.py's scatter sizes, in points squared, and alphas. Drawn as Line2D markers with markersize the
+# square root of its s, and scatter's edge, patch.linewidth points in the face color, so a figure
 # of a million events draws as one path per population rather than one marker each
 EVENT_SIZE = 0.5
 POP_SIZE = 5.0
@@ -15,9 +15,9 @@ POP_ALPHA = 0.8
 
 
 def gates(fsc_a, ssc_a, masks, *, title=None, ax=None):
-    """His figure: every event in gray, then each population that has an event in the next color
-    of the axes' cycle, so an empty population takes no color, as his scatter calls do. masks is
-    the finder's output, one bool column per population. Returns the axes."""
+    """cfc.py's figure: every event in gray, then each population that has an event in the next
+    color of the axes' cycle, so an empty population takes no color, as cfc.py's scatter calls do.
+    masks is the finder's output, one bool column per population. Returns the axes."""
     fsc = np.asarray(fsc_a, dtype=float)
     ssc = np.asarray(ssc_a, dtype=float)
     if fsc.ndim != 1 or fsc.shape != ssc.shape:

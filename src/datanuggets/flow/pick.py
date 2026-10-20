@@ -149,7 +149,7 @@ def _parser() -> argparse.ArgumentParser:
         "--disc",
         choices=("his", "peak"),
         default="his",
-        help="his: cfc.py's gates, so the populations match his figures; peak: "
+        help="his: cfc.py's gates, so the populations match cfc.py's figures; peak: "
         "datanuggets.flow.find_area, the disc centred on the peak",
     )
     p.add_argument(
