@@ -19,8 +19,16 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
+
+from datanuggets._defaults import DN_NUM1
+
+if TYPE_CHECKING:
+    import pandas as pd
+
+    from datanuggets.result import DataNuggets, WhclustResult
 
 SPILL_TOL = 1e-3  # how far from the identity a file's spillover matrix may be before a warning
 
@@ -218,26 +226,32 @@ def _ask(samples, plt, show):
     return chosen
 
 
-def main(argv=None) -> None:
-    args = _parser().parse_args(argv)
+def _pyplot(no_show: bool):
+    """matplotlib's pyplot, once the flow extra is known to be there, drawing off screen with
+    --no-show. pandas is checked here too, for the tables the steps write."""
     try:
         import matplotlib
-        import pandas as pd
+        import pandas  # noqa: F401
     except ImportError as e:
         raise SystemExit(
             'datanuggets-flow needs the flow extra: pip install "datanuggets[flow]"'
         ) from e
-    if args.no_show:
+    if no_show:
         matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    from datanuggets import create_dn, cut_tree, plot, whclust, wmean, wpca
-    from datanuggets.flow import find_area, lymphmacro_finder, mirrored_area
+    return plt
 
+
+def _check_args(args) -> tuple[list[Path], list[float], list[float], Path, list[str] | None]:
+    """The checks made before any file is read, then the files, each file's t11 and t21, the
+    output folder without an earlier run's per-file tables, and --pops split by file."""
     if args.k < 1:
         raise SystemExit(f"--k is {args.k}; it takes 1 or more clusters")
-    if not 2 <= args.dn_num2 < 10000:
-        raise SystemExit(f"--dn-num2 is {args.dn_num2}; it takes 2 to 9999 nuggets per file")
+    if not 2 <= args.dn_num2 < DN_NUM1:  # create_dn's dn_num1, which dn_num2 stays under
+        raise SystemExit(
+            f"--dn-num2 is {args.dn_num2}; it takes 2 to {DN_NUM1 - 1} nuggets per file"
+        )
     paths = _fcs_paths(args.paths)
     t11 = per_file(args.t11, len(paths), "--t11")
     t21 = per_file(args.t21, len(paths), "--t21")
@@ -251,8 +265,16 @@ def main(argv=None) -> None:
             f"--pops gives {len(spec)} choices for {len(paths)} files; give one for "
             "all of them or one per file, separated by ;"
         )
+    return paths, t11, t21, out, spec
 
-    # 1. Each file's populations, counted and drawn on one figure
+
+def _gate_files(args, paths, t11, t21, out, plt) -> list[dict]:
+    """Each file gated with Cabrera's lymphmacro_finder and its populations counted, all of them
+    drawn on one figure, gates.png."""
+    from datanuggets import plot
+    from datanuggets.flow import find_area, lymphmacro_finder, mirrored_area
+
+    area = mirrored_area if args.disc == "his" else find_area
     cols = min(len(paths), 2)
     rows = -(-len(paths) // cols)
     fig, axs = plt.subplots(rows, cols, figsize=(5.5 * cols, 4.8 * rows), squeeze=False)
@@ -263,7 +285,6 @@ def main(argv=None) -> None:
             if c not in pnn:
                 raise SystemExit(f"{path.name} has no channel {c}; its channels: {', '.join(pnn)}")
         fsc, ssc = events[:, pnn.index(args.fsc)], events[:, pnn.index(args.ssc)]
-        area = mirrored_area if args.disc == "his" else find_area
         masks = lymphmacro_finder(fsc, ssc, t11=t11[i], t21=t21[i], area=area)
         table = [
             f"  Pop {j + 1}: {m.sum():>9,} events ({100 * m.mean():4.1f}%), median {args.fsc} "
@@ -280,23 +301,29 @@ def main(argv=None) -> None:
     fig.tight_layout()
     fig.savefig(out / "gates.png", dpi=110)
     print(f"\nThe populations are drawn in {out / 'gates.png'}")
+    return samples
 
-    # 2. The populations to keep in each file
+
+def _choose_pops(samples, spec, plt, show) -> list[list[int]]:
+    """The populations to keep in each file: --pops, or asked file by file."""
     if spec is None:
-        chosen = _ask(samples, plt, not args.no_show)
-    else:
-        try:
-            chosen = [
-                parse_pops(spec[0 if len(spec) == 1 else i], s["masks"].shape[1])
-                for i, s in enumerate(samples)
-            ]
-        except ValueError as e:
-            raise SystemExit(f"--pops: {e}") from e
+        return _ask(samples, plt, show)
+    try:
+        return [
+            parse_pops(spec[0 if len(spec) == 1 else i], s["masks"].shape[1])
+            for i, s in enumerate(samples)
+        ]
+    except ValueError as e:
+        raise SystemExit(f"--pops: {e}") from e
 
-    # 3. The kept events' fluorescence channels, the same ones in every file
+
+def _choose_channels(samples, names) -> tuple[list[str], list[str]]:
+    """The fluorescence channels to cluster, the same ones in every file, and their labels:
+    --channels, or every -A channel of the first file but FSC and SSC. A label is the channel's
+    $PnS with its $PnN, or the $PnN alone."""
     pnn, pns = samples[0]["pnn"], samples[0]["pns"]
-    if args.channels:
-        channels = [c.strip() for c in args.channels.split(",")]
+    if names:
+        channels = [c.strip() for c in names.split(",")]
     else:
         channels = [c for c in pnn if c.endswith("-A") and not c.startswith(("FSC", "SSC"))]
     for s in samples:
@@ -305,7 +332,14 @@ def main(argv=None) -> None:
             raise SystemExit(
                 f"{s['path'].name} has no channel {missing[0]}; its channels: {', '.join(s['pnn'])}"
             )
-    labels = [f"{pns[pnn.index(c)]} ({c})" if pns[pnn.index(c)] else c for c in channels]
+    return channels, [f"{pns[pnn.index(c)]} ({c})" if pns[pnn.index(c)] else c for c in channels]
+
+
+def _keep_events(samples, chosen, channels, cofactor, out) -> list[tuple]:
+    """Each file's kept events as (file number, file name, their rows in the file, their channels
+    as arcsinh(x / cofactor), or as stored with cofactor 0), and selection.csv. A file with fewer
+    than 2 kept events is left out."""
+    import pandas as pd
 
     kept, picks = [], []
     for i, (s, pops) in enumerate(zip(samples, chosen)):
@@ -324,17 +358,35 @@ def main(argv=None) -> None:
             continue  # left out, or too few cells for data nuggets
         events, pnn_i, _ = read_fcs(s["path"])  # read again, so only one file is in memory
         x = events[np.ix_(np.flatnonzero(keep), [pnn_i.index(c) for c in channels])]
-        x = np.arcsinh(x / args.cofactor) if args.cofactor else x
+        x = np.arcsinh(x / cofactor) if cofactor else x
         kept.append((i + 1, s["path"].name, np.flatnonzero(keep), np.ascontiguousarray(x)))
     pd.DataFrame(picks).to_csv(out / "selection.csv", index=False)
     print("\n" + pd.DataFrame(picks).to_string(index=False))
     if not kept:
         raise SystemExit("no file has cells kept, so there is nothing to cluster")
+    return kept
 
-    # 4. Data nuggets of each file's kept cells, then Whclust of all their nuggets together
+
+class _Pool(NamedTuple):
+    """Every kept file's nuggets, pooled in the files' order, and their clusters."""
+
+    dns: list[DataNuggets]  # one per kept file
+    centers: np.ndarray
+    weights: np.ndarray
+    use: np.ndarray  # the nuggets some cell joined; the others have no say in the clusters
+    tree: WhclustResult  # Whclust of the nuggets in use
+    cl: np.ndarray  # each nugget's cluster, numbered from 0, or -1 for one not in use
+    k: int
+
+
+def _cluster(kept, dn_num2, k) -> _Pool:
+    """Data nuggets of each file's kept cells, then Whclust of all the files' nuggets together,
+    cut into k clusters, or into as many as there are nuggets in use when that's fewer."""
+    from datanuggets import create_dn, cut_tree, whclust
+
     dns = []
-    for num, name, rows_i, x in kept:
-        dn = create_dn(x, dn_num2=min(args.dn_num2, len(x)), n_jobs=-1)
+    for num, name, _, x in kept:
+        dn = create_dn(x, dn_num2=min(dn_num2, len(x)), n_jobs=-1)
         print(f"File {num}, {name}: {len(x):,} cells, {dn.n_nuggets:,} nuggets")
         dns.append(dn)
     centers = np.vstack([dn.centers for dn in dns])
@@ -342,17 +394,25 @@ def main(argv=None) -> None:
     use = weights > 0  # a nugget no cell joined has no say in the clusters
     if use.sum() < 2:
         raise SystemExit("the kept cells make fewer than 2 nuggets, too few to cluster")
-    k = min(args.k, int(use.sum()))
+    k = min(k, int(use.sum()))
     tree = whclust(centers[use], weights[use])
     cl = np.full(len(centers), -1)
     cl[use] = cut_tree(tree, k=k)
+    return _Pool(dns, centers, weights, use, tree, cl, k)
 
-    # 5. Outputs. N in nuggets_N.csv and events_N.csv is the file's number, as the prompt and
-    #    selection.csv number it. Clusters are numbered from 1; event0 is the event's row in its
-    #    file and nugget0 the nugget's row in nuggets_N.csv, both numbered from 0
+
+def _write_tables(kept, pool, labels, out) -> pd.DataFrame:
+    """nuggets_N.csv and events_N.csv for each kept file, then cluster_summary.csv and
+    cluster_centers.csv, whose table it returns. N is the file's number, as the prompt and
+    selection.csv number it. Clusters are numbered from 1; event0 is the event's row in its file
+    and nugget0 the nugget's row in nuggets_N.csv, both numbered from 0."""
+    import pandas as pd
+
+    from datanuggets import wmean
+
     summary, start = [], 0
-    for (num, name, rows_i, _), dn in zip(kept, dns):
-        part = cl[start : start + dn.n_nuggets]
+    for (num, name, rows_i, _), dn in zip(kept, pool.dns):
+        part = pool.cl[start : start + dn.n_nuggets]
         start += dn.n_nuggets
         nug = pd.DataFrame(dn.centers, columns=labels)
         nug.insert(0, "nugget0", np.arange(dn.n_nuggets))
@@ -362,7 +422,7 @@ def main(argv=None) -> None:
         pd.DataFrame({"event0": rows_i, "nugget0": dn.assignments, "cluster": ev + 1}).to_csv(
             out / f"events_{num}.csv", index=False
         )
-        counts = np.bincount(ev, minlength=k)
+        counts = np.bincount(ev, minlength=pool.k)
         summary += [
             {
                 "file_number": num,
@@ -371,7 +431,7 @@ def main(argv=None) -> None:
                 "cells": int(counts[c]),
                 "percent": 100 * counts[c] / len(ev),
             }
-            for c in range(k)
+            for c in range(pool.k)
         ]
     summary = pd.DataFrame(summary)
     summary.to_csv(out / "cluster_summary.csv", index=False)
@@ -379,16 +439,25 @@ def main(argv=None) -> None:
     print("(columns are file numbers; selection.csv names the files)")
     table = summary.pivot(index="cluster", columns="file_number", values="percent")
     print(table.round(1).to_string())
-    cc = pd.DataFrame(wmean(centers[use], cl[use], weights[use]), columns=labels)
-    cc.insert(0, "cluster", np.arange(1, k + 1))
+    use = pool.use
+    cc = pd.DataFrame(wmean(pool.centers[use], pool.cl[use], pool.weights[use]), columns=labels)
+    cc.insert(0, "cluster", np.arange(1, pool.k + 1))
     cc.to_csv(out / "cluster_centers.csv", index=False)
+    return cc
 
+
+def _draw_figures(pool, cc, labels, cofactor, plt, out) -> None:
+    """dendrogram.png, clusters_pca.png and cluster_centers.png."""
+    from datanuggets import plot, wpca
+
+    use, k = pool.use, pool.k
     fig, ax = plt.subplots(figsize=(8, 4))
-    plot.dendrogram(tree, labels=False, hang=-1, ax=ax)
+    plot.dendrogram(pool.tree, labels=False, hang=-1, ax=ax)
     ax.set_title(f"Whclust of {use.sum():,} nuggets")
     fig.savefig(out / "dendrogram.png", dpi=150)
     fig, ax = plt.subplots(figsize=(6, 6))
-    plot.scores(wpca(centers[use], wrow=weights[use]), w=weights[use], labels=cl[use], ax=ax)
+    pca = wpca(pool.centers[use], wrow=pool.weights[use])
+    plot.scores(pca, w=pool.weights[use], labels=pool.cl[use], ax=ax)
     ax.set_title(f"Nuggets of the kept cells, {k} clusters")
     fig.savefig(out / "clusters_pca.png", dpi=150)
     fig, ax = plt.subplots(figsize=(8, 8))
@@ -396,9 +465,22 @@ def main(argv=None) -> None:
     ax.set_xticks(range(k), [str(c) for c in range(1, k + 1)])
     ax.set_yticks(range(len(labels)), labels, fontsize=7)
     ax.set_xlabel("cluster")
-    fig.colorbar(im, ax=ax, label=f"arcsinh(x / {args.cofactor:g})" if args.cofactor else "x")
+    fig.colorbar(im, ax=ax, label=f"arcsinh(x / {cofactor:g})" if cofactor else "x")
     fig.tight_layout()
     fig.savefig(out / "cluster_centers.png", dpi=150)
+
+
+def main(argv=None) -> None:
+    args = _parser().parse_args(argv)
+    plt = _pyplot(args.no_show)
+    paths, t11, t21, out, spec = _check_args(args)
+    samples = _gate_files(args, paths, t11, t21, out, plt)
+    chosen = _choose_pops(samples, spec, plt, not args.no_show)
+    channels, labels = _choose_channels(samples, args.channels)
+    kept = _keep_events(samples, chosen, channels, args.cofactor, out)
+    pool = _cluster(kept, args.dn_num2, args.k)
+    cc = _write_tables(kept, pool, labels, out)
+    _draw_figures(pool, cc, labels, args.cofactor, plt, out)
     print(f"\nOutputs are in {out.resolve()}")
     if not args.no_show:
         plt.show()
