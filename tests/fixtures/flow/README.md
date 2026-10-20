@@ -26,3 +26,12 @@ Recorded by `benchmarks/flow/record.py` on the Mac mini on 2026-10-12, from Prof
 | `his_masks`, `fixed_masks` | uint8 | his gate's masks, from his cells and from the fixed cells, `np.packbits` along the events |
 
 Unpack a mask with `np.unpackbits(f["his_masks"], axis=0, count=len(f["fsc"])).astype(bool)`. `tests/flowcases.py` loads all of it.
+
+## The CLI's channels
+
+`202_fluor.npz` holds three fluorescence channels of the same `202.fcs`, for the same events as `202.npz`: every 5th event, the first 50,000. `tests/flow/test_flow_pick.py` puts them beside `202.npz`'s FSC-A and SSC-A to run `datanuggets-flow` end to end on real events. Recorded by `benchmarks/flow/record_fluor.py` on the laptop on 2026-10-20 with flowio's `as_array(preprocess=True)`, as `datanuggets.flow.pick.read_fcs` reads a file, after checking that the FSC-A and SSC-A it read equal `202.npz`'s.
+
+| Key | dtype | Holds |
+|---|---|---|
+| `fluor` | float32 | `FJComp-Alexa Fluor 700-A` (CD8), `FJComp-BV510-A` (CD3) and `FJComp-Spark Blue-A` (CD4), in the file's channel order (float32 in the file, so nothing is lost) |
+| `pnn`, `pns` | str | those three channels' `$PnN` names and `$PnS` labels |
