@@ -25,19 +25,6 @@ import numpy as np
 SPILL_TOL = 1e-3  # how far from the identity a file's spillover matrix may be before a warning
 
 
-def mirrored_area(x, idx, idy, t1=35, t2=0.85):
-    """cfc.py's find_area as he wrote it: each cell's density read right, its distance measured
-    from the mirrored peak (idy, idx). --disc his gates with it, so the populations and their
-    numbers are the ones his cfc.py figures show; datanuggets.flow.find_area measures from the
-    peak itself, which is --disc peak."""
-    rows, cols = x.shape
-    ii, jj = np.meshgrid(np.arange(1, rows + 1), np.arange(1, cols + 1), indexing="ij")
-    gr = np.column_stack([ii.ravel(), jj.ravel()])
-    d = np.linalg.norm(gr - np.array([[idx, idy]]), axis=1)
-    mask = (d < t1) & (x.flatten(order="F") > t2 * x[int(idx) - 1, int(idy) - 1])
-    return gr[mask][:, [1, 0]]
-
-
 def per_file(text: str, n: int, name: str) -> list[float]:
     """One number for every file, or one per file separated by commas, as n numbers."""
     try:
@@ -245,8 +232,7 @@ def main(argv=None) -> None:
     import matplotlib.pyplot as plt
 
     from datanuggets import create_dn, cut_tree, plot, whclust, wmean, wpca
-    from datanuggets.flow import find_area
-    from datanuggets.flow.gate import _finder
+    from datanuggets.flow import find_area, lymphmacro_finder, mirrored_area
 
     if args.k < 1:
         raise SystemExit(f"--k is {args.k}; it takes 1 or more clusters")
@@ -278,7 +264,7 @@ def main(argv=None) -> None:
                 raise SystemExit(f"{path.name} has no channel {c}; its channels: {', '.join(pnn)}")
         fsc, ssc = events[:, pnn.index(args.fsc)], events[:, pnn.index(args.ssc)]
         area = mirrored_area if args.disc == "his" else find_area
-        masks = _finder(fsc, ssc, 11, 11, t11[i], t21[i], 20, 0.5, area)
+        masks = lymphmacro_finder(fsc, ssc, t11=t11[i], t21=t21[i], area=area)
         table = [
             f"  Pop {j + 1}: {m.sum():>9,} events ({100 * m.mean():4.1f}%), median {args.fsc} "
             f"{np.median(fsc[m]) if m.any() else 0:>9,.0f}, {args.ssc} "

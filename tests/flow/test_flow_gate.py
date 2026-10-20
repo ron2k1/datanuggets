@@ -6,6 +6,7 @@ import pytest
 from scipy.spatial import ConvexHull, Delaunay
 
 from datanuggets.flow import hull_gate, lymphmacro_finder
+from datanuggets.flow import mirrored_area as flow_mirrored_area
 from datanuggets.flow.gate import _finder, bin_mask
 from flowcases import NAMES, FlowCase, assert_gate_close, load_case, mirrored_area
 
@@ -46,6 +47,13 @@ def test_finder_with_his_area_rule_gives_his_masks(name):
     for k in range(got.shape[1]):
         cells = FlowCase.cells(c.his_area, k)
         assert_gate_close(c.fsc, c.ssc, got[:, k], c.his_masks[:, k], c.zz, cells)
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_finder_takes_the_area_rule_by_keyword(name):
+    c = load_case(name)
+    got = lymphmacro_finder(c.fsc, c.ssc, t11=20, t21=0.5, area=flow_mirrored_area)
+    assert np.array_equal(got, _finder(c.fsc, c.ssc, 11, 11, 20, 0.5, 20, 0.5, mirrored_area))
 
 
 def test_finder_takes_lists_and_float32():

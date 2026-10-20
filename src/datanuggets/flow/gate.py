@@ -64,11 +64,15 @@ def hull_gate(fsc_a, ssc_a, zz, cells) -> np.ndarray:
         return np.zeros(len(raw), dtype=bool)
 
 
-def lymphmacro_finder(fsc_a, ssc_a, *, n_row=11, n_col=11, t11=22, t21=0.25, t12=20, t22=0.5):
-    """His gate finder: one bool column per population, one row per event, populations in his
-    order. The first peak's area takes t11 and t21, the others t12 and t22. No peak left after
-    his filters gives zero columns, where his code raises IndexError."""
-    return _finder(fsc_a, ssc_a, n_row, n_col, t11, t21, t12, t22, find_area)
+def lymphmacro_finder(
+    fsc_a, ssc_a, *, n_row=11, n_col=11, t11=22, t21=0.25, t12=20, t22=0.5, area=find_area
+):
+    """Cabrera's gate finder: one bool column per population, one row per event, populations in
+    cfc.py's order. The first peak's area takes t11 and t21, the others t12 and t22. area(x, i, j,
+    t1, t2) gives a peak's cells: find_area, the disc on the peak, or mirrored_area, cfc.py's
+    find_area as written. No peak left after cfc.py's filters gives zero columns, where cfc.py
+    raises IndexError."""
+    return _finder(fsc_a, ssc_a, n_row, n_col, t11, t21, t12, t22, area)
 
 
 def _finder(fsc_a, ssc_a, n_row, n_col, t11, t21, t12, t22, area) -> np.ndarray:

@@ -1,5 +1,6 @@
-"""The peaks of the density grid: his focal maxima, refined by search_ind and filtered the way he
-filters them, and find_area, the cells around each."""
+"""The peaks of the density grid: Cabrera's focal maxima, refined by search_ind and filtered the
+way cfc.py filters them, and the cells around each: find_area, and mirrored_area, cfc.py's
+find_area as written."""
 
 from __future__ import annotations
 
@@ -58,3 +59,17 @@ def find_area(x, idx, idy, t1=35, t2=0.85) -> np.ndarray:
     keep = (np.sqrt(di * di + dj * dj) < t1) & (x > t2 * x[int(idx) - 1, int(idy) - 1])
     j, i = np.nonzero(keep.T)
     return np.column_stack((i, j)) + 1
+
+
+def mirrored_area(x, idx, idy, t1=35, t2=0.85) -> np.ndarray:
+    """cfc.py's find_area as Cabrera wrote it: each cell's density read right, its distance
+    measured from the mirrored peak (idy, idx). datanuggets-flow --disc his gates with it, so the
+    populations and their numbers are the ones cfc.py's figures show; find_area measures from the
+    peak itself, which is --disc peak."""
+    x = np.asarray(x, dtype=float)
+    rows, cols = x.shape
+    ii, jj = np.meshgrid(np.arange(1, rows + 1), np.arange(1, cols + 1), indexing="ij")
+    gr = np.column_stack([ii.ravel(), jj.ravel()])
+    d = np.linalg.norm(gr - np.array([[idx, idy]]), axis=1)
+    mask = (d < t1) & (x.flatten(order="F") > t2 * x[int(idx) - 1, int(idy) - 1])
+    return gr[mask][:, [1, 0]]
