@@ -109,8 +109,8 @@ The choice changes which events the clustering sees. In the comparison run on th
 `datanuggets-flow` (`src/datanuggets/flow/pick.py`) runs these steps:
 
 1. Read each FCS file with flowio, as stored and uncompensated. A file whose spillover matrix isn't the identity gets a warning. A folder's files go in name order.
-2. Gate each file on FSC-A against SSC-A with the finder above, with `--t11` and `--t21` given once or per file, and the area rule `--disc` names.
-3. Draw every file's numbered populations in one figure, `gates.png`, and print each population's event count, share and median FSC-A and SSC-A.
+2. Gate each file on FSC-A against SSC-A, or the channels `--fsc` and `--ssc` name, with the finder above, with `--t11` and `--t21` given once or per file, and the area rule `--disc` names.
+3. Draw every file's numbered populations in one figure, `gates.png`, and print each population's event count, share and median of the two scatter channels.
 4. Pick populations file by file, at a prompt or with `--pops`. The kept events are the union of the picked populations, so an event in two of them counts once. A file left out, or with fewer than 2 kept events, isn't clustered.
 5. Take the fluorescence channels: `--channels`, or by default every channel of the first file whose name ends in `-A` and doesn't start with FSC or SSC. Transform them as `arcsinh(x / cofactor)`, with `--cofactor` 6000 by default. A cofactor of 0 leaves them linear.
 6. Make data nuggets of each file's kept events separately: `create_dn` with `dn_num2` set to `--dn-num2` (1000 by default) or the number of kept events if that is smaller, and every other argument at its default. There is no refine step.
@@ -170,18 +170,18 @@ Beavers et al. (2025) define data nuggets (Algorithms 1 and 2, Section 3), weigh
 
 The gate finder isn't in the paper. It comes from Prof. Cabrera's own scripts.
 
-A manuscript in revision by Prof. Cabrera and coauthors applies data nuggets to flow cytometry differently, with differential projection pursuit: it compares experimental conditions by searching for low-dimensional projections that maximize an index of the difference between the conditions' densities, estimated from the weighted nuggets. That analysis isn't implemented in this package.
+A manuscript in revision by Dastgiri, Cabrera and coauthors applies data nuggets to flow cytometry in another way. It compresses the events with data nuggets and then uses differential projection pursuit, a search for projections that maximize an index of the difference between two conditions' densities. This package doesn't implement that analysis.
 
 ## Evaluation
 
 ### Against R
 
-The port is checked against R's own output. The scripts in `r/` run R 4.6.1 with `datanugget` 1.5.0, `WCluster` 1.3.0 and Rfast 2.1.5.2 on x86-64 Windows, with R's reference BLAS and internal LAPACK 3.12.1. They trace the functions without modifying them and record the inputs, the outputs, every random draw and the internal values that matter: 544 cases in 23 groups. A few more values were checked by hand in R and written into the tests. Running the tests doesn't need R. [reproducibility.md](reproducibility.md) lists the groups and how to record them again.
+The port is checked against R's own output. The scripts in `r/` run R 4.6.1 with `datanugget` 1.5.0, `WCluster` 1.3.0 and Rfast 2.1.5.2 on x86-64 Windows, with R's reference BLAS and internal LAPACK 3.12.1. They trace the functions without modifying them and record the inputs, the outputs, every random draw and the internal values that matter: 544 cases in 23 groups. A few more values were checked by hand in R and written into the tests. Running the tests doesn't need R. [reproducibility.md](reproducibility.md#what-r-recorded) lists the groups and what each holds, [development.md](development.md) says how to run the tests, and [architecture.md](architecture.md) shows where the tests and fixtures live. Each known difference from R has a decision record in [the R-compatibility plan](plans/2026-09-30-r-compat.md).
 
 | Function | What R recorded | What is compared | Table |
 | --- | --- | --- | --- |
 | `create_dn` | 37 cases: iris, faithful and quakes under both metrics and all three center methods, and edge cases | assignments, weights, centers and scales, bit for bit | [create_dn.md](validation/create_dn.md) |
-| `refine_dn` | 128 cases over every argument | every kmeans call's rows and clusters, and the outputs, bit for bit. Eigenvalues and projections within tolerance | [refine_dn.md](validation/refine_dn.md) |
+| `refine_dn` | 128 cases: every combination of its arguments on faithful, and six more datasets | every kmeans call's rows and clusters, and the outputs, bit for bit. Eigenvalues and projections within tolerance | [refine_dn.md](validation/refine_dn.md) |
 | `get_dn_means` | 293 nugget sets from the two groups above | bit for bit, an empty nugget's NaN sign included | [get_dn_means.md](validation/get_dn_means.md) |
 | `arithmetic_complexity` | 3481 calls | the pass counts, and the value bit for bit. It raises on the 19 calls R never returned from | [arithmetic_complexity.md](validation/arithmetic_complexity.md) |
 | `wmean`, `wss`, `wwcss` | 49 cases | bit for bit | [wmean.md](validation/wmean.md), [wss.md](validation/wss.md), [wwcss.md](validation/wwcss.md) |
@@ -189,7 +189,7 @@ The port is checked against R's own output. The scripts in `r/` run R 4.6.1 with
 | `cluster_predict` | 39 cases, 6,422 new rows | the distances bit for bit, the positions equal | [cluster_predict.md](validation/cluster_predict.md) |
 | `wpca` | 29 cases, 25 reported | everything up to the eigen input bit for bit, the eigen output by a rule | [wpca.md](validation/wpca.md) |
 | `whclust` | 14 cases, 11 where R returns | `merge` and `order` equal, `height` bit for bit, R's message where R stops | none |
-| `wkmeans` | 15 cases, and 28 runs on arguments R stops on | labels equal, centers and WWCSS bit for bit, every draw read in R's order | none |
+| `wkmeans` | 15 cases, 12 where R returns, and 28 runs on arguments R stops on | labels equal, centers and WWCSS bit for bit, every draw read in R's order, R's message where R stops | none |
 | `dn_` functions | a quakes datanugget of 150 nuggets of 1,000 rows | as for the functions they wrap | none |
 | `cut_tree` | 13 trees | 940 cuts at `k` and 1,729 at `h` | none |
 
@@ -199,22 +199,22 @@ Tolerances appear only where LAPACK or the platform's `log10` is involved. `refi
 
 The tests feed R's recorded draws back through `ReplayDraws`, which raises if the port asks for a draw R didn't make, asks with different arguments, or leaves one unread. So the order of the random calls is checked as well as the numbers. `RDraws` reproduces R's `set.seed` and `sample.int` on 27 recorded cases, and `refine_dn` with `RDraws` returns R's nuggets on all 128 recorded cases.
 
-The compiled kernels are checked against plain-Python references kept in the package, on fuzzed inputs built for ties, overflow and subnormals. The references of `whclust` and `wkmeans` follow R's code statement by statement and count R's quirks, and a case named for a quirk was recorded only after a counting copy of R's function showed the case reaches it. On UCI Covertype at 10,000, 100,000 and 581,012 rows, `create_dn` and `refine_dn` matched R's assignments, weights, centers, scales, messages and warnings exactly.
+The compiled kernels are checked against plain-Python references kept in the package, on fuzzed inputs built for ties, overflow and subnormals. The references of `whclust` and `wkmeans` follow R's code statement by statement and count R's quirks, and a case named for a quirk was recorded only after a counting copy of R's function showed the case reaches it. On the first 10 columns of UCI Covertype at 10,000, 100,000 and 581,012 rows, run on the laptop (i7-13650HX, Windows 11) with one thread and R's random draws replayed, `create_dn` and `refine_dn` matched R's assignments, weights, centers, scales, progress messages and warnings exactly in every run ([reproducibility.md](reproducibility.md#covertype-create_dn-and-refine_dn-against-r)).
 
 These results hold for one reference environment. The port doesn't use the host's long double, so it gives the x86-64 results on arm64 macOS too, where the same tests pass. An R built with another BLAS, or R on arm64 macOS, can round differently, and on tied data that can move rows between nuggets ([limitations.md](limitations.md)).
 
 ### Against Cabrera's script
 
-The reference for the flow finder is Prof. Cabrera's Python, not his R code. `benchmarks/flow/` holds his functions word for word, his whole script with only its two paths read from the command line, and his finder cut at its steps. `check_reference.py` runs his whole script with FlowKit and checks that its masks equal his pieces' masks. On the Mac mini it matched on all four files it was given.
+The reference for the flow finder is Prof. Cabrera's Python, not his R code. `benchmarks/flow/` holds his functions word for word, his whole script with only its two paths read from the command line, and his finder cut at its steps. `check_reference.py` runs his whole script with FlowKit and checks that its masks equal his pieces' masks. On the Mac mini (Apple M4, 16 GB) it matched on all four files it was given.
 
 The suite compares with three fixtures recorded from his code on files of the record, each thinned to 50,000 events:
 
-- The grid's bins and coordinates, the focal maxima and the refined peaks must equal his exactly. The grid's log counts must equal his to 1 unit in the last place, since numpy's `log1p` differs in the last bit between CPUs.
+- The grid's bins and coordinates, the focal maxima and the refined peaks must equal his exactly. The grid's log counts must equal his to 1 unit in the last place, since on an x86 CPU without AVX-512 numpy's `log1p` is the C library's, which can differ in the last bit.
 - `find_area` must equal the corrected rule written out as a plain distance test, and his recorded cells must equal the mirrored disc written out the same way.
 - The gate on his cells must give his masks, and so must the whole finder given his area rule, or differ only on events within 1e-9 of the data's range from the hull's edge.
 - His guards and his row and column limits are each tested on both sides of the line.
 
-`compare.py` runs his code and ours piece by piece on any FCS file or folder, on the same arrays on both sides, and exits with 1 if a piece differs beyond the hull's edge. It pairs per-sample thresholds with the workbook's rows, where his script pairs them with the samples in FlowKit's `$FIL` order. On the mini over all 44 files, the grid, the maxima and the peaks equal his on every file. The gate on his cells and the finder with his `find_area` equal his on 40, and on the other 4 one event each differs, lying exactly on the hull's edge. `stress.py` joined the 44 files into one sample of 10,183,290 events, and ours given his `find_area` gave his masks for every event. The record has no reference gates, so whether the gates are biologically right isn't checked.
+`compare.py` runs his code and ours piece by piece on any FCS file or folder, on the same arrays on both sides, and exits with 1 if a piece differs beyond the hull's edge. It pairs per-sample thresholds with the workbook's rows, where his script pairs them with the samples in FlowKit's `$FIL` order. On the same machine over all 44 files, the grid, the maxima and the peaks equal his on every file. The gate on his cells and the finder with his `find_area` equal his on 40, and on the other 4 one event each differs, lying exactly on the hull's edge. `stress.py` joined the 44 files into one sample of 10,183,290 events, and ours given his `find_area` gave his masks for every event. The record has no reference gates, so whether the gates are biologically right isn't checked, and the [flow gate spec](specs/2026-10-12-flow-gate-design.md) lists that as a non-goal. [reproducibility.md](reproducibility.md#flow-comparepy-piece-by-piece) has the comparison runs.
 
 ### What is tested and what is not
 
@@ -234,7 +234,7 @@ The clustering steps of `datanuggets-flow` call `create_dn`, `whclust`, `cut_tre
 
 Beavers, T. E., Cheng, G., Duan, Y., Cabrera, J., Lubomirski, M., Amaratunga, D., and Teigler, J. E. "Data Nuggets: A Method for Reducing Big Data While Preserving Data Structure." Journal of Computational and Graphical Statistics 34(1), 2025. Published online in 2024. DOI: `10.1080/10618600.2024.2341896`. arXiv: `2403.03099`.
 
-Cabrera, J., and coauthors. Differential projection pursuit for flow cytometry with data nuggets. Manuscript in revision.
+Dastgiri, M., Cabrera, J., et al. "Novel Machine Learning Approach to Differential Cell Flow Cytometry Analysis Based on Projection Pursuit." Manuscript in revision.
 
 Flow data: [Zenodo record 22079206](https://zenodo.org/records/22079206), "Flow cytometry data of PBMC of critically ill, mechanically ventilated patients", licensed under CC BY 4.0.
 
