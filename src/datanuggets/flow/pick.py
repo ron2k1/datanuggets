@@ -280,8 +280,8 @@ def main(argv=None) -> None:
         area = mirrored_area if args.disc == "his" else find_area
         masks = _finder(fsc, ssc, 11, 11, t11[i], t21[i], 20, 0.5, area)
         table = [
-            f"  Pop {j + 1}: {m.sum():>9,} events ({100 * m.mean():4.1f}%), median FSC-A "
-            f"{np.median(fsc[m]) if m.any() else 0:>9,.0f}, SSC-A "
+            f"  Pop {j + 1}: {m.sum():>9,} events ({100 * m.mean():4.1f}%), median {args.fsc} "
+            f"{np.median(fsc[m]) if m.any() else 0:>9,.0f}, {args.ssc} "
             f"{np.median(ssc[m]) if m.any() else 0:>9,.0f}"
             for j, m in enumerate(masks.T)
         ]
@@ -316,7 +316,9 @@ def main(argv=None) -> None:
     for s in samples:
         missing = [c for c in channels if c not in s["pnn"]]
         if missing:
-            raise SystemExit(f"{s['path'].name} has no channel {missing[0]}")
+            raise SystemExit(
+                f"{s['path'].name} has no channel {missing[0]}; its channels: {', '.join(s['pnn'])}"
+            )
     labels = [f"{pns[pnn.index(c)]} ({c})" if pns[pnn.index(c)] else c for c in channels]
 
     kept, picks = [], []
