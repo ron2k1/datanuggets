@@ -1,91 +1,87 @@
 # datanuggets
 
-A flow cytometry sample holds hundreds of thousands to millions of events, and a study holds many samples. Weighted hierarchical clustering and the other methods of the R package `WCluster` can't run on that many rows directly. Data nuggets (Beavers et al., cited below) reduce the data to a few thousand weighted points first. Each nugget has a center, a row count and a scale, and the analysis runs on the nuggets with their row counts as weights.
+**Summarize large datasets. Keep the weights. Work in Python.**
 
-This package is a native Python port of CRAN's `datanugget` 1.5.0 and `WCluster` 1.3.0, so that work runs without R. Its tests check it against 544 cases recorded from R. It matches R bit for bit on them, except for the eigen solver's output and the differences listed in [docs/compatibility.md](docs/compatibility.md). It also includes Prof. Cabrera's flow cytometry gate finder, ported from its Python version. A command line tool, `datanuggets-flow`, gates FCS files, asks which cell populations to keep, and clusters the kept cells.
+Data nuggets represent a dataset with a smaller set of points. Each nugget stores a center, the number of observations it represents, and a measure of spread. You can cluster these weighted points, explore them with PCA, and map cluster labels back to the original rows.
 
-Version `0.1.0.dev0` is in development and isn't on PyPI. `pip install datanugget`, without the s, installs an unrelated package.
+This is a native Python port of methods from R's `datanugget` 1.5.0 and `WCluster` 1.3.0. R is not required.
 
-## Installation
+[Getting started](docs/quickstart.md) · [Function reference](docs/api.md) · [Flow cytometry](docs/cli.md) · [Limitations](docs/limitations.md)
 
-Python 3.12 or newer. Until the open pull requests merge into `main`, the plots and `datanuggets-flow` are only on the `feat/flow-pick` branch:
+> **Research alpha — `0.1.0.dev0`.** The API may change. The repository currently requires access and the package is not on PyPI. The port is tested against recorded R cases, with [known differences](docs/compatibility.md).
+
+## Get started
+
+### 1. Install
+
+Use Python 3.12 or newer and Git. This development branch includes the functions and plots shown here:
 
 ```sh
-pip install "datanuggets[flow] @ git+https://github.com/ron2k1/datanuggets.git@feat/flow-pick"
+python -m pip install "datanuggets[frame,plot] @ git+https://github.com/ron2k1/datanuggets.git@feat/flow-pick"
 ```
 
-The `flow` extra adds flowio, matplotlib and pandas. [docs/installation.md](docs/installation.md) covers the other extras, installing from a wheel, and an editable install for development.
+The extras add pandas and matplotlib. See [installation options](docs/installation.md) for a local checkout or other extras.
 
-## Quickstart
+### 2. Create nuggets
 
-### Your own table of numbers
-
-Any numeric table works: rows are observations and columns are variables. This clusters the rows of a CSV file into 5 groups through 500 nuggets:
+Choose the columns you want to analyze; leave out IDs and known outcome labels. Replace `feature_a` and `feature_b` with your CSV's column names.
 
 ```python
+import numpy as np
 import pandas as pd
-from datanuggets import create_dn, cut_tree, dn_whclust
+from datanuggets import create_dn
 
-df = pd.read_csv("my_data.csv").dropna()
-x = df.select_dtypes("number").to_numpy()
-x = (x - x.mean(axis=0)) / x.std(axis=0)  # put the columns on one scale
+df = pd.read_csv("my_data.csv")
+x = df[["feature_a", "feature_b"]].to_numpy(dtype=float)
+if len(x) < 2 or not np.isfinite(x).all():
+    raise ValueError("Provide at least two rows of finite numeric values.")
 
-dn = create_dn(x, dn_num2=500)
-tree = dn_whclust(dn)
-nugget_cluster = cut_tree(tree, k=5)
-df["cluster"] = nugget_cluster[dn.assignments]
-print(df["cluster"].value_counts().sort_index())
+# Standardize features; constant columns become zero.
+scale = x.std(axis=0)
+scale[scale == 0] = 1
+x = (x - x.mean(axis=0)) / scale
+
+dn = create_dn(x, dn_num1=2_000, dn_num2=200, seed=42)
+print(dn.to_frame().head())
 ```
 
-`create_dn` measures Euclidean distance on the columns as given, so a column in large units would otherwise decide the nuggets alone. It rejects NaN and infinite values, hence the `dropna()`. `dn.assignments` gives each row its nugget, which is how the nugget clusters reach the rows. On the first 50,000 rows and 10 continuous columns of UCI Covertype this ran in 11 seconds on a laptop (i7-13650HX, Windows 11). `pd.read_csv` needs pandas, which the `flow` extra installs.
+`dn_num1` controls the intermediate reduction; `dn_num2` is the final target. Start small, then check whether the reduction preserves the structure you care about. Standardization is one preprocessing choice, not a requirement for every dataset.
 
-### Your own FCS files
+### 3. Analyze and visualize
 
-Point `datanuggets-flow` at a folder of FCS files:
+| You want to… | Use |
+| --- | --- |
+| Refine the nuggets | `refine_dn` |
+| Build and cut a weighted hierarchy | `dn_whclust` + `cut_tree` |
+| Run weighted k-means | `dn_wkmeans` |
+| Explore weighted principal components | `dn_wpca` |
+| Assign new observations to clusters | `dn_cluster_predict` |
+
+The [walkthrough](docs/quickstart.md) connects these steps, plots the results, and shows how `dn.assignments` maps nugget labels back to your rows. The [function reference](docs/api.md) covers arguments, defaults, outputs, and conventions.
+
+## Working with FCS files
+
+The experimental `datanuggets-flow` command finds candidate gates, lets you choose populations, and clusters their events across files. Install the `flow` extra to use it:
 
 ```sh
+python -m pip install "datanuggets[flow] @ git+https://github.com/ron2k1/datanuggets.git@feat/flow-pick"
 datanuggets-flow path/to/fcs_folder
 ```
 
-It gates each file on FSC-A against SSC-A, draws every file's numbered populations in one figure, and prints each population's event count and its median FSC-A and SSC-A. Then it asks, file by file, which populations to keep. The kept cells are clustered on their fluorescence channels, `arcsinh(x / 6000)` by default, with nuggets per file and one weighted Ward clustering of all the files' nuggets together, so every file's cells are labelled with the same set of clusters. Tables and figures go to `datanuggets-out/`.
+Figures and tables go into a new `outputs/flow-<timestamp>/` folder for each run. Run from the repository root to keep them together there; `outputs/` is ignored by Git. You can choose another new folder with `--out`; existing paths are refused.
 
-Files from other instruments may need these flags:
+Inspect the gates, choose at least two fluorescence channels, and check your compensation and preprocessing: the tool does not apply compensation. See the [CLI guide](docs/cli.md) before using it on a study.
 
-```sh
-datanuggets-flow path/to/fcs_folder --fsc FSC-H --ssc SSC-H        # other scatter channel names
-datanuggets-flow path/to/fcs_folder --channels "CD3-A,CD4-A,CD8-A"  # cluster only these channels
-datanuggets-flow path/to/fcs_folder --cofactor 150 --k 10           # another arcsinh cofactor, 10 clusters
-datanuggets-flow path/to/fcs_folder --pops "1,2" --no-show          # no questions: Pop 1 and 2 of every file
-```
+## Know the limits
 
-Channels are named as the file's `$PnN` keywords name them, such as `FJComp-FITC-A`, not by marker. A file without one of the named channels stops the run with a list of the channels it has. The gate finder's thresholds are Prof. Cabrera's and have not been tuned for other panels or instruments, so check `gates.png` before trusting the populations on your data, and adjust `--t11` and `--t21` if they look wrong. [docs/cli.md](docs/cli.md) documents every flag, the prompt, the outputs and the errors.
+- **Memory still matters.** Hierarchical clustering uses a square matrix: 10,000 pooled nuggets need about 800 MB for that matrix alone.
+- **Reduction changes the analysis.** Compare nugget counts and preprocessing choices before interpreting clusters. Cluster numbers are not validated biological identities.
+- **R results are not universally identical.** Random streams, eigen calculations, and some edge cases differ. Read the [compatibility notes](docs/compatibility.md).
 
-To try it without data of your own, [docs/quickstart.md](docs/quickstart.md) runs it on a public file from [Zenodo record 22079206](https://zenodo.org/records/22079206).
+See [limitations and open problems](docs/limitations.md), [methodology](docs/methodology.md), [reproducibility](docs/reproducibility.md), or the [contributor guide](docs/development.md) for details.
 
-## Documentation
+## Citation and credits
 
-- [docs/installation.md](docs/installation.md): requirements, extras, wheel and editable installs.
-- [docs/quickstart.md](docs/quickstart.md): the Python API, plots, the gate finder and a first `datanuggets-flow` run.
-- [docs/cli.md](docs/cli.md): `datanuggets-flow` flags, the population prompt, inputs, outputs and errors.
-- [docs/methodology.md](docs/methodology.md): the data nuggets method, the flow pipeline as implemented, how it relates to the papers, and how the port is checked against R.
-- [docs/compatibility.md](docs/compatibility.md): the ported R functions, argument names and every documented difference from R.
-- [docs/reproducibility.md](docs/reproducibility.md): environments, seeds, datasets, what R recorded, and the benchmarks with their results.
-- [docs/development.md](docs/development.md): running the tests, lint, the build check and the history of the port.
-- [docs/limitations.md](docs/limitations.md): known limitations and open problems.
-- [docs/architecture.md](docs/architecture.md): where the code, tests and fixtures live.
+Beavers, T. E., et al. *Data Nuggets: A Method for Reducing Big Data While Preserving Data Structure.* Journal of Computational and Graphical Statistics **34**(1), 330–342 (2025; online 2024). DOI: `10.1080/10618600.2024.2341896`.
 
-## Citing the method
-
-Beavers, T. E., Cheng, G., Duan, Y., Cabrera, J., Lubomirski, M., Amaratunga, D., and Teigler, J. E. "Data Nuggets: A Method for Reducing Big Data While Preserving Data Structure." Journal of Computational and Graphical Statistics 34(1), 330-342, 2025. Published online in 2024.
-
-DOI: `10.1080/10618600.2024.2341896`. arXiv: `2403.03099`.
-
-## License and credit
-
-GPL-2.0-only, the same license as the R packages `datanugget` and `WCluster`. The algorithms are the R authors' work.
-
-The `datanugget` authors are Rituparna Dey (maintainer), Yajie Duan, Traymon Beavers, Javier Cabrera, Ge Cheng, Kunting Qi and Mariusz Lubomirski.
-
-The `WCluster` authors are Rituparna Dey (maintainer), Yajie Duan, Javier Cabrera and Ge Cheng.
-
-The flow gate finder is Prof. Javier Cabrera's. The port here follows Prof. Cabrera's Python translation of the original R code.
+Licensed under [GPL-2.0-only](LICENSE). The R algorithms are the work of Rituparna Dey, Yajie Duan, Traymon Beavers, Javier Cabrera, Ge Cheng, Kunting Qi, and Mariusz Lubomirski (`datanugget`); and Rituparna Dey, Yajie Duan, Javier Cabrera, and Ge Cheng (`WCluster`). The flow gate finder follows Prof. Javier Cabrera's Python translation of his R code.

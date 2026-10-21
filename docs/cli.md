@@ -1,8 +1,12 @@
 # The datanuggets-flow command
 
-`datanuggets-flow` runs the flow cytometry analysis from FCS files. It gates each file on FSC-A against SSC-A with Prof. Cabrera's gate finder, shows every file's numbered populations, asks which of them hold the cells you want, and clusters those cells: data nuggets of each file's kept events, then one weighted Ward tree over all the files' nuggets, so a cluster is the same cells in every file. [methodology.md](methodology.md#the-datanuggets-flow-pipeline) explains the method and its design choices.
+`datanuggets-flow` gates FCS files, lets you choose candidate populations, and clusters their events. It creates nuggets for each file, then fits one weighted Ward tree to the pooled nuggets. Cluster numbers therefore refer to the same fitted clustering across files; they are not independently validated cell-type labels. [methodology.md](methodology.md#the-datanuggets-flow-pipeline) explains the method and its design choices.
 
-The command needs the `flow` extra, which adds flowio, matplotlib and pandas ([installation.md](installation.md#extras)). In a clone, `uv sync` installs them and `uv run datanuggets-flow` runs it. [quickstart.md](quickstart.md#a-first-datanuggets-flow-run) has a first run on a public file.
+The command needs the `flow` extra, which adds flowio, matplotlib and pandas ([installation.md](installation.md#extras)). In a clone, `uv sync` installs them and `uv run datanuggets-flow` runs it. The [quickstart](quickstart.md#a-first-datanuggets-flow-run) walks through a first run.
+
+> **Experimental workflow.** Each run creates a fresh folder under `outputs/` by default. Existing output paths are refused, and unfinished runs retain an `INCOMPLETE.txt` marker. Choose at least two distinct fluorescence channels and enough retained cells to make at least three occupied nuggets.
+
+Inspect the gates and confirm your compensation and preprocessing before interpreting results. The command does not apply compensation. With many input files, also check the **total** nugget count: 10,000 pooled nuggets require about 800 MB for the hierarchy's matrix alone.
 
 ## Synopsis
 
@@ -28,11 +32,11 @@ flowio reads each file's events with `as_array(preprocess=True)`, as the file st
 | Flag | Default | Meaning |
 | --- | --- | --- |
 | `--pops POPS` | ask at the prompt | Populations to keep, in the prompt's grammar: one entry for every file, or one per file separated by `;` |
-| `--out OUT` | `datanuggets-out` | Folder for the outputs, relative to the current directory. Created with its parents if missing |
+| `--out OUT` | `outputs/flow-<timestamp>` | New output folder, relative to the current directory. Existing paths are refused, including empty folders |
 | `--k K` | `8` | Clusters cut from the tree, 1 or more. Lowered to the number of nuggets when there are fewer |
 | `--cofactor COFACTOR` | `6000` | Fluorescence is clustered as `arcsinh(x / cofactor)`. `0` keeps it linear |
-| `--dn-num2 DN_NUM2` | `1000` | Nuggets per file, 2 to 9999. Lowered to a file's kept events when there are fewer |
-| `--channels CHANNELS` | every `-A` channel but FSC and SSC | Comma-separated `$PnN` names of the channels to cluster. The default takes every `$PnN` of the first file that ends in `-A` and doesn't start with `FSC` or `SSC` |
+| `--dn-num2 DN_NUM2` | `1000` | Nuggets per file, 2 to 9999. Lowered to a file's kept events when there are fewer. Clustering requires at least 3 occupied nuggets across all retained files |
+| `--channels CHANNELS` | every `-A` channel but FSC and SSC | Comma-separated `$PnN` names. Select at least two for the current plotting step. The default takes names in the first file ending in `-A` that do not start with `FSC` or `SSC` |
 | `--fsc FSC` | `FSC-A` | The channel gated as FSC |
 | `--ssc SSC` | `SSC-A` | The channel gated as SSC |
 | `--disc {his,peak}` | `his` | The area rule the gates use, described below |
@@ -49,7 +53,7 @@ On the files of the Zenodo record the default channels are the 32 unmixed `FJCom
 Cabrera's `cfc.py` sets the first peak's thresholds file by file. For a folder of four files:
 
 ```sh
-datanuggets-flow <folder> --t11 22,20,18,18 --t21 0.25,0.5,0.5,0.5
+datanuggets-flow path/to/fcs_folder --t11 22,20,18,18 --t21 0.25,0.5,0.5,0.5 --out outputs/threshold-run
 ```
 
 `cfc.py` pairs these values with the samples in the order FlowKit returns them, by their `$FIL` keyword, which may not be the order of the workbook it reads ([methodology.md](methodology.md#against-cabreras-script)). Here they follow file order, so check the `File N` lines against the values you meant.
@@ -100,7 +104,7 @@ Without `--no-show`, the gate figure opens before the first question and stays r
 `--pops` takes the same answers, for scripted runs. One entry applies to every file, and one entry per file, separated by `;`, applies file by file. Quote it, since `;` ends a command in the shell:
 
 ```sh
-datanuggets-flow a.fcs b.fcs --pops "1,2;1"
+datanuggets-flow a.fcs b.fcs --pops "1,2;1" --out outputs/selection-run
 ```
 
 Enter has no meaning here. A file in which the finder found no population takes `all` or `none`. An entry that doesn't parse or names a missing population stops the run, as the failure table below shows. `--pops ""` counts as no `--pops`, so the run asks.
@@ -109,19 +113,19 @@ An event in two kept populations counts once: the kept events are the union of t
 
 ## What a run does
 
-1. Checks that matplotlib and pandas import, checks `--k` and `--dn-num2`, finds the files, reads the thresholds, creates `--out`, deletes the `nuggets_*.csv` and `events_*.csv` an earlier run left there, and checks the number of `--pops` entries.
+1. Checks that matplotlib and pandas import, checks `--k` and `--dn-num2`, finds the files, reads the thresholds, and checks the number of `--pops` entries. Creates a new output folder and an `INCOMPLETE.txt` marker; an existing output path stops the run without changing its contents.
 2. Gates each file: reads its events, runs the finder on `--fsc` and `--ssc` with the file's `--t11` and `--t21` and the `--disc` rule, prints the population lines and draws the file's panel of `gates.png`.
-3. Chooses each file's populations, at the prompt or from `--pops`.
+3. Checks the clustering channels, requiring at least two distinct channels present in every file, then chooses each file's populations at the prompt or from `--pops`.
 4. For each file, keeps the events in any chosen population. A file with fewer than 2 kept events is left out of the clustering but stays in `selection.csv`. The file is read again, so only one file's events are in memory at a time, and the kept events' clustered channels are transformed as `arcsinh(x / cofactor)`, or left as they are with `--cofactor 0`. Writes `selection.csv`.
 5. Makes data nuggets of each file's kept events separately with `create_dn`, `dn_num2` set to `--dn-num2` or to the number of kept events if that is smaller, every other argument at its default and `n_jobs=-1`, which uses every core. When a file has no more kept events than `--dn-num2`, `create_dn` warns `DN.num is greater than or equal to the number of rows. Returning original data`, and each event becomes its own nugget.
-6. Pools every file's nugget centers and weights in file order, drops nuggets with weight 0, builds one weighted Ward tree with `whclust` weighted by each nugget's event count, and cuts it at `--k` clusters with `cut_tree`.
-7. Writes the outputs below and prints each file's share of kept cells in each cluster. Without `--no-show`, it then opens the figures and returns when they are closed.
+6. Pools every file's nugget centers and weights in file order, drops nuggets with weight 0, checks that at least three occupied nuggets remain, builds one weighted Ward tree with `whclust` weighted by each nugget's event count, and cuts it at `--k` clusters with `cut_tree`.
+7. Writes the outputs below and prints each file's share of kept cells in each cluster. Removes `INCOMPLETE.txt` when all tables and figures are saved. Without `--no-show`, it then opens the figures and returns when they are closed.
 
 `create_dn` runs with its fixed default seed. Two runs on the same three files with the same flags, on the development laptop, wrote identical CSV files.
 
 ## Outputs
 
-Everything goes in `--out`:
+Figures and tables share one run folder: `outputs/flow-<timestamp>/` by default, or a new folder chosen with `--out`. Paths are relative to the current directory. Run from the repository root to keep results inside its ignored `outputs/` directory.
 
 | File | Contents |
 | --- | --- |
@@ -156,9 +160,11 @@ The columns:
 
 A file left out of the clustering has no `nuggets_N.csv` or `events_N.csv`, so the numbers can skip.
 
-### Stale outputs
+### Output safety
 
-At the start, a run deletes every `nuggets_*.csv` and `events_*.csv` in `--out`, so the files of an earlier run with more input files can't pass for this run's. That happens before the `--pops` check and before any gating. The other outputs are overwritten when a run reaches them, so a run that stops partway leaves an earlier run's later outputs, such as `cluster_summary.csv`, next to its own `gates.png` and `selection.csv`.
+**Existing output paths are never reused.** The command refuses a file, directory, or symbolic link at the requested path, including an empty directory. This keeps a new run from deleting or overwriting earlier results. Let the default choose a fresh run folder, or give `--out` an unused name.
+
+If a run fails or is cancelled after creating its folder, partial figures and tables stay there with `INCOMPLETE.txt`. The error also prints their location. Rerun in a new folder; the command does not resume unfinished runs. The marker is removed only after every result file has been saved.
 
 ## Spillover
 
@@ -177,6 +183,9 @@ The checks run in the order of the steps above, so the first condition a run mee
 | `--t11 takes numbers like 22 or 22,20,18,18, got 'a'` | A threshold that isn't a number. `--t21` gives the same message |
 | `--t11 gives 2 values for 3 files; give one, or one per file` | A threshold list of the wrong length |
 | `--pops gives 2 choices for 3 files; give one for all of them or one per file, separated by ;` | A `--pops` list of the wrong length |
+| `output path already exists: PATH; choose a new --out folder` | The selected output path already exists |
+| `choose at least two distinct fluorescence channels for clustering and PCA` | Fewer than two distinct clustering channels |
+| `--channels repeats a channel; list each channel only once` | Duplicate entries in a list with at least two distinct channels |
 | `223.fcs has no channel FOO; its channels: FSC-A, FSC-H, ...` | A file without the `--fsc` or `--ssc` channel |
 | `--pops: there is no Pop 9; this file has Pop 1 to Pop 7` | A `--pops` entry naming a population the file doesn't have |
 | `--pops: 'x' isn't a population number or a range like 1-3` | A `--pops` entry that doesn't parse |
@@ -184,20 +193,22 @@ The checks run in the order of the steps above, so the first condition a run mee
 | `cancelled; nothing was clustered` | Ctrl+C or the end of input at the prompt |
 | `223.fcs has no channel FOO; its channels: FSC-A, FSC-H, ...` | A file without one of the channels to cluster |
 | `no file has cells kept, so there is nothing to cluster` | Every file was left out or kept fewer than 2 events |
-| `the kept cells make fewer than 2 nuggets, too few to cluster` | Fewer than 2 nuggets with weight above 0 |
+| `the kept cells make fewer than 3 occupied nuggets, too few for weighted Ward clustering; keep more cells or increase --dn-num2` | Fewer than 3 nuggets with weight above 0 |
 | `datanuggets-flow needs the flow extra: pip install "datanuggets[flow]"` | matplotlib or pandas isn't installed |
 
-A bad flag value, such as `--disc mirror` or a non-integer `--k`, gets argparse's usage message and exit status 2. Three more conditions end in a Python traceback with exit status 1: a missing flowio raises `ImportError: reading FCS files needs flowio: pip install "datanuggets[flow]"`, a file flowio can't parse raises flowio's own error, and an FSC or SSC channel with NaN or infinite values, or with one value, raises the finder's `ValueError`.
+A bad flag value, such as `--disc mirror` or a non-integer `--k`, gets argparse's usage message and exit status 2. Other errors can end in a Python traceback with exit status 1: missing flowio, an unreadable FCS file, or invalid scatter values. A failed run retains its incomplete marker and any partial outputs.
 
 ## Examples
 
+Each output directory below must be unused. Replace `path/to/fcs_folder` and the channel names with your inputs.
+
 ```sh
-datanuggets-flow <folder>                                           # asks which populations to keep
-datanuggets-flow <folder> --pops 1,2 --no-show                      # Pop 1 and 2 of every file, no questions
-datanuggets-flow a.fcs b.fcs --pops "1,2;1"                         # Pop 1 and 2 of a.fcs, Pop 1 of b.fcs
-datanuggets-flow <folder> --t11 22,20,18,18 --t21 0.25,0.5,0.5,0.5  # cfc.py's thresholds, file by file
-datanuggets-flow <folder> --pops 1,2 --disc peak --k 12 --out peak-k12
-datanuggets-flow a.fcs --pops 1 --channels "FJComp-BV510-A,FJComp-Spark Blue-A,FJComp-Alexa Fluor 700-A" --cofactor 0 --dn-num2 200 --k 3
+datanuggets-flow path/to/fcs_folder --out outputs/run-001
+datanuggets-flow path/to/fcs_folder --pops "1,2" --no-show --out outputs/run-002
+datanuggets-flow a.fcs b.fcs --pops "1,2;1" --out outputs/run-003
+datanuggets-flow path/to/fcs_folder --t11 22,20,18,18 --t21 0.25,0.5,0.5,0.5 --out outputs/run-004
+datanuggets-flow path/to/fcs_folder --pops "1,2" --disc peak --k 12 --out outputs/run-005
+datanuggets-flow a.fcs --pops 1 --channels "FJComp-BV510-A,FJComp-Spark Blue-A,FJComp-Alexa Fluor 700-A" --cofactor 0 --dn-num2 200 --k 3 --out outputs/run-006
 ```
 
-The last one clusters three channels of Pop 1, untransformed, into 3 clusters of 200 nuggets.
+The last command uses three untransformed channels from Pop 1, reduces the retained events to up to 200 nuggets in total, and groups those nuggets into three clusters.

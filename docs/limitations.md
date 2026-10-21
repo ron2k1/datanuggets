@@ -1,6 +1,24 @@
 # Limitations and open problems
 
-This page lists what the package doesn't do or can't guarantee, then the problems that are known and unsolved. The differences from R that are kept on purpose are in [compatibility.md](compatibility.md).
+This package is a research alpha. Its numerical methods have substantial test coverage, but the API is still changing and the flow workflow needs validation for each study. The differences from R kept on purpose are in [compatibility.md](compatibility.md).
+
+## What this means for your analysis
+
+| Limitation | Practical consequence |
+| --- | --- |
+| Quadratic memory use | Reduce the intermediate and pooled nugget counts before running a large study. The hierarchy alone needs about 800 MB at 10,000 nuggets. |
+| A reduced representation | Compare settings and check whether important structure survives. Weighted centers do not retain every detail of the original observations. |
+| Different random streams and eigen calculations | Matching R seed numbers is insufficient. Some degenerate inputs can change refinements or PCA results. |
+| Experimental flow defaults | Inspect gates, choose channels and transformations for your panel, and validate biological interpretations. No automatic compensation is applied. |
+| A changing API | Record the package version and commit used for a study. Planned compatibility changes can alter arguments, shapes, labels, and random defaults. |
+
+## CLI safeguards and boundaries
+
+1. **Each run needs a new output folder.** The default creates `outputs/flow-<timestamp>/` relative to the current directory. An existing `--out` path is refused, even if empty. Failed or cancelled runs keep partial results with an `INCOMPLETE.txt` marker; inspect them only as incomplete work and retry in a new folder.
+2. **At least two distinct fluorescence channels are required.** The CLI checks this before asking for populations. Its PCA figure needs two components; a one-dimensional plotting workflow is not supported.
+3. **Clustering needs at least three occupied pooled nuggets.** Very small retained samples or `--dn-num2 2` on a single file can fall short. The CLI reports this before calling weighted Ward clustering.
+
+The [CLI guide](cli.md) explains the output policy and errors. Finishing a run does not validate its biological interpretation.
 
 ## Limitations
 
@@ -17,7 +35,8 @@ This page lists what the package doesn't do or can't guarantee, then the problem
 - `whclust` keeps an `n` by `n` float64 matrix of merge costs, as R's `Whclust` does: 32 MB at 2,000 rows and 800 MB at 10,000.
 - When weights of both signs make R merge a cluster with itself, `whclust` reruns the whole call through its plain-Python reference, which follows R's matrix steps one by one and is far slower than the compiled path.
 - `wkmeans` gives up after 10,000 starts that miss `k` clusters (`MAX_STARTS` in `datanuggets.wcluster.wkmeans`), where R keeps drawing. On an input where R would return after more starts than that, the port raises instead. No such input is known.
-- `create_dn` builds a `dn_num1` by `dn_num1` distance matrix in its second stage. At the default 10,000 that's 800 MB of float64, whatever the row count, and the process peaked near 0.9 GB on Covertype.
+- `create_dn` builds a square distance matrix over the centers actually pooled for its second stage. At 10,000 centers, its default intermediate target, that matrix is 800 MB of float64; small inputs can produce fewer centers. Chunk allocation and other arrays also affect memory, so this is not a total-memory bound. The recorded Covertype run peaked near 0.9 GB.
+- The flow command pools nuggets from every retained file. At its default of 1,000 per file, 44 files can produce 44,000 nuggets: about 15.5 GB for the hierarchy's matrix alone. Per-file reduction does not make the folder-scale hierarchy bounded in memory.
 - `refine_dn` without shape splits is slower than R on the full Covertype data, 1.5 seconds to 0.9. Two thirds of its time there goes to the long double means and covariances. R gets those from the x87 unit's hardware long double, and the port repeats them in 64-bit integer code. The benchmark is in [reproducibility.md](reproducibility.md).
 - numba compiles the kernels on first use and caches them. On the development laptop (i7-13650HX, Windows 11), importing the package and making a first small call to each public function took 8.8 seconds with an empty cache and 0.9 seconds with a warm one on Python 3.14, and 8.3 and 0.9 seconds on 3.15. The cache is kept per Python version, so each new version compiles once. Where numba can't write its cache, every new process compiles again.
 
@@ -25,6 +44,7 @@ This page lists what the package doesn't do or can't guarantee, then the problem
 
 - The plot tests check drawn coordinates and colors, not images. A change in how matplotlib renders them, such as its fonts or its antialiasing, wouldn't fail them.
 - Windows has no `os.fork`, so the two tests of forked children run only on macOS and Linux.
+- The FCS parser and complete CLI are tested with an FCS 3.1 file reconstructed from measured fixture data. This does not cover every instrument's original file encoding or metadata.
 
 ### Flow cytometry
 
@@ -34,7 +54,7 @@ This page lists what the package doesn't do or can't guarantee, then the problem
 
 ### Packaging
 
-- It isn't on PyPI, and it needs Python 3.12 or newer with numba. [installation.md](installation.md) has the install commands.
+- It isn't on PyPI, and the current repository requires access. It needs Python 3.12 or newer with compatible NumPy, SciPy, and Numba installations. A platform-independent package wheel does not guarantee that its compiled dependencies support every platform. [installation.md](installation.md) has the install commands.
 
 ## Open problems
 
@@ -46,7 +66,7 @@ These are known and unsolved. Items 1 to 5 are tracked in the [R-compatibility r
 4. R's behavior with NaN, NA and infinite values isn't recorded for `create_dn`, `refine_dn`, `create_dn_centers`, `arithmetic_complexity` or `get_dn_means`, so they keep raising until it is. The `WCluster` statistics need NA and NaN recorded separately before they can pass them through with R's payloads.
 5. A reference eigen solver needs approval. In the [spike](plans/2026-09-30-eigen-reference-solver.md), R's own `Rlapack` reproduced R on all 420 rank-deficient `wpca` inputs, where scipy matched 9, on 100 of 100 refine cases against scipy's 63, and on all 43 `wpca` rotation and score cases against 16. The recommended option builds R's LAPACK sources with R's flags for Windows x64 first. It needs the R source and Rtools downloads, platform wheels in place of the pure-Python one, and a license review. Nothing was measured on Linux, macOS arm64 or another R version.
 6. The speed work goes past the design spec's text in five places, which wait on a ruling. The stopping rule itself passes: no Python function takes more than 10% of wall time on Covertype, at 100,000 rows (5.8% for `create_dn`, 3.6% for `refine_dn`) or at full size (7.0% and 1.1%). The [follow-up plan](plans/2026-09-30-speed-next-targets.md) lists the five. Each deletion round is compiled whole, marking loop included, because the profile flagged the function and not the loop. The surviving rows are kept as a list of row numbers rather than a mask, and a row's nearest neighbour is searched again only when it was deleted. The row minimum keeps four running minima instead of being vectorized, which gives the same first index. Stage 1 has always run on threads, where the spec says loky, and the kernels release the GIL, so with `n_jobs` above 1 its threads now run them at once. `DIST_BLOCK_ROWS` and `ASSIGN_BLOCK_ROWS` are gone, since the kernels make no numpy temporaries to bound.
-7. `optimal.DN` isn't ported. It gets its own spec. The `wkmeans`, `whclust` and `dn_` port goes past its [spec](specs/2026-10-09-wcluster-iterative-port-design.md)'s text in five places, which wait on a ruling. The [plan](plans/2026-10-09-wcluster-iterative-port.md) lists the first four. `wkmeans` gives up after 10,000 starts without `k` clusters, where R keeps drawing. The `dn_` functions stop where R does on a datanugget with one variable, instead of reading the one column as data. `dn_cluster_predict` reads a `DataNuggets` given as `newx` by `dn`'s width, as R does, where the spec says it uses `newx`'s centers. `whclust` keeps R's `n` by `n` matrix without chunking it. The fifth came up in the build: `dn_cluster_predict` takes a matrix `newx`, where R stops, so that it matches `cluster_predict`.
+7. `optimal.DN` isn't ported. It gets its own spec. The `wkmeans`, `whclust` and `dn_` port goes past its [spec](specs/2026-10-09-wcluster-iterative-port-design.md)'s text in five places, which wait on a ruling. The [plan](plans/2026-10-09-wcluster-iterative-port.md) lists the first four. `wkmeans` gives up after 10,000 starts without `k` clusters, where R keeps drawing. One-variable support differs by wrapper: `dn_wkmeans` rejects it; `dn_wpca` requires an explicit `wcol=[1]`; `dn_whclust` accepts it. See the function reference for the supported shapes. `dn_cluster_predict` reads a `DataNuggets` given as `newx` by `dn`'s width, as R does, where the spec says it uses `newx`'s centers. `whclust` keeps R's `n` by `n` matrix without chunking it. The fifth came up in the build: `dn_cluster_predict` takes a matrix `newx`, where R stops, so that it matches `cluster_predict`.
 8. Some behavior isn't covered by a recorded case or a test:
    - R hasn't recorded zero-column inputs or centers with no rows. The compiled distance functions raise `ValueError` on both, and no public call reaches them.
    - A process that launches numba threads under GNU OpenMP and then forks, before it has ever imported the moments module, leaves the child without the hook that makes it run serially. Neither test machine has GNU OpenMP.

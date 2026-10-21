@@ -46,7 +46,7 @@ jobs:
           rm -rf tmp/sdist/src
           uv venv tmp/wheel
           wheel=$(echo dist/datanuggets-*-py3-none-any.whl)
-          uv pip install --python tmp/wheel "$wheel[frame,progress,plot]" pytest==9.1.1 pytest-xdist==3.8.0
+          uv pip install --python tmp/wheel "$wheel[frame,progress,plot,flow]" pytest==9.1.1 pytest-xdist==3.8.0
           cd tmp/sdist
           ../wheel/bin/python -c "import datanuggets as d; assert 'site-packages' in d.__file__, d.__file__"
           ../wheel/bin/python -m pytest -q -p no:cacheprovider -n 2 -m "not slow"

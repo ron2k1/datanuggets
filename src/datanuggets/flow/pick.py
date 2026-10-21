@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -130,7 +131,10 @@ def _parser() -> argparse.ArgumentParser:
         help='populations to keep, e.g. "1,2" for every file or "1,2;1;1" '
         "file by file; without it you are asked",
     )
-    p.add_argument("--out", default="datanuggets-out", help="folder for the outputs")
+    p.add_argument(
+        "--out",
+        help="new output folder (default: outputs/flow-<timestamp>); existing paths are refused",
+    )
     p.add_argument("--k", type=int, default=8, help="clusters cut from the tree")
     p.add_argument(
         "--cofactor",
@@ -244,8 +248,7 @@ def _pyplot(no_show: bool):
 
 
 def _check_args(args) -> tuple[list[Path], list[float], list[float], Path, list[str] | None]:
-    """The checks made before any file is read, then the files, each file's t11 and t21, the
-    output folder without an earlier run's per-file tables, and --pops split by file."""
+    """Validate arguments without writing files; return inputs, thresholds, output and choices."""
     if args.k < 1:
         raise SystemExit(f"--k is {args.k}; it takes 1 or more clusters")
     if not 2 <= args.dn_num2 < DN_NUM1:  # create_dn's dn_num1, which dn_num2 stays under
@@ -255,10 +258,11 @@ def _check_args(args) -> tuple[list[Path], list[float], list[float], Path, list[
     paths = _fcs_paths(args.paths)
     t11 = per_file(args.t11, len(paths), "--t11")
     t21 = per_file(args.t21, len(paths), "--t21")
-    out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
-    for old in [*out.glob("nuggets_*.csv"), *out.glob("events_*.csv")]:
-        old.unlink()  # an earlier run's, which could be taken for this run's
+    out = (
+        Path(args.out)
+        if args.out
+        else Path("outputs") / datetime.now(UTC).strftime("flow-%Y%m%d-%H%M%S-%fZ")
+    )
     spec = args.pops.split(";") if args.pops else None
     if spec is not None and len(spec) not in (1, len(paths)):
         raise SystemExit(
@@ -326,6 +330,12 @@ def _choose_channels(samples, names) -> tuple[list[str], list[str]]:
         channels = [c.strip() for c in names.split(",")]
     else:
         channels = [c for c in pnn if c.endswith("-A") and not c.startswith(("FSC", "SSC"))]
+    if len(set(channels)) < 2:
+        raise SystemExit(
+            "choose at least two distinct fluorescence channels for clustering and PCA"
+        )
+    if len(set(channels)) != len(channels):
+        raise SystemExit("--channels repeats a channel; list each channel only once")
     for s in samples:
         missing = [c for c in channels if c not in s["pnn"]]
         if missing:
@@ -392,8 +402,11 @@ def _cluster(kept, dn_num2, k) -> _Pool:
     centers = np.vstack([dn.centers for dn in dns])
     weights = np.concatenate([dn.weights for dn in dns]).astype(float)
     use = weights > 0  # a nugget no cell joined has no say in the clusters
-    if use.sum() < 2:
-        raise SystemExit("the kept cells make fewer than 2 nuggets, too few to cluster")
+    if use.sum() < 3:
+        raise SystemExit(
+            "the kept cells make fewer than 3 occupied nuggets, too few for weighted Ward "
+            "clustering; keep more cells or increase --dn-num2"
+        )
     k = min(k, int(use.sum()))
     tree = whclust(centers[use], weights[use])
     cl = np.full(len(centers), -1)
@@ -474,13 +487,28 @@ def main(argv=None) -> None:
     args = _parser().parse_args(argv)
     plt = _pyplot(args.no_show)
     paths, t11, t21, out, spec = _check_args(args)
-    samples = _gate_files(args, paths, t11, t21, out, plt)
-    chosen = _choose_pops(samples, spec, plt, not args.no_show)
-    channels, labels = _choose_channels(samples, args.channels)
-    kept = _keep_events(samples, chosen, channels, args.cofactor, out)
-    pool = _cluster(kept, args.dn_num2, args.k)
-    cc = _write_tables(kept, pool, labels, out)
-    _draw_figures(pool, cc, labels, args.cofactor, plt, out)
+    try:
+        out.mkdir(parents=True, exist_ok=False)
+    except FileExistsError:
+        raise SystemExit(f"output path already exists: {out}; choose a new --out folder") from None
+    incomplete = out / "INCOMPLETE.txt"
+    incomplete.write_text(
+        "This run has not completed. Its tables and figures may be partial.\n"
+        "A successful run removes this marker; rerun in a new output folder.\n",
+        encoding="utf-8",
+    )
+    try:
+        samples = _gate_files(args, paths, t11, t21, out, plt)
+        channels, labels = _choose_channels(samples, args.channels)
+        chosen = _choose_pops(samples, spec, plt, not args.no_show)
+        kept = _keep_events(samples, chosen, channels, args.cofactor, out)
+        pool = _cluster(kept, args.dn_num2, args.k)
+        cc = _write_tables(kept, pool, labels, out)
+        _draw_figures(pool, cc, labels, args.cofactor, plt, out)
+        incomplete.unlink()
+    except (Exception, SystemExit, KeyboardInterrupt):
+        print(f"\nRun incomplete; partial outputs are in {out.resolve()}", file=sys.stderr)
+        raise
     print(f"\nOutputs are in {out.resolve()}")
     if not args.no_show:
         plt.show()

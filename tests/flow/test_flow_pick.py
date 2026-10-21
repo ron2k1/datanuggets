@@ -74,8 +74,6 @@ def test_main_clusters_real_events_end_to_end(tmp_path, monkeypatch, close_figur
     folder, out = tmp_path / "in", tmp_path / "out"
     folder.mkdir()
     (folder / "202.fcs").write_bytes(b"")  # for _fcs_paths to find; _read_202 reads it
-    out.mkdir()
-    (out / "nuggets_9.csv").write_text("an earlier run's\n")
     monkeypatch.setattr(pick, "read_fcs", _read_202)
     argv = [str(folder), "--no-show", "--out", str(out), "--dn-num2", "50", "--k", "3"]
     if asked:  # Pop 1 typed at the prompt instead
@@ -250,6 +248,85 @@ def test_pops_must_give_one_choice_or_one_per_file(tmp_path):
         (tmp_path / name).write_bytes(b"")
     with pytest.raises(SystemExit, match="2 choices for 3 files"):
         main([str(tmp_path), "--pops", "1;2", "--no-show", "--out", str(tmp_path / "out")])
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("existing", ["directory", "empty-directory", "file"])
+def test_existing_output_is_preserved_before_reading_input(tmp_path, monkeypatch, existing):
+    source, out = tmp_path / "202.fcs", tmp_path / "out"
+    source.touch()
+    if existing == "file":
+        out.write_bytes(b"keep this file")
+        before = out.read_bytes()
+    else:
+        out.mkdir()
+        if existing == "directory":
+            for name in (*COLUMNS, *FIGURES, "nuggets_9.csv"):
+                (out / name).write_bytes(b"earlier results")
+        before = {p.name: p.read_bytes() for p in out.iterdir()}
+    monkeypatch.setattr(pick, "read_fcs", lambda path: pytest.fail("read before output check"))
+    with pytest.raises(SystemExit, match="output path already exists"):
+        main([str(source), "--pops", "1", "--no-show", "--out", str(out)])
+    after = out.read_bytes() if out.is_file() else {p.name: p.read_bytes() for p in out.iterdir()}
+    assert after == before
+
+
+@pytest.mark.parametrize(
+    "failure", [ValueError("bad FCS"), SystemExit("cancelled"), KeyboardInterrupt()]
+)
+def test_failed_run_is_marked_and_does_not_touch_previous_results(
+    tmp_path, monkeypatch, capsys, failure
+):
+    source, old, out = tmp_path / "202.fcs", tmp_path / "previous", tmp_path / "new"
+    source.touch()
+    old.mkdir()
+    (old / "events_1.csv").write_bytes(b"earlier events")
+
+    def fail(*args):
+        (out / "gates.png").write_bytes(b"partial figure")
+        raise failure
+
+    monkeypatch.setattr(pick, "_gate_files", fail)
+    with pytest.raises(type(failure)):
+        main([str(source), "--pops", "1", "--no-show", "--out", str(out)])
+    assert (old / "events_1.csv").read_bytes() == b"earlier events"
+    assert (out / "INCOMPLETE.txt").is_file()
+    assert "Run incomplete" in capsys.readouterr().err
+    with pytest.raises(SystemExit, match="output path already exists"):
+        main([str(source), "--pops", "1", "--no-show", "--out", str(out)])
+
+
+def test_default_runs_have_separate_folders_under_outputs(tmp_path, monkeypatch):
+    source = tmp_path / "202.fcs"
+    source.touch()
+    monkeypatch.chdir(tmp_path)
+
+    def cancel(*args):
+        raise SystemExit("cancelled")
+
+    monkeypatch.setattr(pick, "_gate_files", cancel)
+    for _ in range(2):
+        with pytest.raises(SystemExit, match="cancelled"):
+            main([str(source), "--no-show"])
+    runs = list((tmp_path / "outputs").iterdir())
+    assert len(runs) == 2
+    assert all((run / "INCOMPLETE.txt").is_file() for run in runs)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["202.fcs", "outputs"]
+
+
+@pytest.mark.parametrize("names", [None, "CD3-A", "CD3-A,CD3-A"])
+def test_too_few_distinct_channels_stop_before_clustering(names):
+    samples = [{"path": Path("one.fcs"), "pnn": ["FSC-A", "SSC-A", "CD3-A"], "pns": ["", "", ""]}]
+    with pytest.raises(SystemExit, match="at least two distinct fluorescence channels"):
+        pick._choose_channels(samples, names)
+
+
+def test_two_occupied_nuggets_get_an_actionable_error():
+    with np.load(FLOW / "202_fluor.npz") as data:
+        x = data["fluor"][:2, :2].astype(float)
+    kept = [(1, "202.fcs", np.arange(len(x)), x)]
+    with pytest.raises(SystemExit, match="fewer than 3 occupied nuggets"):
+        pick._cluster(kept, dn_num2=2, k=2)
 
 
 @pytest.mark.parametrize(

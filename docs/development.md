@@ -79,7 +79,7 @@ uv run --no-project python scripts/check_dist.py tmp/dist
 uvx --from twine==7.0.0 twine check --strict tmp/dist/*
 ```
 
-The checker opens the sdist and the wheel. It fails on a file outside the allowlist in `pyproject.toml`, a cache file, a home-folder path, a name from the development setup, or versions that disagree, so leftovers from an earlier build in the same folder can fail it. `--expect-version` makes it fail unless the build has that version, which the release uses on a tag. The `package` workflow also installs the wheel alone in a new environment with the `frame`, `progress` and `plot` extras, deletes `src/` from the unpacked sdist, and runs the sdist's own default tests against the installed wheel. [releasing.md](releasing.md) covers publishing.
+The checker opens the sdist and the wheel. It fails on a file outside the allowlist in `pyproject.toml`, a cache file, a home-folder path, a name from the development setup, or versions that disagree, so leftovers from an earlier build in the same folder can fail it. `--expect-version` makes it fail unless the build has that version, which the release uses on a tag. The `package` workflow also installs the wheel alone in a new environment with the `frame`, `progress`, `plot` and `flow` extras, deletes `src/` from the unpacked sdist, and runs the sdist's own default tests against the installed wheel, including the FCS parser and CLI integration tests. [releasing.md](releasing.md) covers publishing.
 
 ## Parity tables
 
