@@ -39,14 +39,23 @@ jobs:
         run: uv run --no-project python scripts/check_dist.py dist
       - name: Metadata
         run: uvx --from twine==7.0.0 twine check --strict dist/*
-      - name: The sdist's tests on the installed wheel
+      - name: Extract the sdist without its source tree
         run: |
           mkdir -p tmp/sdist
           tar -xzf dist/datanuggets-*.tar.gz -C tmp/sdist --strip-components 1
           rm -rf tmp/sdist/src
-          uv venv tmp/wheel
+      - name: Core-only installed wheel on recorded quakes data
+        run: |
+          uv venv --python 3.14 tmp/core
+          uv pip install --python tmp/core dist/datanuggets-*-py3-none-any.whl
+          tmp/core/bin/python scripts/smoke_wheel.py tmp/sdist
+          uv pip check --python tmp/core
+      - name: The sdist's tests on the installed wheel with all extras
+        run: |
+          uv venv --python 3.14 tmp/wheel
           wheel=$(echo dist/datanuggets-*-py3-none-any.whl)
           uv pip install --python tmp/wheel "$wheel[frame,progress,plot,flow]" pytest==9.1.1 pytest-xdist==3.8.0
+          uv pip check --python tmp/wheel
           cd tmp/sdist
           ../wheel/bin/python -c "import datanuggets as d; assert 'site-packages' in d.__file__, d.__file__"
           ../wheel/bin/python -m pytest -q -p no:cacheprovider -n 2 -m "not slow"

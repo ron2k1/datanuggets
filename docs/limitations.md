@@ -2,6 +2,8 @@
 
 This package is a research alpha. Its numerical methods have substantial test coverage, but the API is still changing and the flow workflow needs validation for each study. The differences from R kept on purpose are in [compatibility.md](compatibility.md).
 
+**Publication hold:** the GNU sorting helpers need a compatible source-provenance record or replacement before this candidate can be redistributed publicly. See [third-party notices](../THIRD_PARTY.md#publication-hold-gnu-sorting-helpers). Both TestPyPI and PyPI uploads are blocked in the release workflow; check-only runs remain available.
+
 ## What this means for your analysis
 
 | Limitation | Practical consequence |
@@ -56,7 +58,7 @@ The [CLI guide](cli.md) explains the output policy and errors. Finishing a run d
 
 ### Packaging
 
-- It isn't on PyPI, and the current repository requires access. It needs Python 3.12 or newer with compatible NumPy, SciPy, and Numba installations. A platform-independent package wheel does not guarantee that its compiled dependencies support every platform. [installation.md](installation.md) has the install commands.
+- It needs Python 3.12 or newer with compatible NumPy, SciPy, and Numba installations. A platform-independent package wheel does not guarantee that its compiled dependencies support every platform. [installation.md](installation.md) covers the alpha, GitHub, and local-wheel install routes.
 
 ## Open problems
 

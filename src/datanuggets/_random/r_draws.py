@@ -1,3 +1,9 @@
+# R RNG.c / random.c / unique.c adaptations; upstream notices are in THIRD_PARTY.md.
+# Copyright (C) 1997-2026 The R Core Team; 2003-2018 The R Foundation.
+# Copyright (C) 1995, 1996 Robert Gentleman and Ross Ihaka.
+# Python adaptation by Ronil Basu, recorded 2026-10-21.
+# GPL version 2; supplied without warranty. See LICENSE and THIRD_PARTY.md.
+
 """R's own draws: set.seed(seed) under R's default RNGkind, then sample.int() as R 4.6.1 runs
 it."""
 

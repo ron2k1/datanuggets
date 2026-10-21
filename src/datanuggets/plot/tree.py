@@ -1,3 +1,9 @@
+# R plot.hclust / C_dend adaptations; upstream notices are in THIRD_PARTY.md.
+# Copyright (C) 1995-2026 The R Core Team; 2002-2009 The R Foundation.
+# Copyright (C) 1995, 1996 Robert Gentleman and Ross Ihaka.
+# Python adaptation by Ronil Basu, recorded 2026-10-21.
+# GPL version 2; supplied without warranty. See LICENSE and THIRD_PARTY.md.
+
 """dendrogram: R's plot.hclust for a whclust tree, line for line."""
 
 from __future__ import annotations

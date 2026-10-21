@@ -1,15 +1,16 @@
 [build-system]
-requires = ["hatchling>=1.25"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
 name = "datanuggets"
-version = "0.1.0.dev0"
+version = "0.1.0a1"
 description = "Native Python port of the R packages datanugget and WCluster (data nuggets for large-data reduction)."
 readme = "README.md"
 requires-python = ">=3.12"
-license = "GPL-2.0-only"
-license-files = ["LICENSE"]
+# The sdist also contains CC-BY-4.0 data that is absent from the wheel. Do not declare
+# one SPDX expression for both archives; their license files describe each component.
+license-files = ["LICENSE", "THIRD_PARTY.md"]
 authors = [{ name = "Ronil Basu" }]
 keywords = ["data nuggets", "data reduction", "big data", "weighted clustering", "weighted PCA"]
 classifiers = [
@@ -73,7 +74,7 @@ packages = ["src/datanuggets"]
 # tests/scripts tests that checker, which isn't shipped.
 [tool.hatch.build.targets.sdist]
 only-include = [
-    "src/datanuggets", "tests", "LICENSE", "README.md", "pyproject.toml",
+    "src/datanuggets", "tests", "LICENSE", "THIRD_PARTY.md", "README.md", "pyproject.toml",
     "docs/README.md",
     "docs/installation.md",
     "docs/quickstart.md",
@@ -83,6 +84,7 @@ only-include = [
     "docs/compatibility.md",
     "docs/methodology.md",
     "docs/reproducibility.md",
+    "docs/releases.md",
     "examples/first_analysis.py",
 ]
 exclude = ["tests/scripts"]

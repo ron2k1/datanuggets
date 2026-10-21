@@ -1,3 +1,8 @@
+# Adapted from R's kmns.f: (C) Royal Statistical Society 1979.
+# Upstream modifications: B. D. Ripley, 1998-06-17; M. Maechler, 2001-04-12.
+# Python adaptation by Ronil Basu, recorded 2026-10-21: zero-based indexing
+# and Numba compilation. GPL-2.0-only; no warranty.
+# See LICENSE and THIRD_PARTY.md for the license and source notices.
 """Hartigan-Wong k-means (R's kmns.f), compiled.
 
 The same operations in the same order as hartigan_wong._HW, which ports kmns.f line by line, in

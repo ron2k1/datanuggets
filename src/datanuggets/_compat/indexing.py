@@ -1,3 +1,8 @@
+# R parallel::splitIndices adaptation; upstream notices are in THIRD_PARTY.md.
+# Copyright (C) 1995-2025 The R Core Team; derived from snow by Luke Tierney.
+# Python adaptation by Ronil Basu, recorded 2026-10-21.
+# GPL version 2; supplied without warranty. See LICENSE and THIRD_PARTY.md.
+
 """R's index helpers the ported code depends on, 0-based: parallel::splitIndices and the rows
 unique() keeps."""
 

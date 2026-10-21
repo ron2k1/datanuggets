@@ -4,7 +4,7 @@ Recorded by `benchmarks/flow/record.py` on the Mac mini on 2026-10-12, from Prof
 
 ## Source
 
-[Zenodo record 22079206](https://zenodo.org/records/22079206), "Flow cytometry data of PBMC of critically ill, mechanically ventilated patients", CC-BY-4.0. Three of its 44 FCS 3.1 files from a Cytek Aurora, each thinned to every k-th event and cut at 50,000 events:
+Stefanie Kreutmair and Susanne Unger (2026), *Flow cytometry data of PBMC of critically ill, mechanically ventilated patients* (V1), Zenodo, [doi:10.5281/zenodo.22079206](https://doi.org/10.5281/zenodo.22079206). The data and these derived data are licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); use does not imply endorsement. Three of its 44 FCS 3.1 files from a Cytek Aurora were selected, thinned to every k-th event, cut at 50,000 events, and converted to NPZ with computed reference arrays:
 
 | File | k | Populations, reference code | Populations, disc on the peak |
 |---|---|---|---|

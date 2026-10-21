@@ -39,10 +39,19 @@ USER_GUIDES = (
     "docs/compatibility.md",
     "docs/methodology.md",
     "docs/reproducibility.md",
+    "docs/releases.md",
     "examples/first_analysis.py",
 )
 SDIST_FILES = frozenset(
-    {"PKG-INFO", ".gitignore", "pyproject.toml", "LICENSE", "README.md", *USER_GUIDES}
+    {
+        "PKG-INFO",
+        ".gitignore",
+        "pyproject.toml",
+        "LICENSE",
+        "THIRD_PARTY.md",
+        "README.md",
+        *USER_GUIDES,
+    }
 )
 SDIST_DIRS = ("src/datanuggets/", "tests/")
 SDIST_EXCLUDED = ("tests/scripts/",)
@@ -50,6 +59,7 @@ SDIST_REQUIRED = (
     "PKG-INFO",
     "pyproject.toml",
     "LICENSE",
+    "THIRD_PARTY.md",
     "README.md",
     "src/datanuggets/__init__.py",
     "tests/conftest.py",
@@ -294,7 +304,12 @@ def _read_wheel(path: Path, version: str, deny: frozenset[str]) -> tuple[list[st
                     problems += _member(where, name, data, allowed, deny)
     except ZIP_ERRORS as e:
         return problems + [f"{where}: can't be read ({type(e).__name__})"], None
-    required = (f"{NAME}/__init__.py", info + "METADATA", info + "licenses/LICENSE")
+    required = (
+        f"{NAME}/__init__.py",
+        info + "METADATA",
+        info + "licenses/LICENSE",
+        info + "licenses/THIRD_PARTY.md",
+    )
     problems += [f"{where}: missing {r}" for r in required if r not in seen]
     return problems, meta
 
