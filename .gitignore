@@ -7,3 +7,13 @@ dist/
 build/
 tmp/
 outputs/
+
+# Local planning and review notes
+/docs/specs/
+/docs/plans/
+/docs/reviews/
+
+# Local R reference tooling; recorded test fixtures stay tracked
+/r/
+*.[Rr]
+/.github/workflows/bench.yml

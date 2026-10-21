@@ -45,7 +45,7 @@ from datanuggets._random.r_draws import RDraws
 
 ### Not ported
 
-`datanugget`'s `optimal.DN` is still to port, and it gets its own spec ([open problem 7](limitations.md#open-problems)). The [plotting spec](https://github.com/ron2k1/datanuggets/blob/main/docs/specs/2026-10-10-plotting-design.md) leaves its elbow and difference plots to that port.
+`datanugget`'s `optimal.DN` and its elbow and difference plots are not implemented yet ([open problem 7](limitations.md#open-problems)).
 
 `datanuggets.flow` doesn't come from R. It ports Prof. Cabrera's Python gate finder for flow cytometry, `lymphmacro_finder`, and is checked against the reference code piece by piece. Its departures from that code are in [methodology.md](methodology.md), and the `datanuggets-flow` command built on it is in [cli.md](cli.md).
 

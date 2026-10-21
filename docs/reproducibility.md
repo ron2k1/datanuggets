@@ -2,7 +2,7 @@
 
 This page is for reproducing a number that datanuggets reports. It starts with what every experiment shares: the machines and environments, how seeds behave, and the datasets with their licenses. Then come what R recorded for the tests and one section per experiment, each with what it measures, its command, what it prints and its recorded result. Installation is in [installation.md](installation.md), running the tests in [development.md](https://github.com/ron2k1/datanuggets/blob/main/docs/development.md), and the differences from R in [compatibility.md](compatibility.md).
 
-The benchmark commands require a full Git clone, including the development tools and `uv.lock`; these are not included in the source archive. Run every command on this page from the repository root. The R scripts stop anywhere else, and the flow scripts write to `tmp/flow` under the current folder.
+The benchmark tools require a full Git clone and the development dependencies in `uv.lock`; they are not included in the source archive. Run commands from the repository root. The Covertype and WCluster comparison commands below are for maintainers who already have local R baseline records. Those records, their R generators and the R benchmark workflow are not distributed, so a fresh clone cannot reproduce those comparisons from scratch. The Python tests use the included fixtures, and the flow benchmarks use the datasets described below.
 
 ## Environments
 
@@ -15,7 +15,7 @@ The benchmark commands require a full Git clone, including the development tools
 
 ### The R reference
 
-Every R result in the tests and benchmarks comes from R 4.6.1 on the laptop. `r/fixture_io.R` writes the environment into the `versions` field of each output's `manifest.json`, so a case recorded on another build would show it. All 544 fixture manifests record the same values:
+Every R result in the tests and benchmarks comes from R 4.6.1 on the laptop. The fixture generators recorded the environment into the `versions` field of each output's `manifest.json`, so a case recorded on another build would show it. All 544 fixture manifests record the same values:
 
 | Field | Value |
 | --- | --- |
@@ -31,7 +31,7 @@ Some manifests also record `WCluster` 1.3.0 and R's `matprod` option, `default`.
 
 R's last bits depend on that build. Rfast's `dista` sums Euclidean terms through the BLAS for more than 32 columns, `colMeans` and `rowMeans` add in long double, and `%*%` follows the reference BLAS's order. The port repeats that arithmetic in its own code instead of using the host's. So an R built with OpenBLAS, MKL or Accelerate, or R on arm64 macOS, where `long double` is plain double, can round differently from the fixtures, and on tied data that can change assignments. [compatibility.md](compatibility.md) and [limitations.md](limitations.md) have the details.
 
-To set up the same R, follow [r/README.md](../r/README.md): install R 4.6.1, then run `Rscript r/setup.R`, which installs the packages into a private library whose location `DATANUGGETS_R_LIB` overrides. `setup.R` stops unless it installed `datanugget` 1.5.0 and `WCluster` 1.3.0, and every script that sources `r/fixture_io.R` checks both again. Rfast comes from CRAN as a dependency and isn't pinned. `setup.R` prints its version without checking it, so compare that line with 2.1.5.2 before recording anything.
+The environment above documents how the reference data was produced. Regenerating it requires matching those R and package versions, including Rfast 2.1.5.2, and the local maintainer generators. Neither the generators nor their setup scripts are included in this Python repository. Use the checked-in fixtures for routine verification.
 
 ### Python
 
@@ -51,10 +51,9 @@ numba compiles each kernel on first use and caches it per Python version, so the
 
 ### Pinning and memory on Windows
 
-`benchmarks/pin.py` runs a command, and every process it starts, on chosen CPUs with Windows power throttling off. `benchmarks/measure.py` runs a command and reports its wall time and the peak working set across its process tree, since `Rscript` hands its work to a child `Rterm`. Both need psutil, which `uv run --with psutil` supplies, and both read Windows-only process information, so they run only on Windows. Put either in front of a benchmark command:
+`benchmarks/pin.py` runs a command, and every process it starts, on chosen CPUs with Windows power throttling off. `benchmarks/measure.py` runs a command and reports its wall time and the peak working set across its process tree, since `Rscript` hands its work to a child `Rterm`. Both need psutil, which `uv run --with psutil` supplies, and both read Windows-only process information, so they run only on Windows. With the local R baseline records available, put either in front of a comparison command:
 
 ```sh
-uv run --with psutil python benchmarks/pin.py Rscript benchmarks/covertype.R 10000
 uv run --with psutil python benchmarks/pin.py uv run python benchmarks/covertype.py 10000
 uv run --with psutil python benchmarks/measure.py uv run python benchmarks/covertype.py 10000
 ```
@@ -93,10 +92,10 @@ print(np.array_equal(a.assignments, b.assignments))  # False
 - `tests/randomness/test_rdraws.py` runs all 128 recorded `refine.DN` cases with `RDraws` of the case's seed, 291102 when the case gives none, and checks two workers against one.
 - `tests/wcluster/test_wkmeans.py` runs iris with k = 3 and five starts under `RDraws(291102)` against R's labels, and the 28 runs of the `wkmeans_args` group.
 - `tests/randomness/test_draws.py` checks that two `NumpyDraws(291102)` give the same stream.
-- `benchmarks/wcluster.py` runs `wkmeans` on 10,000 Covertype rows with `RDraws(291102)`. `benchmarks/wcluster.R` and `benchmarks/covertype.R` rely on the R functions' default of 291102.
-- In `r/`, `fixtures_create_dn.R`, `fixtures_refine_dn.R`, `fixtures_kmeans.R`, `fixtures_wkmeans.R`, `wcluster_counted.R`, `fixtures_dn_wcluster.R`, `fixtures_compat.R` and `fixtures_rsample.R` pass it to the functions they record.
+- `benchmarks/wcluster.py` runs `wkmeans` on 10,000 Covertype rows with `RDraws(291102)`. The original R benchmark scripts relied on the R functions' default of 291102.
+- The original fixture generators passed 291102 to the functions they recorded; each case's manifest retains its arguments and draws.
 
-Other seeds build inputs. `covertype.R` draws its 10,000 and 100,000 row subsets after `set.seed(20260929)`. The generators in `r/` use other seeds to make some test inputs, and `fixtures_rsample.R` records `set.seed` itself on 12 seeds, among them negative, fractional and near-overflow values. Every fixture stores its inputs, so the tests never draw them again.
+Other seeds build inputs. The original Covertype generator drew its 10,000 and 100,000 row subsets after `set.seed(20260929)`. The fixture generators used other seeds to make some test inputs, and `fixtures_rsample.R` recorded `set.seed` itself on 12 seeds, among them negative, fractional and near-overflow values. Every fixture stores its inputs, so the tests never draw them again.
 
 The flow gate finder draws nothing. The `datanuggets-flow` command calls `create_dn` with the default int seed; [cli.md](cli.md) covers its options.
 
@@ -110,7 +109,7 @@ The fixtures use datasets that ship with R in its `datasets` package: iris, fait
 
 Blackard, J. (1998). [Covertype](https://doi.org/10.24432/C50K5N) [Dataset]. UCI Machine Learning Repository. It's licensed under CC BY 4.0.
 
-The benchmarks read the [data file](https://archive.ics.uci.edu/ml/machine-learning-databases/covtype/covtype.data.gz) saved as `tmp/covertype/covtype.data.gz`: 581,012 rows, of which they use the first 10 columns, the continuous ones. They're all whole numbers, so there are plenty of ties. `benchmarks/covertype.R` stops unless the file's SHA-256 is this one:
+The benchmarks read the [data file](https://archive.ics.uci.edu/ml/machine-learning-databases/covtype/covtype.data.gz) saved as `tmp/covertype/covtype.data.gz`: 581,012 rows, of which they use the first 10 columns, the continuous ones. They're all whole numbers, so there are plenty of ties. The original R benchmark checked the file against this SHA-256:
 
 ```text
 614360d0257557dd1792834a85a1cdebfadc3c4f30b011d56afee7ffb5b15771
@@ -126,9 +125,9 @@ The fixtures in `tests/fixtures/flow/` are three of its files, `154`, `202` and 
 
 ## What R recorded
 
-Every R result the tests compare with comes from R itself. A few were checked by hand in an R session and written into the tests, such as the cancelling-weight cases in `tests/wcluster/test_wstats.py` and `arithmetic_complexity` on an `x` with no rows or no columns. The long double fuzz checks against a Python reference instead of R. Everything else comes from the scripts in `r/`. They run R 4.6.1 with the pinned packages, trace the functions under test without modifying them, and write the inputs, the outputs, every random draw and the internal values that matter into `tests/fixtures/`. Each case carries a manifest with the R version, the package versions, the BLAS and the long double width. Running the tests doesn't need R. Fixtures are recorded on one machine only, the laptop with the pinned R. There are 544 cases in 23 groups:
+Every R result the tests compare with comes from R itself. A few were checked by hand in an R session and written into the tests, such as the cancelling-weight cases in `tests/wcluster/test_wstats.py` and `arithmetic_complexity` on an `x` with no rows or no columns. The long double fuzz checks against a Python reference instead of R. Everything else was recorded by local R fixture generators. They ran R 4.6.1 with the pinned packages, traced the functions under test without modifying them, and wrote the inputs, the outputs, every random draw and the internal values that matter into `tests/fixtures/`. Each case carries a manifest with the R version, the package versions, the BLAS and the long double width. Running the tests doesn't need R. The fixtures were recorded on one machine, the laptop with the pinned R. There are 544 cases in 23 groups:
 
-| Group | Script in `r/` | Cases | What R recorded |
+| Group | Original generator (not distributed) | Cases | What R recorded |
 | --- | --- | --- | --- |
 | `create_dn` | `fixtures_create_dn.R` | 37 | `create.DN` inputs, every random draw, every `create.DNcenters` call, and the outputs |
 | `refine_dn` | `fixtures_refine_dn.R` | 128 | the input nuggets, every draw, every `kmeans` call with the rows it clustered, the messages and warnings, and the refined nuggets |
@@ -148,7 +147,7 @@ Every R result the tests compare with comes from R itself. A few were checked by
 | `dn_wcluster` | `fixtures_dn_wcluster.R` | 8 | two quakes datanuggets and a data frame of new rows, `DN.Wkmeans`, `DN.Whclust`, `DN.Wpca` and `DNcluster.predict` on them, and R's messages and outputs on a datanugget with one variable and on a matrix `newx` |
 | `plot` | `fixtures_plot.R` | 18 | `cutree` at every `k` and at every height, the midpoints and both infinities on the 13 trees of the `whclust` and `dn_wcluster` groups, the lines `plot.hclust` drew for each tree it draws, read back from its PDF, and for one of them again at two other hangs and with its heights out of order, the disc `pch = 16` draws at `cex` 1 and 0.5, the help examples' nugget colors, and R's stops in all three |
 
-Arrays are stored as raw little-endian float64 or int32, row-major, and `manifest.json` gives each one's shape. The flow fixtures aren't among the 544: they come from Prof. Cabrera's Python, not from R. Regenerating fixtures is covered in [development.md](https://github.com/ron2k1/datanuggets/blob/main/docs/development.md) and [r/README.md](../r/README.md).
+Arrays are stored as raw little-endian float64 or int32, row-major, and `manifest.json` gives each one's shape. The flow fixtures aren't among the 544: they come from Prof. Cabrera's Python, not from R. The fixture data is included; the R generators are not distributed. See [development.md](https://github.com/ron2k1/datanuggets/blob/main/docs/development.md) for running the recorded checks.
 
 ## Experiments
 
@@ -170,7 +169,7 @@ The suite ran on both machines at the commit that merged into `main`, with no fa
 | Laptop, i7-13650HX | Windows 11, Python 3.14.3 and 3.15.0, numpy 2.5.3, scipy 1.18.1, numba 0.68.0 | the default suite and the slow fuzz on each Python. Two tests skip because Windows has no `os.fork` |
 | Mac mini, Apple M4 | macOS 26.6.2 arm64, Python 3.14.3 and 3.15.0, numpy 2.5.3, scipy 1.18.1, numba 0.68.0 | the default suite on 8 workers on each Python, the two fork tests included |
 
-That commit is `ad662ba`, the merge of PR #7 on 2026-10-09. It holds steps 1 to 10 of the history in [development.md](https://github.com/ron2k1/datanuggets/blob/main/docs/development.md). `wkmeans`, `whclust`, the `dn_` functions, the plots and the flow finder came after it and weren't part of this run.
+That commit is `ad662ba`, the merge of PR #7 on 2026-10-09. It includes the original nugget functions, weighted statistics and their speed improvements. `wkmeans`, `whclust`, the `dn_` functions, the plots and the flow finder came after it and weren't part of this run.
 
 The package layout change was also checked from a built wheel. The wheel holds the same files as `src/`, and the suite passed in a clean virtual environment from outside the repo.
 
@@ -178,21 +177,16 @@ The package layout change was also checked from a built wheel. The wheel holds t
 
 This is the large-data regression check. The fixtures are small, so both packages also run on Covertype: the full 581,012 rows, and random subsets of 10,000 and 100,000 rows that `covertype.R` draws once in R after `set.seed(20260929)`. Each size runs `create.DN` with R's defaults, then `refine.DN` on its result with shape splits off and on. The only change from R's defaults is `no.cores = 1`, and `n_jobs=1` in Python, so R's random draws can be recorded in order. Python takes the rows from R's output and replays R's draws the way the tests do. `refine_dn` starts from R's `create.DN` output, so a mismatch in `create_dn` can't hide one in `refine_dn`.
 
-The R script needs the data file and the private R library from [r/README.md](../r/README.md). Run it first, then the Python script with the same size:
+The Python comparison requires previously recorded R inputs, draws, outputs and timings under `tmp/covertype/out/`. These records and their R generator are not distributed; downloading Covertype alone is not enough. If you have those local records, run the matching size (`10000`, `100000` or `all`):
 
 ```sh
-Rscript benchmarks/covertype.R 10000
 uv run python benchmarks/covertype.py 10000
-```
-
-The size is `10000`, `100000` or `all`, and `covertype.py` stops without one. Add `noshape` to the `Rscript` line to skip shape splits, as the full-size runs did:
-
-```sh
-Rscript benchmarks/covertype.R all noshape
 uv run python benchmarks/covertype.py all
 ```
 
-`covertype.R` writes each call's inputs, draws, outputs, seconds, messages and warnings to `tmp/covertype/out/covertype_<size>_create`, `_refine` and `_refine_shape`, and prints one line per call with its seconds, its nugget count and how many draws it made. `covertype.py` prints a JSON report: `n` and `p`, then for `create`, `refine` and `refine_shape` the Python seconds `python_s`, R's recorded seconds `r_s`, the nugget counts, and one true or false for each of `assignments`, `weights`, `centers`, `scales`, `messages` and `warnings`. When the assignments differ it adds how many. It skips a refine step whose R output is missing. It exits nonzero only on an error, such as the port asking for a draw R didn't make or leaving one unread, so read the checks in the report.
+The recorded full-size runs skipped shape splits.
+
+The original R benchmark wrote each call's inputs, draws, outputs, seconds, messages and warnings to `tmp/covertype/out/covertype_<size>_create`, `_refine` and `_refine_shape`, and printed one line per call with its seconds, its nugget count and how many draws it made. `covertype.py` prints a JSON report: `n` and `p`, then for `create`, `refine` and `refine_shape` the Python seconds `python_s`, R's recorded seconds `r_s`, the nugget counts, and one true or false for each of `assignments`, `weights`, `centers`, `scales`, `messages` and `warnings`. When the assignments differ it adds how many. It skips a refine step whose R output is missing. It exits nonzero only on an error, such as the port asking for a draw R didn't make or leaving one unread, so read the checks in the report.
 
 Assignments, weights, centers, scales, progress messages and warnings matched exactly in every run, and every output matched R's at all three sizes with the code merged at `ad662ba`. At 100,000 rows the shape-split run replayed 383,475 draws.
 
@@ -219,7 +213,7 @@ They ran on the laptop (i7-13650HX, 16 GB, Windows 11). R was 4.6.1 with `datanu
 
 ### Covertype: where the time goes
 
-`benchmarks/profile_stop.py` checks the speed work's stopping rule: no function written in Python in `src/datanuggets` may take more than 10% of the run's wall time by cProfile's own time, for `create_dn` and for `refine_dn` without shape splits, on R's replayed draws. cProfile can't see into numba, so the script wraps each kernel in a Python function named `compiled_<kernel>` that books the kernel's time under that name. It reads the outputs of `covertype.R` for the size it's given, which takes the same values as `covertype.py`'s, and runs at `100000` without one:
+`benchmarks/profile_stop.py` checks the speed work's stopping rule: no function written in Python in `src/datanuggets` may take more than 10% of the run's wall time by cProfile's own time, for `create_dn` and for `refine_dn` without shape splits, on R's replayed draws. cProfile can't see into numba, so the script wraps each kernel in a Python function named `compiled_<kernel>` that books the kernel's time under that name. It needs the same local R baseline records as `covertype.py`, for the requested size, and defaults to `100000`. Those records are not distributed:
 
 ```sh
 uv run python benchmarks/profile_stop.py 100000
@@ -231,19 +225,15 @@ The rule passed on the laptop at 100,000 rows, 5.8% for `create_dn` and 3.6% for
 
 ### WCluster: whclust and wkmeans against R
 
-`whclust` and `wkmeans` ran on the first n rows of R's `quakes` with the weights 1, 3, 7, 2 repeating, `wkmeans` with k = 4, R's defaults otherwise (one start, 10 iterations, seed 291102) and R's draws replayed. These are the workloads behind the speed gates in the [design spec](https://github.com/ron2k1/datanuggets/blob/main/docs/specs/2026-10-09-wcluster-iterative-port-design.md), section 10. The port is checked against R bit for bit: `merge`, `height` and `order` for `whclust`, and the labels, centers, each cluster's WWCSS and the total for `wkmeans`. The port alone also runs `whclust` on the first 2,000 Covertype rows, `wkmeans` with k = 4 and `RDraws(291102)` on the first 10,000, and `dn_whclust` on the 2,000 nuggets R's `create.DN` made of the 100,000-row subset.
+`whclust` and `wkmeans` ran on the first n rows of R's `quakes` with the weights 1, 3, 7, 2 repeating, `wkmeans` with k = 4, R's defaults otherwise (one start, 10 iterations, seed 291102) and R's draws replayed. These are the workloads behind the speed checks listed below. The port is checked against R bit for bit: `merge`, `height` and `order` for `whclust`, and the labels, centers, each cluster's WWCSS and the total for `wkmeans`. The port alone also runs `whclust` on the first 2,000 Covertype rows, `wkmeans` with k = 4 and `RDraws(291102)` on the first 10,000, and `dn_whclust` on the 2,000 nuggets R's `create.DN` made of the 100,000-row subset.
 
-R's `Whclust` is timed once, since it takes minutes. R's `Wkmeans` is the best of 3 untraced runs, and one more traced run records its draws. Python takes the best of 3 when a run takes under a second, and one run otherwise. The scripts say to run them under `pin.py`, in one sitting:
+R's `Whclust` is timed once, since it takes minutes. R's `Wkmeans` is the best of 3 untraced runs, and one more traced run records its draws. Python takes the best of 3 when a run takes under a second, and one run otherwise. The original comparison ran both languages under `pin.py` in one sitting. With the local R baseline records already present, the Python side runs as:
 
 ```sh
-Rscript benchmarks/wcluster.R whclust200
-Rscript benchmarks/wcluster.R whclust400
-Rscript benchmarks/wcluster.R whclust800
-Rscript benchmarks/wcluster.R wkmeans
 uv run python benchmarks/wcluster.py
 ```
 
-`whclust800` is the long one in R: 11 minutes on the M4 mini, and 49 on the laptop when it was short of memory. `wcluster.R` writes each workload to `tmp/wcluster/out/` and prints its seconds. `wcluster.py` also needs the Covertype file and, for its `dn_whclust` row, the `covertype.R 100000` outputs. It prints the first calls' time, a table of R seconds, Python seconds, speedup and whether every output equals R's, then one PASS or FAIL line per gate, and exits with 1 on a FAIL. A missing R output gets a line saying which script to run, and the gates that need it fail. The six gates are `whclust` on quakes under 1 s at 200 and 400 rows, and at 800 rows while equal to R, `wkmeans` on quakes at least 50 times faster than R at each n, `whclust` on 2,000 Covertype rows under 10 s, `wkmeans` on 10,000 Covertype rows under 30 s, and `dn_whclust` on 2,000 nuggets under 10 s. The quakes gates also require every output to equal R's.
+`whclust800` is the long one in R: 11 minutes on the M4 mini, and 49 on the laptop when it was short of memory. The original R benchmark wrote each workload to `tmp/wcluster/out/` and printed its seconds. `wcluster.py` also needs the Covertype file and, for its `dn_whclust` row, the local R outputs for the 100,000-row Covertype run. It prints the first calls' time, a table of R seconds, Python seconds, speedup and whether every output equals R's, then one PASS or FAIL line per gate, and exits with 1 on a FAIL. A missing R output is reported as a missing local baseline, and the gates that need it fail. These baseline records are not included in a fresh clone. The six gates are `whclust` on quakes under 1 s at 200 and 400 rows, and at 800 rows while equal to R, `wkmeans` on quakes at least 50 times faster than R at each n, `whclust` on 2,000 Covertype rows under 10 s, `wkmeans` on 10,000 Covertype rows under 30 s, and `dn_whclust` on 2,000 nuggets under 10 s. The quakes gates also require every output to equal R's.
 
 On the laptop on 2026-10-20, unpinned and against the R outputs behind the laptop's R column below, it printed this. Its Python times are an unpinned run's, not the recorded ones:
 

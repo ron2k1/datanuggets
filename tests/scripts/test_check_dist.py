@@ -127,6 +127,10 @@ def test_files_outside_the_allowlist(tmp_path):
             tmp_path / "dist",
             sdist={
                 "docs/plan.md": "x",
+                "docs/specs/design.md": "x",
+                "docs/plans/implementation.md": "x",
+                "docs/reviews/review.md": "x",
+                "r/setup.R": "x",
                 ".scratch/sdd/notes.md": "x",
                 "benchmarks/run.py": "x",
                 "uv.lock": "x",
@@ -138,6 +142,10 @@ def test_files_outside_the_allowlist(tmp_path):
     )
     for member in (
         "docs/plan.md",
+        "docs/specs/design.md",
+        "docs/plans/implementation.md",
+        "docs/reviews/review.md",
+        "r/setup.R",
         ".scratch/sdd/notes.md",
         "benchmarks/run.py",
         "uv.lock",
@@ -147,7 +155,7 @@ def test_files_outside_the_allowlist(tmp_path):
         assert has(got, ".tar.gz", member, "not on the allowlist"), member
     for member in ("tests/test_x.py", "other/__init__.py"):
         assert has(got, ".whl", member, "not on the allowlist"), member
-    assert len(got) == 8
+    assert len(got) == 12
 
 
 def test_cache_files(tmp_path):
@@ -162,9 +170,9 @@ def test_cache_files(tmp_path):
                 "tests/.hypothesis/examples/x": b"\0",
                 "tests/.mypy_cache/x.json": b"\0",
                 "tests/.coverage": b"\0",
-                "r/.Rhistory": b"\0",
-                "r/setup.R.orig": b"\0",
-                "r/setup.R~": b"\0",
+                "tests/.Rhistory": b"\0",
+                "tests/setup.R.orig": b"\0",
+                "tests/setup.R~": b"\0",
             },
             wheel={
                 "datanuggets/nuggets/create.create_dn-12.py314.nbi": b"\0",
@@ -184,9 +192,9 @@ def test_cache_files(tmp_path):
         "tests/.hypothesis/examples/x",
         "tests/.mypy_cache/x.json",
         "tests/.coverage",
-        "r/.Rhistory",
-        "r/setup.R.orig",
-        "r/setup.R~",
+        "tests/.Rhistory",
+        "tests/setup.R.orig",
+        "tests/setup.R~",
     ):
         assert has(got, member, "cache file"), member
     assert len(got) == 13
