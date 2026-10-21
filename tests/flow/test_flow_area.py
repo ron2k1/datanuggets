@@ -1,10 +1,12 @@
-"""find_area: the corrected rule on the recorded peaks and on random grids, the blob his version
-misses, and his cells as the mirrored disc on real data."""
+"""find_area: the corrected rule on the recorded peaks and on random grids, the blob cfc.py's
+version misses, and cfc.py's cells as the mirrored disc on real data, stated directly and as
+datanuggets.flow.mirrored_area."""
 
 import numpy as np
 import pytest
 
 from datanuggets.flow import find_area
+from datanuggets.flow import mirrored_area as flow_mirrored_area
 from flowcases import NAMES, FlowCase, T, fixed_area, load_case, mirrored_area
 
 
@@ -43,6 +45,21 @@ def test_his_cells_are_the_mirrored_disc(name):
     for k, (i, j) in enumerate(c.peaks):
         want = FlowCase.cells(c.his_area, k)
         assert np.array_equal(mirrored_area(c.z.T, i, j, *_thresholds(k)), want)
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_flow_mirrored_area_gives_the_recorded_his_area_cells(name):
+    c = load_case(name)
+    for k, (i, j) in enumerate(c.peaks):
+        got = flow_mirrored_area(c.z.T, i, j, *_thresholds(k))
+        assert np.array_equal(got, FlowCase.cells(c.his_area, k))
+        assert np.array_equal(got, mirrored_area(c.z.T, i, j, *_thresholds(k)))
+
+
+def test_both_area_rules_take_a_nested_list_as_find_area_does():
+    x = np.random.default_rng(2).gamma(1.0, size=(30, 30))
+    for rule in (find_area, flow_mirrored_area):
+        assert np.array_equal(rule(x.tolist(), 10, 20, 8, 0.5), rule(x, 10, 20, 8, 0.5))
 
 
 def test_on_the_diagonal_his_rule_and_ours_agree():

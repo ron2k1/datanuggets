@@ -44,6 +44,11 @@ Paper = "https://doi.org/10.1080/10618600.2024.2341896"
 frame = ["pandas>=2.2"]
 progress = ["tqdm>=4.66"]
 plot = ["matplotlib>=3.9"]
+# datanuggets-flow: FCS files in, the populations you pick out of the gates clustered
+flow = ["flowio>=1.4,<1.5", "matplotlib>=3.9", "pandas>=2.2"]
+
+[project.scripts]
+datanuggets-flow = "datanuggets.flow.pick:main"
 
 [dependency-groups]
 dev = [

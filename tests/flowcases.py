@@ -11,7 +11,8 @@ import numpy as np
 from scipy.spatial import ConvexHull
 
 FLOW = Path(__file__).parent / "fixtures" / "flow"
-NAMES = tuple(sorted(p.stem for p in FLOW.glob("*.npz")))
+# the recorded files, named for their FCS files' numbers; 202_fluor.npz is the CLI test's
+NAMES = tuple(sorted(p.stem for p in FLOW.glob("*.npz") if p.stem.isdigit()))
 EDGE_TOL = 1e-9  # of the data's range: how near the hull's edge an event gated differently may be
 T = ((22, 0.25), (20, 0.5))  # his t11, t21 for the first peak, t12, t22 for the rest
 
