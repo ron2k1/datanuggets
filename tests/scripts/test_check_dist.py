@@ -27,6 +27,7 @@ SDIST = {
     "src/datanuggets/__init__.py": "",
     "tests/conftest.py": "",
     "tests/fixtures/case.json": '{"x": [1.5, 2e-300]}',
+    **dict.fromkeys(check_dist.USER_GUIDES, "# User guide\n"),
 }
 WHEEL = {
     "datanuggets/__init__.py": "",
@@ -111,6 +112,13 @@ def has(problems, *parts):
 def test_clean_build_passes(tmp_path):
     assert check_dist.check(build(tmp_path / "dist")) == []
     assert check_dist.check(build(tmp_path / "dist2"), expect_version="1.0") == []
+
+
+def test_source_archive_requires_user_guides_and_example(tmp_path):
+    got = check_dist.check(build(tmp_path / "dist", drop=check_dist.USER_GUIDES))
+    for member in check_dist.USER_GUIDES:
+        assert has(got, ".tar.gz", member, "missing"), member
+    assert len(got) == len(check_dist.USER_GUIDES)
 
 
 def test_files_outside_the_allowlist(tmp_path):

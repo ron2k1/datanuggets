@@ -29,7 +29,21 @@ NAME = "datanuggets"
 # The sdist's allowlist, relative to its top folder: pyproject.toml's only-include and exclude,
 # and the PKG-INFO and .gitignore the build adds. It's kept apart from pyproject.toml on purpose,
 # so that a change to only-include has to get past this too.
-SDIST_FILES = frozenset({"PKG-INFO", ".gitignore", "pyproject.toml", "LICENSE", "README.md"})
+USER_GUIDES = (
+    "docs/README.md",
+    "docs/installation.md",
+    "docs/quickstart.md",
+    "docs/api.md",
+    "docs/cli.md",
+    "docs/limitations.md",
+    "docs/compatibility.md",
+    "docs/methodology.md",
+    "docs/reproducibility.md",
+    "examples/first_analysis.py",
+)
+SDIST_FILES = frozenset(
+    {"PKG-INFO", ".gitignore", "pyproject.toml", "LICENSE", "README.md", *USER_GUIDES}
+)
 SDIST_DIRS = ("src/datanuggets/", "tests/", "r/")
 SDIST_EXCLUDED = ("tests/scripts/",)
 SDIST_REQUIRED = (
@@ -39,6 +53,7 @@ SDIST_REQUIRED = (
     "README.md",
     "src/datanuggets/__init__.py",
     "tests/conftest.py",
+    *USER_GUIDES,
 )
 
 # Caches and leftovers a build can sweep in from a working tree: Python's and its tools', numba's

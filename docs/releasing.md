@@ -1,59 +1,74 @@
 # Releasing
 
-`release.yml` publishes the package. Run by hand from the Actions tab, it uploads to TestPyPI. A pushed `v*` tag uploads to PyPI. Either way its first job, `gate`, stops the run unless the commit is on `main` and, for a tag, the tag is `v` and the version in `pyproject.toml`. Then it runs `tests.yml` (Linux, 3.12 to 3.15), `matrix.yml` (Windows and macOS, 3.12 to 3.15) and `package.yml` (the build, `scripts/check_dist.py`, `twine check` and the installed-wheel test), and it uploads only the two files `package.yml` checked.
+The repository is prepared for a future PyPI release; the current installation route is [GitHub `main`](installation.md). Updating documentation or merging a pull request does not publish a package. Publishing starts only when a maintainer runs the release workflow or pushes a release tag.
 
-Both uploads use Trusted Publishing. No token is stored in the repo or its secrets. The index trusts a run of `release.yml` from this repo in a named GitHub environment, and the job gets a short-lived token for that one upload.
+## What the workflow does
 
-By default the upload action also attaches attestations, signed records of the run that built each file. Each names the repo, the workflow file and the commit, and goes in Sigstore's public log, so those are public from the first upload even while the repo is private. `attestations: false` on the upload step turns them off.
+`.github/workflows/release.yml` is on `main`. A manual run uploads to TestPyPI; a pushed `v*` tag uploads to PyPI. Its first job requires the selected commit to be in `main`'s history. A tag must also match `pyproject.toml`: for example, `v0.1.0a1` for version `0.1.0a1`.
 
-## One-time setup
+Before uploading, the workflow runs:
 
-These need the account owner, and nothing can be uploaded until they're done.
+- Linux tests on Python 3.12–3.15, including the slow tier on 3.14 and 3.15.
+- Windows and macOS tests on Python 3.12–3.15.
+- A source archive and wheel build, the distribution audit, `twine check`, and tests against the installed wheel.
 
-1. On [test.pypi.org](https://test.pypi.org/manage/account/publishing/) and on [pypi.org](https://pypi.org/manage/account/publishing/), add a pending trusted publisher. The two sites have separate accounts, and PyPI needs two-factor sign-in.
+Only the checked archives are uploaded. Both indexes use [Trusted Publishing](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/), so a repository API token is not required. The publishing action creates provenance attestations by default; those identify the repository, workflow and commit publicly, including when the source repository is private.
+
+## One-time account setup
+
+The account owner must configure publishing before the first upload. These settings are separate from the files committed to the repository.
+
+1. Create a pending trusted publisher in [TestPyPI](https://test.pypi.org/manage/account/publishing/) and [PyPI](https://pypi.org/manage/account/publishing/), using the following exact values. The sites have separate accounts.
 
    | Field | TestPyPI | PyPI |
-   |---|---|---|
-   | PyPI project name | `datanuggets` | `datanuggets` |
+   | --- | --- | --- |
+   | Project name | `datanuggets` | `datanuggets` |
    | Owner | `ron2k1` | `ron2k1` |
-   | Repository name | `datanuggets` | `datanuggets` |
-   | Workflow name | `release.yml` | `release.yml` |
-   | Environment name | `testpypi` | `pypi` |
+   | Repository | `datanuggets` | `datanuggets` |
+   | Workflow | `release.yml` | `release.yml` |
+   | Environment | `testpypi` | `pypi` |
 
-   A pending publisher doesn't reserve the name. The first upload creates the project, so until then someone else can take `datanuggets`.
+   A pending publisher does not reserve a project name; verify availability before planning the first release.
 
-2. In the repo's Settings, under Environments, create `testpypi` and `pypi`. Under Deployment branches and tags, limit `testpypi` to the branch `main` and `pypi` to tags matching `v*`.
+2. In GitHub Settings → Environments, create `testpypi` and `pypi`. Restrict `testpypi` to branch `main` and `pypi` to tags matching `v*`. Add deployment approval where the repository's plan supports it, and limit release-tag access to maintainers.
+3. Before a public release, make sure the repository and the README's documentation links are accessible to the intended audience. Confirm the license, credits, compatibility notes and known limitations describe the version being released.
 
-There's no approval step while the repo is private. On GitHub Pro, an environment's required reviewers work only on public repos. Until then, anyone who can push a `v*` tag to a commit on `main` can release, so keep write access to people who may. Once the repo is public, add yourself as a required reviewer on `pypi`, and every upload will wait for you.
+## Test a release candidate
 
-## A dry run on TestPyPI
+For a first public alpha, a version such as `0.1.0a1` communicates its status. The following commands use that version as an example; substitute the version actually merged to `main`.
 
-GitHub lists a workflow under Run workflow only once its file is on the default branch, so this works after the branch that adds `release.yml` is merged.
-
-1. In Actions, pick release, then Run workflow on `main`. `gate` stops a run from any commit that isn't on `main`.
-2. When it finishes, the files are at [test.pypi.org/p/datanuggets](https://test.pypi.org/p/datanuggets). To install from there, with the dependencies from PyPI:
-
-   ```sh
-   pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ datanuggets==0.1.0.dev0
-   ```
-
-TestPyPI takes each version once, like PyPI. A second dry run needs a new version in `pyproject.toml`, such as `0.1.0.dev1`.
-
-## A release
-
-1. Set the version in `pyproject.toml`, such as `0.1.0`, and merge it to `main`. That's the only place the version is written. `datanuggets.__version__` reads it from the installed metadata.
-2. Do a dry run of that commit, as above.
-3. Tag the same commit and push the tag:
+1. Update `project.version` in `pyproject.toml`, refresh `uv.lock` with `uv lock`, and merge both changes to `main`. The library reads `datanuggets.__version__` from installed package metadata.
+2. In GitHub Actions, select **release → Run workflow → main**. This uploads to TestPyPI after all checks pass.
+3. In a fresh environment, download the exact wheel from TestPyPI without dependencies, then install that local wheel with dependencies from PyPI:
 
    ```sh
-   git tag -a v0.1.0 -m "datanuggets 0.1.0"
-   git push origin v0.1.0
+   python -m pip download --index-url https://test.pypi.org/simple/ --no-deps --only-binary=:all: --dest tmp/testpypi datanuggets==0.1.0a1
+   python -m pip install --index-url https://pypi.org/simple/ "tmp/testpypi/datanuggets-0.1.0a1-py3-none-any.whl[frame,plot,flow]"
+   python -c "import datanuggets; print(datanuggets.__version__)"
+   datanuggets-flow --help
    ```
 
-4. `gate` refuses a tag that isn't on `main` or doesn't match `pyproject.toml` before any tests run. After the tests, the `pypi` job runs the checker again on the downloaded files with `--expect-version 0.1.0`, so the files that go up are the version the tag names. Then they're at [pypi.org/p/datanuggets](https://pypi.org/p/datanuggets).
+   This makes the candidate's source explicit. An `--extra-index-url` does not give TestPyPI priority over PyPI; pip considers matching candidates across indexes. See [pip's package selection documentation](https://pip.pypa.io/en/stable/cli/pip_install/#finding-packages).
 
-A version can't be uploaded twice or replaced. A broken release is fixed with a new version, and the broken one can be yanked on PyPI, which keeps it installable only by its exact version.
+4. Run `python examples/first_analysis.py` from a checkout of that same commit, using the fresh environment. It must produce a plot and two CSV files under `outputs/`. Exercise the CLI with representative FCS files before advertising the flow workflow for a study.
 
-## The full matrix on a pull request
+TestPyPI requires a new version for each new set of release files. Bump the alpha suffix for another candidate, for example `0.1.0a2`.
 
-`matrix.yml` doesn't run on every push, since macOS and Windows minutes cost 10 and 2 times as much on a private repo. Add the `matrix` label to a pull request to run it. Remove the label and add it again to run it on a later push.
+## Publish the tested commit
+
+After the candidate passes, tag the exact commit tested above and push that tag:
+
+```sh
+git switch main
+git pull --ff-only origin main
+git tag -a v0.1.0a1 TESTED_COMMIT_SHA -m "datanuggets 0.1.0a1"
+git push origin v0.1.0a1
+```
+
+Replace `TESTED_COMMIT_SHA` with the candidate's full commit hash. The workflow reruns its checks and confirms the built version matches the tag before uploading to [PyPI](https://pypi.org/p/datanuggets/). Verify the published metadata, install that exact version in a fresh environment, and then update the README and installation guide to use PyPI. For an alpha, show a pinned version such as `python -m pip install "datanuggets[frame,plot]==0.1.0a1"`.
+
+Published files cannot be replaced. Fix a broken release with a new version; yanking can discourage installation of the broken version without deleting its history.
+
+## Run the full platform matrix on a pull request
+
+Add the `matrix` label to run the Windows and macOS jobs before merging. Remove and re-add the label to rerun them after a later push. The release workflow always runs this matrix.

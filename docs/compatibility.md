@@ -1,6 +1,6 @@
 # Compatibility with R
 
-`datanuggets` ports CRAN's `datanugget` 1.5.0 and `WCluster` 1.3.0. On the 544 cases recorded from R it matches R bit for bit, except for the eigen solver's output and the differences on this page. This page lists what is ported, how R's names and arguments map to Python's, and where the behavior differs from R's. The recorded cases and the R build they came from are in [reproducibility.md](reproducibility.md), and the per-function parity tables are in [validation/](validation/). What the port can't guarantee is in [limitations.md](limitations.md).
+`datanuggets` ports CRAN's `datanugget` 1.5.0 and `WCluster` 1.3.0. On the 544 cases recorded from R it matches R bit for bit, except for the eigen solver's output and the differences on this page. This page lists what is ported, how R's names and arguments map to Python's, and where the behavior differs from R's. The recorded cases and the R build they came from are in [reproducibility.md](reproducibility.md), and the per-function parity tables are in [validation/](https://github.com/ron2k1/datanuggets/blob/main/docs/validation/). What the port can't guarantee is in [limitations.md](limitations.md).
 
 ## Ported functions
 
@@ -45,7 +45,7 @@ from datanuggets._random.r_draws import RDraws
 
 ### Not ported
 
-`datanugget`'s `optimal.DN` is still to port, and it gets its own spec ([open problem 7](limitations.md#open-problems)). The [plotting spec](specs/2026-10-10-plotting-design.md) leaves its elbow and difference plots to that port.
+`datanugget`'s `optimal.DN` is still to port, and it gets its own spec ([open problem 7](limitations.md#open-problems)). The [plotting spec](https://github.com/ron2k1/datanuggets/blob/main/docs/specs/2026-10-10-plotting-design.md) leaves its elbow and difference plots to that port.
 
 `datanuggets.flow` doesn't come from R. It ports Prof. Cabrera's Python gate finder for flow cytometry, `lymphmacro_finder`, and is checked against the reference code piece by piece. Its departures from that code are in [methodology.md](methodology.md), and the `datanuggets-flow` command built on it is in [cli.md](cli.md).
 

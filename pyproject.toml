@@ -35,6 +35,7 @@ dependencies = [
 
 [project.urls]
 Source = "https://github.com/ron2k1/datanuggets"
+Documentation = "https://github.com/ron2k1/datanuggets/blob/main/docs/README.md"
 Issues = "https://github.com/ron2k1/datanuggets/issues"
 "datanugget (R)" = "https://CRAN.R-project.org/package=datanugget"
 "WCluster (R)" = "https://CRAN.R-project.org/package=WCluster"
@@ -71,7 +72,19 @@ packages = ["src/datanuggets"]
 # its own would otherwise ship. scripts/check_dist.py holds the same list and checks the build.
 # tests/scripts tests that checker, which isn't shipped.
 [tool.hatch.build.targets.sdist]
-only-include = ["src/datanuggets", "tests", "r", "LICENSE", "README.md", "pyproject.toml"]
+only-include = [
+    "src/datanuggets", "tests", "r", "LICENSE", "README.md", "pyproject.toml",
+    "docs/README.md",
+    "docs/installation.md",
+    "docs/quickstart.md",
+    "docs/api.md",
+    "docs/cli.md",
+    "docs/limitations.md",
+    "docs/compatibility.md",
+    "docs/methodology.md",
+    "docs/reproducibility.md",
+    "examples/first_analysis.py",
+]
 exclude = ["tests/scripts"]
 
 [tool.pytest.ini_options]
