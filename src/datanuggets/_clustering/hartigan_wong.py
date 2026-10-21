@@ -1,3 +1,8 @@
+# Adapted from R's kmns.f: (C) Royal Statistical Society 1979.
+# Upstream modifications: B. D. Ripley, 1998-06-17; M. Maechler, 2001-04-12.
+# Python adaptation by Ronil Basu, recorded 2026-10-21: zero-based indexing,
+# Python interfaces and compiled-kernel dispatch. GPL-2.0-only; no warranty.
+# See LICENSE and THIRD_PARTY.md for the license and source notices.
 """Hartigan-Wong k-means as R's stats::kmeans runs it.
 
 _HW is a line-by-line port of R's kmns.f (Hartigan and Wong 1979, algorithm AS 136, with R's

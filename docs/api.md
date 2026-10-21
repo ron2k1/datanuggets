@@ -1,6 +1,6 @@
 # API reference
 
-This manual documents the public Python API for **datanuggets 0.1.0.dev0**. For installation and a first analysis, start with the [installation guide](installation.md) and [quickstart](quickstart.md). This page gives function-level arguments, return values, examples, and compatibility notes.
+This manual documents the public Python API for **datanuggets 0.1.0a1**. For installation and a first analysis, start with the [installation guide](installation.md) and [quickstart](quickstart.md). This page gives function-level arguments, return values, examples, and compatibility notes.
 
 The 18 core functions are exported from `datanuggets`. Eight flow helpers live in `datanuggets.flow`, and nine plotting helpers live in `datanuggets.plot`.
 

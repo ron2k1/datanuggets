@@ -4,7 +4,7 @@
 
 ## Ported functions
 
-Version `0.1.0.dev0` is in development. Eighteen functions are ported:
+Version `0.1.0a1` is a research alpha. Eighteen functions are ported:
 
 | Python | R | R package |
 | --- | --- | --- |

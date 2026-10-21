@@ -8,13 +8,21 @@ This is a native Python port of methods from R's `datanugget` 1.5.0 and `WCluste
 
 [Getting started](https://github.com/ron2k1/datanuggets/blob/main/docs/quickstart.md) · [Function reference](https://github.com/ron2k1/datanuggets/blob/main/docs/api.md) · [Flow cytometry](https://github.com/ron2k1/datanuggets/blob/main/docs/cli.md) · [Limitations](https://github.com/ron2k1/datanuggets/blob/main/docs/limitations.md)
 
-> **Research alpha — `0.1.0.dev0`.** The API may change. The repository currently requires access and the package is not on PyPI. The port is tested against recorded R cases, with [known differences](https://github.com/ron2k1/datanuggets/blob/main/docs/compatibility.md).
+> **Research alpha — `0.1.0a1`.** The API may change. The port is tested against recorded R cases, with [known differences](https://github.com/ron2k1/datanuggets/blob/main/docs/compatibility.md). See the [release notes](https://github.com/ron2k1/datanuggets/blob/main/docs/releases.md) for scope and limitations.
+
+Publication is on hold while the provenance of the GNU sorting helpers is reviewed. See the [third-party notices](https://github.com/ron2k1/datanuggets/blob/main/THIRD_PARTY.md#publication-hold-gnu-sorting-helpers).
 
 ## Get started
 
 ### 1. Install
 
-Use Python 3.12 or newer and Git. Create and activate a [virtual environment](https://github.com/ron2k1/datanuggets/blob/main/docs/installation.md#choose-a-python-version), then install from `main`:
+Use Python 3.12 or newer. Create and activate a [virtual environment](https://github.com/ron2k1/datanuggets/blob/main/docs/installation.md#choose-a-python-version). Once the alpha is published, install its exact version from PyPI:
+
+```sh
+python -m pip install "datanuggets[frame,plot]==0.1.0a1"
+```
+
+For the current source, including before the first publication, install from `main` with Git and repository access:
 
 ```sh
 python -m pip install "datanuggets[frame,plot] @ git+https://github.com/ron2k1/datanuggets.git@main"
@@ -63,12 +71,14 @@ The [walkthrough](https://github.com/ron2k1/datanuggets/blob/main/docs/quickstar
 
 ## Working with FCS files
 
-The experimental `datanuggets-flow` command finds candidate gates, lets you choose populations, and clusters their events across files. Install the `flow` extra to use it:
+The experimental `datanuggets-flow` command finds candidate gates, lets you choose populations, and clusters their events across files. Once the alpha is published, install the `flow` extra at the same version:
 
 ```sh
-python -m pip install "datanuggets[flow] @ git+https://github.com/ron2k1/datanuggets.git@main"
+python -m pip install "datanuggets[flow]==0.1.0a1"
 datanuggets-flow path/to/fcs_folder
 ```
+
+Before publication, use the [source install](https://github.com/ron2k1/datanuggets/blob/main/docs/installation.md#install-from-github) with `[flow]` in place of `[frame,plot]`.
 
 Figures and tables go into a new `outputs/flow-<timestamp>/` folder for each run. Run from the repository root to keep them together there; `outputs/` is ignored by Git. You can choose another new folder with `--out`; existing paths are refused.
 
@@ -86,4 +96,4 @@ See [limitations and open problems](https://github.com/ron2k1/datanuggets/blob/m
 
 Beavers, T. E., et al. *Data Nuggets: A Method for Reducing Big Data While Preserving Data Structure.* Journal of Computational and Graphical Statistics **34**(1), 330–342 (2025; online 2024). DOI: `10.1080/10618600.2024.2341896`.
 
-Licensed under [GPL-2.0-only](https://github.com/ron2k1/datanuggets/blob/main/LICENSE). The R algorithms are the work of Rituparna Dey, Yajie Duan, Traymon Beavers, Javier Cabrera, Ge Cheng, Kunting Qi, and Mariusz Lubomirski (`datanugget`); and Rituparna Dey, Yajie Duan, Javier Cabrera, and Ge Cheng (`WCluster`). The flow gate finder follows Prof. Javier Cabrera's Python translation of his R code.
+The intended package license is [GPL-2.0-only](https://github.com/ron2k1/datanuggets/blob/main/LICENSE), subject to the unresolved sorting-source review above. The R algorithms are the work of Rituparna Dey, Yajie Duan, Traymon Beavers, Javier Cabrera, Ge Cheng, Kunting Qi, and Mariusz Lubomirski (`datanugget`); and Rituparna Dey, Yajie Duan, Javier Cabrera, and Ge Cheng (`WCluster`). The flow gate finder follows Prof. Javier Cabrera's Python translation of his R code. See [third-party notices](https://github.com/ron2k1/datanuggets/blob/main/THIRD_PARTY.md) for upstream credits, permission records, and the separate CC-BY-4.0 license for flow test data in the source archive.

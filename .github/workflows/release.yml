@@ -1,6 +1,6 @@
 # Publishes the sdist and wheel that package.yml built and checked, once the Linux, Windows and
-# macOS tests pass. Run by hand, it uploads to TestPyPI; a pushed v* tag uploads to PyPI. Both
-# use Trusted Publishing, so no token is stored: the index trusts this file run from the named
+# macOS tests pass and the source-provenance hold is resolved. Manual check runs remain available.
+# Both indexes use Trusted Publishing, so no token is stored: the index trusts this file from the named
 # GitHub environment. docs/releasing.md has the one-time setup and the steps.
 name: release
 
@@ -8,6 +8,15 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      destination:
+        description: Check the candidate only, or publish it to TestPyPI
+        type: choice
+        required: true
+        default: check
+        options:
+          - check
+          - testpypi
 
 permissions:
   contents: read
@@ -21,9 +30,8 @@ defaults:
     shell: bash
 
 jobs:
-  # Before an hour of tests: the commit must be on main, and a tag must be v and the version in
-  # pyproject.toml. Environments' required reviewers need a public repo on this plan, so while
-  # it's private this is what stands between a pushed tag and PyPI.
+  # The commit must be on main, and a tag must match the version in pyproject.toml.
+  # Configure environment restrictions and reviewers before enabling publication.
   gate:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -46,6 +54,13 @@ jobs:
             fi
           fi
 
+      # Remove this hold only with a reviewed resolution recorded in THIRD_PARTY.md.
+      - name: Require resolved source provenance before publication
+        if: github.event_name != 'workflow_dispatch' || inputs.destination != 'check'
+        run: |
+          echo "::error::Publication is on hold: GNU sorting-helper provenance must be resolved. See THIRD_PARTY.md."
+          exit 1
+
   tests:
     needs: gate
     uses: ./.github/workflows/tests.yml
@@ -57,7 +72,7 @@ jobs:
     uses: ./.github/workflows/package.yml
 
   testpypi:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.destination == 'testpypi'
     needs: [tests, matrix, package]
     runs-on: ubuntu-latest
     timeout-minutes: 15

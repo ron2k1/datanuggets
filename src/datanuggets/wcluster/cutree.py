@@ -1,3 +1,8 @@
+# R cutree adaptations; upstream notices are in THIRD_PARTY.md.
+# Copyright (C) 1995-2025 The R Core Team.
+# Python adaptation by Ronil Basu, recorded 2026-10-21.
+# GPL version 2; supplied without warranty. See LICENSE and THIRD_PARTY.md.
+
 """cut_tree: R's cutree for one k or one h, on a whclust tree."""
 
 from __future__ import annotations

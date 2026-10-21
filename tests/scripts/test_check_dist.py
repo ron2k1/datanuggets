@@ -23,6 +23,7 @@ SDIST = {
     "PKG-INFO": METADATA,
     "pyproject.toml": '[project]\nname = "datanuggets"\n',
     "LICENSE": "GPL-2.0\n",
+    "THIRD_PARTY.md": "# Third-party notices\n",
     "README.md": "# datanuggets\n",
     "src/datanuggets/__init__.py": "",
     "tests/conftest.py": "",
@@ -33,6 +34,7 @@ WHEEL = {
     "datanuggets/__init__.py": "",
     "datanuggets-{v}.dist-info/METADATA": METADATA,
     "datanuggets-{v}.dist-info/licenses/LICENSE": "GPL-2.0\n",
+    "datanuggets-{v}.dist-info/licenses/THIRD_PARTY.md": "# Third-party notices\n",
 }
 FAKE = frozenset({check_dist.digest("zorblax")})
 
@@ -254,12 +256,19 @@ def test_required_members(tmp_path):
     got = check_dist.check(
         build(
             tmp_path / "dist",
-            drop=("tests/conftest.py", "datanuggets-1.0.dist-info/licenses/LICENSE"),
+            drop=(
+                "tests/conftest.py",
+                "THIRD_PARTY.md",
+                "datanuggets-1.0.dist-info/licenses/LICENSE",
+                "datanuggets-1.0.dist-info/licenses/THIRD_PARTY.md",
+            ),
         )
     )
     assert has(got, ".tar.gz", "missing tests/conftest.py")
     assert has(got, ".whl", "missing datanuggets-1.0.dist-info/licenses/LICENSE")
-    assert len(got) == 2
+    assert has(got, ".tar.gz", "missing THIRD_PARTY.md")
+    assert has(got, ".whl", "missing datanuggets-1.0.dist-info/licenses/THIRD_PARTY.md")
+    assert len(got) == 4
 
 
 def test_versions_agree(tmp_path):
