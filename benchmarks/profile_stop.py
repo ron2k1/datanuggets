@@ -1,4 +1,4 @@
-"""Checks spec section 9.5's stopping rule on Covertype: no function written in Python in
+"""Checks the documented stopping rule on Covertype: no function written in Python in
 src/datanuggets may have a cProfile tottime above 10% of the run's wall time, for create_dn and
 for refine_dn (shape splits off), both with n_jobs=1 on R's replayed draws.
 
@@ -6,7 +6,8 @@ cProfile can't see into numba, so a kernel's time would land in the Python funct
 it. Callers reach kernels through their module (ldjit, rfastjit, centersjit, kmnsjit). For the
 run, each of those references is swapped for a copy whose kernels are wrapped in Python functions
 named compiled_<kernel>, which book the time under that name instead. Run from the repo root
-after benchmarks/covertype.R with the same size:
+with local R records for the same size in tmp/covertype/out/ (not distributed).
+See docs/reproducibility.md for the baseline requirements:
 
     uv run python benchmarks/profile_stop.py [10000 | 100000]
 

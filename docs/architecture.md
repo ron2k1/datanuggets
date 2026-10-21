@@ -1,6 +1,6 @@
 # Architecture
 
-Where the code, tests, fixtures and tools of datanuggets live, which way the imports run, and where new work goes. The last section maps the old paths that the plans, specs and reviews in `docs/` still use.
+Where the code, tests, fixtures and tools of datanuggets live, which way the imports run, and where new work goes. The last section maps module paths used before the package reorganization.
 
 ## Repository
 
@@ -8,19 +8,16 @@ Where the code, tests, fixtures and tools of datanuggets live, which way the imp
 |---|---|
 | `src/datanuggets/` | the package, the only folder that ships in the wheel |
 | `tests/` | the pytest suite, `rfixtures.py` and the R fixtures it reads, and `flowcases.py` and the flow fixtures |
-| `r/` | the R scripts that record the fixtures, with setup in `r/README.md` |
 | `scripts/` | `parity_report.py`, which rebuilds the tables in `docs/validation/`, and `check_dist.py`, which checks a built sdist and wheel before they ship |
-| `benchmarks/` | the Covertype and `WCluster` benchmarks in R and Python, the stopping-rule profiler, the memory meter and the CPU pinning wrapper, and in `benchmarks/flow/` Prof. Cabrera's flow script with the comparison against `datanuggets.flow` |
-| `.github/workflows/` | `tests.yml`, `matrix.yml`, `package.yml`, `bench.yml` and `release.yml`, which [development.md](development.md#what-ci-runs) describes |
+| `benchmarks/` | Python comparison and profiling tools; the Covertype and WCluster comparisons require local R baseline records that are not distributed. `benchmarks/flow/` contains the Python flow reference and comparisons |
+| `.github/workflows/` | `tests.yml`, `matrix.yml`, `package.yml` and `release.yml`, which [development.md](development.md#what-ci-runs) describes |
 | `docs/` | the pages for users and maintainers: installation, quickstart, the `datanuggets-flow` command, methodology, compatibility, reproducibility, development, limitations, releasing and this one |
-| `docs/specs/` | the design specs, dated |
-| `docs/plans/` | implementation plans and decision records, dated |
-| `docs/reviews/` | review reports, dated and kept as written |
+| `examples/` | runnable examples, starting with `first_analysis.py` |
 | `docs/validation/` | one parity table per public function, written by `scripts/parity_report.py` |
 
-The package imports nothing from `tests/`, `r/`, `scripts/` or `benchmarks/`. The wheel holds only `src/datanuggets/` and its metadata. The sdist adds `r/`, the README, the license, `pyproject.toml`, `.gitignore` and `tests/`, leaving out `tests/scripts/`, so its own tests can run against an installed wheel. `scripts/`, `benchmarks/` and `docs/` don't ship.
+The package imports nothing from `tests/`, `scripts/` or `benchmarks/`. The wheel contains the Python package and its metadata. The source archive adds the tests and fixtures (except `tests/scripts/`), user guides, `examples/first_analysis.py`, README, license, `pyproject.toml` and `.gitignore`. Maintainer scripts, benchmarks, internal notes and R source files do not ship.
 
-Some folders a fuller layout would have aren't here, because nothing exists to put in them: the fixture generators are R and stay in `r/` beside their setup notes, and the examples live in the README, `docs/quickstart.md` and `docs/cli.md`, so there is no examples folder. Add each folder with its first file.
+Internal specs, plans and reviews are local files in ignored folders under `docs/`. R source files, the local `r/` tooling and its benchmark workflow are ignored too. Recorded reference fixtures remain tracked so ordinary tests need only Python.
 
 ## The package
 
@@ -159,7 +156,7 @@ A test file holds the R parity cases and the unit cases for the module it covers
 
 - Each case lives in `tests/fixtures/<group>/<case>/`: a `manifest.json` and its arrays as `.bin` files.
 - Tests read them through `rfixtures.py`, and `rfixtures.FIXTURE_ROOT` is the one place that names the location.
-- The `r/fixtures_*.R` scripts record the groups, each case through `write_case` in `r/fixture_io.R`, in the pinned R environment `r/README.md` describes. Most groups come from the script of the same name, and nine don't. `fixtures_rcompat.R` writes `rcompat_split_indices`, `rcompat_dist`, `rcompat_dista`, `rcompat_rowmins` and `rcompat_means`. `fixtures_rstats.R` writes `rcompat_stats` and `fixtures_rwstats.R` writes `rcompat_wstats`. `fixtures_kmeans.R` also writes `kmns`, and `fixtures_wstats.R` also writes `wstats_constructed`. To find the script for any group, search `r/` for its name. A script that reads another group's cases back names that group too, so `create_dn`, `kmeans` and `refine_dn` turn up in more than one script, and the one that records the group is the one whose cases go to `write_case` under that name.
+- R fixture generators recorded the inputs, draws and outputs in the reference environment described in [reproducibility.md](reproducibility.md#what-r-recorded). Those generators are local maintainer tools and are not distributed; the recorded data is included.
 - The flow fixtures are the exception. `tests/fixtures/flow/` holds three `.npz` files recorded by `benchmarks/flow/record.py` from Prof. Cabrera's Python on real PBMC files, not from R, and `202_fluor.npz`, recorded by `benchmarks/flow/record_fluor.py`: three fluorescence channels of the same `202.fcs` events, for the command's end-to-end tests. Their source and keys are in its `README.md`.
 - Fixtures are evidence of what R did. They're never regenerated to make a test pass, and the reorganization left every fixture byte where it was.
 
@@ -178,7 +175,7 @@ The other moved private modules (`_rcompat`, `_rstats`, `_ldjit`, `_ldouble`, `_
 
 ## Old paths in older documents
 
-The plans, specs and reviews in `docs/` record their day and keep the paths they were written with. Line numbers in them refer to the files as they were then. This section translates their paths.
+Older references may use paths from before the package reorganization. These tables map them to the current modules.
 
 | Old file | Now |
 |---|---|

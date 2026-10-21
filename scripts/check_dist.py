@@ -44,7 +44,7 @@ USER_GUIDES = (
 SDIST_FILES = frozenset(
     {"PKG-INFO", ".gitignore", "pyproject.toml", "LICENSE", "README.md", *USER_GUIDES}
 )
-SDIST_DIRS = ("src/datanuggets/", "tests/", "r/")
+SDIST_DIRS = ("src/datanuggets/", "tests/")
 SDIST_EXCLUDED = ("tests/scripts/",)
 SDIST_REQUIRED = (
     "PKG-INFO",

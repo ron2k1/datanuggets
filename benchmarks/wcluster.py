@@ -1,8 +1,9 @@
-"""Times the WCluster ports on benchmarks/wcluster.R's workloads and compares every output with
+"""Times the WCluster ports on the recorded R workloads and compares every output with
 R's bit for bit, times the workloads R is too slow to run, and checks the speed gates in
-docs/specs/2026-10-09-wcluster-iterative-port-design.md section 10. Exits nonzero on a FAIL.
+docs/reproducibility.md. Exits nonzero on a FAIL.
 
-Run from the repo root after benchmarks/wcluster.R, in the same pinned sitting:
+Maintainer tool: requires local R baseline records, which are not distributed.
+Run from the repo root with those records available:
     uv run --with psutil python benchmarks/pin.py <path to uv> run python benchmarks/wcluster.py
 """
 
@@ -123,7 +124,7 @@ def main() -> int:
     rs = against_r()
     for name, res in rs.items():
         if res is None:
-            print(f"{name:26s} R output missing: run benchmarks/wcluster.R")
+            print(f"{name:26s} local R baseline missing from tmp/wcluster/out (not distributed)")
         else:
             line(name, res[0], res[1], "yes" if res[2] else "NO")
     _, wh2000 = timed(lambda: whclust(x[:2000], w[:2000]))
@@ -132,7 +133,9 @@ def main() -> int:
     line("wkmeans covertype 10000", None, wk10000, "")
     case = load(COVERTYPE / "out" / "covertype_100000_create")
     if case is None:
-        print("dn_whclust                 nuggets missing: run benchmarks/covertype.R 100000")
+        print(
+            "dn_whclust                 local Covertype 100000 baseline missing (not distributed)"
+        )
         dn, dn2000 = None, float("inf")
     else:
         dn = DataNuggets(

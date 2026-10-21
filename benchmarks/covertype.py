@@ -1,6 +1,7 @@
 """Replays R's recorded draws on the Covertype benchmark and compares every output bit for bit.
 
-Run from the repo root after benchmarks/covertype.R with the same size:
+Maintainer tool: requires local R records in tmp/covertype/out/, which are not distributed.
+See docs/reproducibility.md. Run from the repo root with the recorded size:
     uv run python benchmarks/covertype.py 10000 | 100000 | all
 """
 

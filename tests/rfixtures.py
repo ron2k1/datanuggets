@@ -118,7 +118,9 @@ def load_group(group: str) -> list[Case]:
         else []
     )
     if not dirs:
-        raise FileNotFoundError(f"no fixtures under {root}; regenerate them with the scripts in r/")
+        raise FileNotFoundError(
+            f"no fixtures under {root}; restore tests/fixtures from the source checkout or archive"
+        )
     return [Case(p, json.loads((p / "manifest.json").read_text(encoding="utf-8"))) for p in dirs]
 
 
