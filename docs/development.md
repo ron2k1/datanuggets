@@ -5,12 +5,12 @@ Setting up, running the tests and the lint, checking a build, and rebuilding the
 ## Setup
 
 ```sh
-git clone --branch feat/flow-pick https://github.com/ron2k1/datanuggets.git
+git clone --branch main https://github.com/ron2k1/datanuggets.git
 cd datanuggets
-uv sync
+uv sync --locked --python 3.14
 ```
 
-[installation.md](installation.md#editable-install-for-development) says what `uv sync` installs and why the branch is `feat/flow-pick` for now. Every command below runs from the repository root.
+[Installation](installation.md#editable-install-for-development) explains editable installs. This creates `.venv` with Python 3.14 and the locked development dependencies. Every command below runs from the repository root. Ordinary development needs only one Python version; testing 3.15 is a separate compatibility check of the same code.
 
 ## Tests
 
@@ -31,22 +31,41 @@ uv run pytest -n auto
 
 `-n auto` starts one worker per logical CPU, and each worker loads numba, scipy and its own copy of the fixtures it reads. If workers fail with `MemoryError`, give a smaller number, such as the `-n 2` that CI uses.
 
-### On another Python
+### Test Python 3.14 and 3.15
 
-To run the suite on another Python, such as 3.15, give it its own environment under the ignored `tmp/` folder:
+Keep the main `.venv` on 3.14 and create a second environment under the ignored `tmp/` folder. These are two installations of the same checkout, not two branches or package editions. Do not reuse one environment for both interpreters.
 
-```sh
-UV_PROJECT_ENVIRONMENT=tmp/venv315 uv sync --python 3.15
-tmp/venv315/Scripts/python -m pytest
-```
-
-That's the Windows path. On macOS and Linux it's `tmp/venv315/bin/python`. In PowerShell, set the variable first:
+**Windows (PowerShell):** restore the environment setting after creating the second environment so later `uv` commands keep using their original target.
 
 ```powershell
-$env:UV_PROJECT_ENVIRONMENT = "tmp/venv315"; uv sync --python 3.15
+$previousEnvironment = $env:UV_PROJECT_ENVIRONMENT
+try {
+    $env:UV_PROJECT_ENVIRONMENT = "tmp/venv315"
+    uv sync --locked --python 3.15
+} finally {
+    if ($null -eq $previousEnvironment) {
+        Remove-Item Env:UV_PROJECT_ENVIRONMENT -ErrorAction SilentlyContinue
+    } else {
+        $env:UV_PROJECT_ENVIRONMENT = $previousEnvironment
+    }
+}
+.\.venv\Scripts\python.exe --version
+.\.venv\Scripts\python.exe -m pytest
+.\tmp\venv315\Scripts\python.exe --version
+.\tmp\venv315\Scripts\python.exe -m pytest
 ```
 
-numba compiles every kernel again for a new Python version, so the first run there is slower.
+**macOS or Linux:** the environment setting below applies to that command only.
+
+```sh
+UV_PROJECT_ENVIRONMENT=tmp/venv315 uv sync --locked --python 3.15
+.venv/bin/python --version
+.venv/bin/python -m pytest
+tmp/venv315/bin/python --version
+tmp/venv315/bin/python -m pytest
+```
+
+Numba compiles every kernel again for a new Python version, so the first run there is slower. The Python version belongs to the environment, while `datanuggets.__version__` is the library version and is the same in both.
 
 ### What CI runs
 
@@ -58,7 +77,7 @@ numba compiles every kernel again for a new Python version, so the first run the
 | `bench.yml` | a pull request gets the `bench` label | the `WCluster` benchmark in R 4.6.1 and in the port on x86 Linux, about an hour |
 | `release.yml` | by hand for TestPyPI, a pushed `v*` tag for PyPI | the three above, then the upload, as [releasing.md](releasing.md) describes |
 
-The test steps run pytest with `-q -p no:cacheprovider -n 2` and `-m "not slow"` or `-m slow`. Every workflow can also be started by hand, but GitHub offers that only once its file is on the default branch, and none of these files is on `main` yet.
+The test steps run pytest with `-q -p no:cacheprovider -n 2` and `-m "not slow"` or `-m slow`. These workflows are on `main`; use their triggers in the table above.
 
 ## Lint
 
@@ -75,7 +94,7 @@ To check a build the way CI does, build into an empty folder and run the checker
 
 ```sh
 uv build --out-dir tmp/dist
-uv run --no-project python scripts/check_dist.py tmp/dist
+uv run python scripts/check_dist.py tmp/dist
 uvx --from twine==7.0.0 twine check --strict tmp/dist/*
 ```
 
@@ -115,6 +134,6 @@ The work landed in the order below. Most steps started from a written plan, link
 | 12 | PR #9, [spec](specs/2026-10-10-plotting-design.md), [plan](plans/2026-10-10-plotting.md), [review](reviews/2026-10-10-plotting-review.md) | `cut_tree` and the `plot` package. R recorded `cutree`'s cuts and stops, `plot.hclust`'s lines read back from its PDF, and the nugget colors of the help examples |
 | 13 | PR #10, [spec](specs/2026-10-12-flow-gate-design.md), [plan](plans/2026-10-12-flow-gate.md), [review](reviews/2026-10-12-flow-gate-review.md) | `datanuggets.flow`, Prof. Cabrera's lymphocyte and macrophage gate finder ported from its Python version, with the distance disc centred on the peak, and `plot.gates` for the reference code's figure. The reference script, word for word, recorded its pieces on three files of a public PBMC record, and `compare.py` and `compare.ps1` check ours against the reference piece by piece on any FCS file or folder |
 | 14 | PR #11, [spec](specs/2026-10-19-packaging-design.md), [plan](plans/2026-10-19-packaging.md), [review](reviews/2026-10-19-packaging-review.md) | The sdist built from an allowlist, and `scripts/check_dist.py`, which reads the built sdist and wheel and fails on a file off the list, a cache file, a home-folder path, a name from the development setup, or versions that disagree. `package.yml` runs the sdist's tests on the installed wheel, the Linux tests cover 3.12 to 3.15, `matrix.yml` adds Windows and macOS on a label, and `release.yml` publishes through Trusted Publishing. The version is written once, in `pyproject.toml` |
-| 15 | branch `feat/flow-pick` | `datanuggets-flow` and the `flow` extra: each FCS file gated, every file's numbered populations shown in one figure, the ones to keep picked file by file, and the kept cells clustered with data nuggets per file and weighted Ward clustering of all the files' nuggets together. `--disc his`, the default, gates with the `find_area` of Prof. Cabrera's `cfc.py`, so the populations are the ones `cfc.py`'s figures show |
+| 15 | PR #12 | `datanuggets-flow` and the `flow` extra: each FCS file gated, every file's numbered populations shown in one figure, the ones to keep picked file by file, and the kept cells clustered with data nuggets per file and weighted Ward clustering of all the files' nuggets together. `--disc his`, the default, gates with the `find_area` of Prof. Cabrera's `cfc.py`, so the populations are the ones `cfc.py`'s figures show |
 
-PRs #4 and #5 were opened against the speed branch and closed there. Steps 4 to 9 reached `main` together through PR #6, and step 10 through PR #7. PRs #8 to #11 are open, each based on the one before, and step 15 sits on top of them.
+PRs #4 and #5 were opened against the speed branch and closed there. Steps 4 to 9 reached `main` together through PR #6, and step 10 through PR #7. PRs #8 to #11 and step 15 (PR #12) are now merged into `main`.

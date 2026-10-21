@@ -1,8 +1,8 @@
 # Reproducibility
 
-This page is for reproducing a number that datanuggets reports. It starts with what every experiment shares: the machines and environments, how seeds behave, and the datasets with their licenses. Then come what R recorded for the tests and one section per experiment, each with what it measures, its command, what it prints and its recorded result. Installation is in [installation.md](installation.md), running the tests in [development.md](development.md), and the differences from R in [compatibility.md](compatibility.md).
+This page is for reproducing a number that datanuggets reports. It starts with what every experiment shares: the machines and environments, how seeds behave, and the datasets with their licenses. Then come what R recorded for the tests and one section per experiment, each with what it measures, its command, what it prints and its recorded result. Installation is in [installation.md](installation.md), running the tests in [development.md](https://github.com/ron2k1/datanuggets/blob/main/docs/development.md), and the differences from R in [compatibility.md](compatibility.md).
 
-Run every command on this page from the repository root. The R scripts stop anywhere else, and the flow scripts write to `tmp/flow` under the current folder.
+The benchmark commands require a full Git clone, including the development tools and `uv.lock`; these are not included in the source archive. Run every command on this page from the repository root. The R scripts stop anywhere else, and the flow scripts write to `tmp/flow` under the current folder.
 
 ## Environments
 
@@ -35,13 +35,15 @@ To set up the same R, follow [r/README.md](../r/README.md): install R 4.6.1, the
 
 ### Python
 
+Python 3.14 and 3.15 are two interpreters running the same package. Choose one for normal use; separate environments are needed only to compare or test both. The numbers below record the interpreter used in each experiment.
+
 `uv.lock` pins numpy 2.5.3, scipy 1.18.1 and numba 0.68.0, with llvmlite 0.50.0 and joblib 1.6.0. Its dev group adds what the plots, the flow scripts and the tests use, among them matplotlib 3.11.2, pandas 3.0.6, flowio 1.4.0, openpyxl 3.1.5 and pytest 9.1.1. The suite, Covertype and `WCluster` runs below give the Python they used, 3.14.3 or 3.15.0. The flow runs don't record theirs. To get the locked environment on a given Python:
 
 ```sh
 uv sync --locked --python 3.14
 ```
 
-`--locked` stops if `uv.lock` and `pyproject.toml` disagree, instead of resolving again. Keeping a second Python's environment next to the first is covered in [development.md](development.md).
+`--locked` stops if `uv.lock` and `pyproject.toml` disagree, instead of resolving again. Keeping a second Python's environment next to the first is covered in [development.md](https://github.com/ron2k1/datanuggets/blob/main/docs/development.md).
 
 Two outputs still depend on the host. The eigen output in `wpca` and `refine_dn` comes from the installed scipy's LAPACK, so the tests hold it to R's by a rule or a tolerance. A NaN that `distw` computes in its lower triangle carries another sign bit on arm64. Everything else gives the x86-64 R results on arm64 macOS too, where the same tests pass.
 
@@ -146,7 +148,7 @@ Every R result the tests compare with comes from R itself. A few were checked by
 | `dn_wcluster` | `fixtures_dn_wcluster.R` | 8 | two quakes datanuggets and a data frame of new rows, `DN.Wkmeans`, `DN.Whclust`, `DN.Wpca` and `DNcluster.predict` on them, and R's messages and outputs on a datanugget with one variable and on a matrix `newx` |
 | `plot` | `fixtures_plot.R` | 18 | `cutree` at every `k` and at every height, the midpoints and both infinities on the 13 trees of the `whclust` and `dn_wcluster` groups, the lines `plot.hclust` drew for each tree it draws, read back from its PDF, and for one of them again at two other hangs and with its heights out of order, the disc `pch = 16` draws at `cex` 1 and 0.5, the help examples' nugget colors, and R's stops in all three |
 
-Arrays are stored as raw little-endian float64 or int32, row-major, and `manifest.json` gives each one's shape. The flow fixtures aren't among the 544: they come from Prof. Cabrera's Python, not from R. Regenerating fixtures is covered in [development.md](development.md) and [r/README.md](../r/README.md).
+Arrays are stored as raw little-endian float64 or int32, row-major, and `manifest.json` gives each one's shape. The flow fixtures aren't among the 544: they come from Prof. Cabrera's Python, not from R. Regenerating fixtures is covered in [development.md](https://github.com/ron2k1/datanuggets/blob/main/docs/development.md) and [r/README.md](../r/README.md).
 
 ## Experiments
 
@@ -159,7 +161,7 @@ uv run pytest
 uv run pytest -m slow
 ```
 
-The mini ran the default suite on 8 workers, which pytest-xdist from the dev group gives with `uv run pytest -n 8`. [development.md](development.md) covers the rest of the test setup.
+The mini ran the default suite on 8 workers, which pytest-xdist from the dev group gives with `uv run pytest -n 8`. [development.md](https://github.com/ron2k1/datanuggets/blob/main/docs/development.md) covers the rest of the test setup.
 
 The suite ran on both machines at the commit that merged into `main`, with no failures:
 
@@ -168,7 +170,7 @@ The suite ran on both machines at the commit that merged into `main`, with no fa
 | Laptop, i7-13650HX | Windows 11, Python 3.14.3 and 3.15.0, numpy 2.5.3, scipy 1.18.1, numba 0.68.0 | the default suite and the slow fuzz on each Python. Two tests skip because Windows has no `os.fork` |
 | Mac mini, Apple M4 | macOS 26.6.2 arm64, Python 3.14.3 and 3.15.0, numpy 2.5.3, scipy 1.18.1, numba 0.68.0 | the default suite on 8 workers on each Python, the two fork tests included |
 
-That commit is `ad662ba`, the merge of PR #7 on 2026-10-09. It holds steps 1 to 10 of the history in [development.md](development.md). `wkmeans`, `whclust`, the `dn_` functions, the plots and the flow finder came after it and weren't part of this run.
+That commit is `ad662ba`, the merge of PR #7 on 2026-10-09. It holds steps 1 to 10 of the history in [development.md](https://github.com/ron2k1/datanuggets/blob/main/docs/development.md). `wkmeans`, `whclust`, the `dn_` functions, the plots and the flow finder came after it and weren't part of this run.
 
 The package layout change was also checked from a built wheel. The wheel holds the same files as `src/`, and the suite passed in a clean virtual environment from outside the repo.
 
@@ -229,7 +231,7 @@ The rule passed on the laptop at 100,000 rows, 5.8% for `create_dn` and 3.6% for
 
 ### WCluster: whclust and wkmeans against R
 
-`whclust` and `wkmeans` ran on the first n rows of R's `quakes` with the weights 1, 3, 7, 2 repeating, `wkmeans` with k = 4, R's defaults otherwise (one start, 10 iterations, seed 291102) and R's draws replayed. These are the workloads behind the speed gates in the [design spec](specs/2026-10-09-wcluster-iterative-port-design.md), section 10. The port is checked against R bit for bit: `merge`, `height` and `order` for `whclust`, and the labels, centers, each cluster's WWCSS and the total for `wkmeans`. The port alone also runs `whclust` on the first 2,000 Covertype rows, `wkmeans` with k = 4 and `RDraws(291102)` on the first 10,000, and `dn_whclust` on the 2,000 nuggets R's `create.DN` made of the 100,000-row subset.
+`whclust` and `wkmeans` ran on the first n rows of R's `quakes` with the weights 1, 3, 7, 2 repeating, `wkmeans` with k = 4, R's defaults otherwise (one start, 10 iterations, seed 291102) and R's draws replayed. These are the workloads behind the speed gates in the [design spec](https://github.com/ron2k1/datanuggets/blob/main/docs/specs/2026-10-09-wcluster-iterative-port-design.md), section 10. The port is checked against R bit for bit: `merge`, `height` and `order` for `whclust`, and the labels, centers, each cluster's WWCSS and the total for `wkmeans`. The port alone also runs `whclust` on the first 2,000 Covertype rows, `wkmeans` with k = 4 and `RDraws(291102)` on the first 10,000, and `dn_whclust` on the 2,000 nuggets R's `create.DN` made of the 100,000-row subset.
 
 R's `Whclust` is timed once, since it takes minutes. R's `Wkmeans` is the best of 3 untraced runs, and one more traced run records its draws. Python takes the best of 3 when a run takes under a second, and one run otherwise. The scripts say to run them under `pin.py`, in one sitting:
 

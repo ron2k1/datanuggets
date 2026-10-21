@@ -4,14 +4,16 @@ This walkthrough takes a numeric table from preprocessing to nuggets, clusters, 
 
 ## 1. Install and check
 
-Use Python 3.12 or newer and Git. The current development repository requires access; these features are on `feat/flow-pick`.
+Use Python 3.12 or newer and Git. Python 3.14 and 3.15 run the same package; choose one and [activate an environment](installation.md#choose-a-python-version). Install from `main` (repository access is currently required):
 
 ```sh
-python -m pip install "datanuggets[frame,plot] @ git+https://github.com/ron2k1/datanuggets.git@feat/flow-pick"
+python -m pip install "datanuggets[frame,plot] @ git+https://github.com/ron2k1/datanuggets.git@main"
 python -c "import datanuggets; print(datanuggets.__version__)"
 ```
 
 The current version is `0.1.0.dev0`. The first numerical call can take longer while Numba compiles its kernels. See [installation](installation.md) for other options.
+
+**Try the included data first:** after a [local checkout and install](installation.md#from-a-local-checkout), run `python examples/first_analysis.py`. It uses the recorded R `quakes` data and saves a plot and tables under the checkout's `outputs/` folder. The rest of this guide shows the individual steps using your own CSV files.
 
 ## 2. Choose and prepare your features
 
@@ -162,7 +164,7 @@ Prediction chooses the nearest weighted cluster mean. It does not rerun hierarch
 The flow workflow is experimental. Install its extra, then run it on a file or folder:
 
 ```sh
-python -m pip install "datanuggets[flow] @ git+https://github.com/ron2k1/datanuggets.git@feat/flow-pick"
+python -m pip install "datanuggets[flow] @ git+https://github.com/ron2k1/datanuggets.git@main"
 datanuggets-flow path/to/fcs_folder
 ```
 
