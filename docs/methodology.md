@@ -110,8 +110,8 @@ The choice changes which events the clustering sees. In the comparison run on th
 
 1. Read each FCS file with flowio, as stored and uncompensated. A file whose spillover matrix isn't the identity gets a warning. A folder's files go in name order.
 2. Gate each file on FSC-A against SSC-A, or the channels `--fsc` and `--ssc` name, with the finder above, with `--t11` and `--t21` given once or per file, and the area rule `--disc` names.
-3. Draw every file's numbered populations in one figure, `gates.png`, and the density grid, local maxima and kept peaks behind them in another, `local_maxima.png`. Print each population's event count, share and median of the two scatter channels.
-4. Pick populations file by file, at a prompt or with `--pops`. The kept events are the union of the picked populations, so an event in two of them counts once. A file left out, or with fewer than 2 kept events, isn't clustered.
+3. Draw every file's density grid, local maxima and numbered peaks in one figure, `local_maxima.png`, and print each population's event count, share and median of the two scatter channels.
+4. Pick populations file by file from those peaks, at a prompt or with `--pops`, then draw every file's populations in `gates.png`. The kept events are the union of the picked populations, so an event in two of them counts once. A file left out, or with fewer than 2 kept events, isn't clustered.
 5. Take the fluorescence channels: `--channels`, or by default every channel of the first file whose name ends in `-A` and doesn't start with FSC or SSC. Transform them as `arcsinh(x / cofactor)`, with `--cofactor` 6000 by default. A cofactor of 0 leaves them linear.
 6. Make data nuggets of each file's kept events separately: `create_dn` with `dn_num2` set to `--dn-num2` (1000 by default) or the number of kept events if that is smaller, and every other argument at its default. There is no refine step.
 7. Pool every file's nugget centers and weights, drop nuggets with weight 0, and build one weighted Ward tree with `whclust`.
