@@ -1,4 +1,4 @@
-"""gates: his figure as Line2D markers, his sizes, alphas and colors."""
+"""gates: his figure as Line2D markers, his sizes, alphas and colors. peaks: the grid, its\nlocal maxima and the kept peaks labelled with their Pop numbers."""
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -6,7 +6,8 @@ import numpy as np
 import pytest
 from matplotlib.colors import to_hex
 
-from datanuggets.plot import gates
+from datanuggets.flow import FinderPeaks
+from datanuggets.plot import gates, peaks
 
 
 def _data():
@@ -96,3 +97,53 @@ def test_gates_rejects_channels_of_different_lengths():
     fsc, ssc, masks = _data()
     with pytest.raises(ValueError, match="same length"):
         gates(fsc, ssc[:-1], masks)
+
+
+def _peaks():
+    density = np.zeros((20, 30))
+    density[5, 8], density[12, 20], density[3, 25] = 3.0, 2.0, 1.0
+    return FinderPeaks(
+        density=density,
+        candidates=np.array([[6, 9], [13, 21], [4, 26]]),
+        peaks=np.array([[6, 9], [13, 21]]),
+        fsc=np.linspace(1e5, 4e6, 30),
+        ssc=np.linspace(2e4, 4e6, 20),
+    )
+
+
+def test_peaks_draws_the_grid_maxima_and_numbered_peaks():
+    fp = _peaks()
+    fig, ax = plt.subplots()
+    assert peaks(fp, title="File 1", ax=ax) is ax
+    (im,) = ax.get_images()
+    assert im.get_array().shape == fp.density.shape
+    assert im.get_array().mask[0, 0]  # empty bins are left blank
+    cand, kept = ax.get_lines()
+    assert (cand.get_gid(), kept.get_gid()) == ("candidates", "peaks")
+    assert np.array_equal(cand.get_xdata(), fp.candidates[:, 1])
+    assert np.array_equal(cand.get_ydata(), fp.candidates[:, 0])
+    assert np.array_equal(kept.get_xdata(), fp.peaks[:, 1])
+    assert [t.get_text() for t in ax.texts] == ["Pop 1", "Pop 2"]
+    assert [t.xy for t in ax.texts] == [(9, 6), (21, 13)]
+    assert ax.get_title() == "File 1"
+    fig.canvas.draw()
+    labels = [t.get_text() for t in ax.get_xticklabels()]
+    assert labels == ["800k", "1.6M", "2.4M", "3.2M", "4M"]
+    assert ax.get_xticks()[-1] == pytest.approx(30)  # 4e6 is the last column's value
+    legend = [t.get_text() for t in ax.get_legend().get_texts()]
+    assert legend == ["Local maxima (3)", "Kept peaks (2)"]
+    plt.close(fig)
+
+
+def test_peaks_with_no_peak_draws_the_grid():
+    fp = _peaks()._replace(candidates=np.empty((0, 2), int), peaks=np.empty((0, 2), int))
+    fig, ax = plt.subplots()
+    peaks(fp, ax=ax)
+    assert not ax.texts
+    assert [len(line.get_xdata()) for line in ax.get_lines()] == [0, 0]
+    plt.close(fig)
+
+
+def test_peaks_rejects_raw_values_that_do_not_fit_the_grid():
+    with pytest.raises(ValueError, match="per column and row"):
+        peaks(_peaks()._replace(fsc=np.arange(5.0)))

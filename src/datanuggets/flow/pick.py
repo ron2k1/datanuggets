@@ -200,9 +200,9 @@ def _ask(samples, plt, show):
         plt.show(block=False)
         plt.pause(0.5)
     print(
-        "\nWhich populations hold the cells you want? Each file's Pop numbers are the ones in "
-        "its own legend in the figure, and the same number can be a different circle in "
-        'another file. Type numbers like 1 or 1,2 or 1-3, "all", or "none" to leave the file '
+        "\nWhich populations hold the cells you want? Each file's Pop numbers label the peaks "
+        "in its own panel of the local maxima figure, and the same number can be a different "
+        'peak in another file. Type numbers like 1 or 1,2 or 1-3, "all", or "none" to leave the file '
         "out; Enter repeats the previous file's choice, Ctrl+C stops. Click this terminal "
         "before typing."
     )
@@ -273,15 +273,16 @@ def _check_args(args) -> tuple[list[Path], list[float], list[float], Path, list[
 
 
 def _gate_files(args, paths, t11, t21, out, plt) -> list[dict]:
-    """Each file gated with Cabrera's lymphmacro_finder and its populations counted, all of them
-    drawn on one figure, gates.png."""
+    """Each file gated with Cabrera's lymphmacro_finder and its populations counted, and the
+    density grid, local maxima and the peak each Pop grows from drawn on one figure,
+    local_maxima.png, the one the populations are chosen from. gates.png waits for the choice."""
     from datanuggets import plot
-    from datanuggets.flow import find_area, lymphmacro_finder, mirrored_area
+    from datanuggets.flow import find_area, finder_peaks, lymphmacro_finder, mirrored_area
 
     area = mirrored_area if args.disc == "his" else find_area
     cols = min(len(paths), 2)
     rows = -(-len(paths) // cols)
-    fig, axs = plt.subplots(rows, cols, figsize=(5.5 * cols, 4.8 * rows), squeeze=False)
+    fig, axs = plt.subplots(rows, cols, figsize=(6.5 * cols, 5.2 * rows), squeeze=False)
     samples = []
     for i, path in enumerate(paths):
         events, pnn, pns = read_fcs(path)
@@ -298,14 +299,36 @@ def _gate_files(args, paths, t11, t21, out, plt) -> list[dict]:
         ]
         print(f"\nFile {i + 1}, {path.name}: {len(fsc):,} events")
         print("\n".join(table))
-        plot.gates(fsc, ssc, masks, title=f"File {i + 1}: {path.name}", ax=axs.flat[i])
-        samples.append({"path": path, "masks": masks, "pnn": pnn, "pns": pns, "table": table})
+        fp = finder_peaks(fsc, ssc)
+        plot.peaks(fp, title=f"File {i + 1}: {path.name}", ax=axs.flat[i])
+        print(f"  {len(fp.candidates)} local maxima, {len(fp.peaks)} kept as peaks")
+        fsc, ssc = fsc.copy(), ssc.copy()  # for gates.png; copies, so events can be freed
+        sample = {"path": path, "masks": masks, "pnn": pnn, "pns": pns, "table": table}
+        samples.append(sample | {"fsc": fsc, "ssc": ssc})
     for ax in axs.flat[len(paths) :]:
         ax.set_visible(False)
     fig.tight_layout()
-    fig.savefig(out / "gates.png", dpi=110)
-    print(f"\nThe populations are drawn in {out / 'gates.png'}")
+    fig.savefig(out / "local_maxima.png", dpi=110)
+    print(f"\nThe local maxima and each Pop's peak are drawn in {out / 'local_maxima.png'}")
     return samples
+
+
+def _draw_gates(samples, plt, out) -> None:
+    """gates.png, once the populations are chosen: each file's events in gray and each of its
+    populations in color, one panel per file."""
+    from datanuggets import plot
+
+    cols = min(len(samples), 2)
+    rows = -(-len(samples) // cols)
+    fig, axs = plt.subplots(rows, cols, figsize=(5.5 * cols, 4.8 * rows), squeeze=False)
+    for i, s in enumerate(samples):
+        title = f"File {i + 1}: {s['path'].name}"
+        plot.gates(s["fsc"], s["ssc"], s["masks"], title=title, ax=axs.flat[i])
+    for ax in axs.flat[len(samples) :]:
+        ax.set_visible(False)
+    fig.tight_layout()
+    fig.savefig(out / "gates.png", dpi=110)
+    print(f"The populations are drawn in {out / 'gates.png'}")
 
 
 def _choose_pops(samples, spec, plt, show) -> list[list[int]]:
@@ -501,6 +524,7 @@ def main(argv=None) -> None:
         samples = _gate_files(args, paths, t11, t21, out, plt)
         channels, labels = _choose_channels(samples, args.channels)
         chosen = _choose_pops(samples, spec, plt, not args.no_show)
+        _draw_gates(samples, plt, out)
         kept = _keep_events(samples, chosen, channels, args.cofactor, out)
         pool = _cluster(kept, args.dn_num2, args.k)
         cc = _write_tables(kept, pool, labels, out)

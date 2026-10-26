@@ -69,10 +69,10 @@ On `202.fcs`, `his` gives populations of 225,770, 58,245 and 27,590 events and `
 
 ### At the prompt
 
-Without `--pops`, the run gates every file, prints each file's populations and asks. Each population line gives its event count, its share of the file's events, and its median on the `--fsc` and `--ssc` channels, FSC-A and SSC-A by default. `gates.png` draws each file in its own panel, with the same Pop numbers in its legend. From a run on three files of the Zenodo record, after the first answer:
+Without `--pops`, the run gates every file, prints each file's populations and asks. Each population line gives its event count, its share of the file's events, and its median on the `--fsc` and `--ssc` channels, FSC-A and SSC-A by default. `local_maxima.png` draws each file in its own panel: the density grid, every local maximum, and each kept peak labelled with its Pop number, so you choose from the peaks. `gates.png`, the populations' full gates, is drawn only after the choice. From a run on three files of the Zenodo record, after the first answer:
 
 ```text
-Which populations hold the cells you want? Each file's Pop numbers are the ones in its own legend in the figure, and the same number can be a different circle in another file. Type numbers like 1 or 1,2 or 1-3, "all", or "none" to leave the file out; Enter repeats the previous file's choice, Ctrl+C stops. Click this terminal before typing.
+Which populations hold the cells you want? Each file's Pop numbers label the peaks in its own panel of the local maxima figure, and the same number can be a different peak in another file. Type numbers like 1 or 1,2 or 1-3, "all", or "none" to leave the file out; Enter repeats the previous file's choice, Ctrl+C stops. Click this terminal before typing.
 
 File 2, 202.fcs:
   Pop 1:   225,770 events (80.0%), median FSC-A 1,015,754, SSC-A   569,799
@@ -114,8 +114,8 @@ An event in two kept populations counts once: the kept events are the union of t
 ## What a run does
 
 1. Checks that matplotlib and pandas import, checks `--k` and `--dn-num2`, finds the files, reads the thresholds, and checks the number of `--pops` entries. Creates a new output folder and an `INCOMPLETE.txt` marker; an existing output path stops the run without changing its contents.
-2. Gates each file: reads its events, runs the finder on `--fsc` and `--ssc` with the file's `--t11` and `--t21` and the `--disc` rule, prints the population lines and draws the file's panel of `gates.png`.
-3. Checks the clustering channels, requiring at least two distinct channels present in every file, then chooses each file's populations at the prompt or from `--pops`.
+2. Gates each file: reads its events, runs the finder on `--fsc` and `--ssc` with the file's `--t11` and `--t21` and the `--disc` rule, prints the population lines and the number of local maxima and kept peaks, and draws the file's panel of `local_maxima.png`.
+3. Checks the clustering channels, requiring at least two distinct channels present in every file, then chooses each file's populations at the prompt or from `--pops`, and draws `gates.png`.
 4. For each file, keeps the events in any chosen population. A file with fewer than 2 kept events is left out of the clustering but stays in `selection.csv`. The file is read again, so only one file's events are in memory at a time, and the kept events' clustered channels are transformed as `arcsinh(x / cofactor)`, or left as they are with `--cofactor 0`. Writes `selection.csv`.
 5. Makes data nuggets of each file's kept events separately with `create_dn`, `dn_num2` set to `--dn-num2` or to the number of kept events if that is smaller, every other argument at its default and `n_jobs=-1`, which uses every core. When a file has no more kept events than `--dn-num2`, `create_dn` warns `DN.num is greater than or equal to the number of rows. Returning original data`, and each event becomes its own nugget.
 6. Pools every file's nugget centers and weights in file order, drops nuggets with weight 0, checks that at least three occupied nuggets remain, builds one weighted Ward tree with `whclust` weighted by each nugget's event count, and cuts it at `--k` clusters with `cut_tree`.
@@ -129,7 +129,8 @@ Figures and tables share one run folder: `outputs/flow-<timestamp>/` by default,
 
 | File | Contents |
 | --- | --- |
-| `gates.png` | One panel per file, two to a row, titled `File N: name`: every event in gray and each population in color. 110 dpi |
+| `local_maxima.png` | One panel per file, two to a row, titled `File N: name`: the finder's 100 × 100 density grid, every local maximum as an open circle and each kept peak as a cross labelled with the Pop number it seeds. Written before the prompt; populations are chosen from it. 110 dpi |
+| `gates.png` | One panel per file, laid out as `local_maxima.png`: every event in gray and each population in color. Written after the populations are chosen. 110 dpi |
 | `selection.csv` | One row per file: what was kept |
 | `nuggets_N.csv` | One row per nugget of file N |
 | `events_N.csv` | One row per kept event of file N |
