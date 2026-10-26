@@ -1282,13 +1282,13 @@ clusters(x, labels, *, w=None, centers=None, dims=(0, 1),
 | `w` | Optional nonnegative point weights, with at least one positive value. |
 | `centers` | Optional cluster centers, one row per sorted distinct label. |
 | `dims` | Two feature positions to display. |
-| `size` | `"area"` scales marker area by weight; `"log"` uses the R-style logarithmic size rule. |
+| `size` | `"area"` scales marker area by weight; `"sqrt"` by the square root of weight, so heavy points dominate less; `"log"` uses the R-style logarithmic size rule. |
 | `colors` | Optional sequence of cluster colors. |
 | `ax` | Optional Matplotlib axes. |
 
 **Details**
 
-Without weights, `size="area"` uses fixed-size markers. `size="log"` requires weights and makes points with weight at most 1 invisible. Supplied centers are shown as stars.
+Without weights, `size="area"` and `size="sqrt"` use fixed-size markers. `size="log"` requires weights and makes points with weight at most 1 invisible. Supplied centers are shown as stars.
 
 **Value**
 
