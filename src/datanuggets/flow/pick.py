@@ -232,10 +232,12 @@ def _ask(samples, plt, show):
 
 def _pyplot(no_show: bool):
     """matplotlib's pyplot, once the flow extra is known to be there, drawing off screen with
-    --no-show. pandas is checked here too, for the tables the steps write."""
+    --no-show. pandas and scikit-learn are checked here too, for the tables and the t-SNE the
+    steps make, so a missing one stops the run before any file is read."""
     try:
         import matplotlib
         import pandas  # noqa: F401
+        import sklearn  # noqa: F401
     except ImportError as e:
         raise SystemExit(
             'datanuggets-flow needs the flow extra: pip install "datanuggets[flow]"'
@@ -483,7 +485,7 @@ def _write_tables(kept, pool, labels, out) -> pd.DataFrame:
 
 
 def _draw_figures(pool, cc, labels, cofactor, plt, out) -> None:
-    """dendrogram.png, clusters_pca.png and cluster_centers.png."""
+    """dendrogram.png, clusters_pca.png, clusters_tsne.png and cluster_centers.png."""
     from datanuggets import plot, wpca
 
     use, k = pool.use, pool.k
@@ -496,6 +498,19 @@ def _draw_figures(pool, cc, labels, cofactor, plt, out) -> None:
     plot.scores(pca, w=pool.weights[use], labels=pool.cl[use], ax=ax)
     ax.set_title(f"Nuggets of the kept cells, {k} clusters")
     fig.savefig(out / "clusters_pca.png", dpi=150)
+    fig, ax = plt.subplots(figsize=(6.5, 6))
+    xy = _tsne(pool.centers[use])
+    plot.clusters(xy, pool.cl[use], w=pool.weights[use], size="sqrt", ax=ax)
+    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]  # plot.clusters' and scores'
+    handles = [
+        plt.Line2D([], [], ls="none", marker="o", color=colors[c % len(colors)], label=str(c + 1))
+        for c in range(k)
+    ]
+    ax.legend(handles=handles, title="cluster", loc="center left", bbox_to_anchor=(1, 0.5))
+    ax.set(xlabel="t-SNE 1", ylabel="t-SNE 2")
+    ax.set_title(f"t-SNE of {use.sum():,} nuggets, {k} clusters; area ∝ √weight")
+    fig.tight_layout()
+    fig.savefig(out / "clusters_tsne.png", dpi=150)
     fig, ax = plt.subplots(figsize=(8, 8))
     im = ax.imshow(cc[labels].to_numpy().T, aspect="auto", cmap="viridis")
     ax.set_xticks(range(k), [str(c) for c in range(1, k + 1)])
@@ -504,6 +519,15 @@ def _draw_figures(pool, cc, labels, cofactor, plt, out) -> None:
     fig.colorbar(im, ax=ax, label=f"arcsinh(x / {cofactor:g})" if cofactor else "x")
     fig.tight_layout()
     fig.savefig(out / "cluster_centers.png", dpi=150)
+
+
+def _tsne(x) -> np.ndarray:
+    """A 2-D t-SNE of the nugget centers, seeded so a run repeats. Perplexity is lowered from 30
+    when there are too few nuggets for it, as scikit-learn requires it below their number."""
+    from sklearn.manifold import TSNE
+
+    perplexity = min(30.0, (len(x) - 1) / 3)
+    return TSNE(perplexity=perplexity, init="pca", random_state=0).fit_transform(x)
 
 
 def main(argv=None) -> None:

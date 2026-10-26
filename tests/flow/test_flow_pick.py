@@ -24,6 +24,7 @@ FIGURES = (
     "local_maxima.png",
     "dendrogram.png",
     "clusters_pca.png",
+    "clusters_tsne.png",
     "cluster_centers.png",
 )
 # _digest of each table, recorded from pick.py before its main() was cut into steps

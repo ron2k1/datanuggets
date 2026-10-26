@@ -2,7 +2,7 @@
 
 `datanuggets-flow` gates FCS files, lets you choose candidate populations, and clusters their events. It creates nuggets for each file, then fits one weighted Ward tree to the pooled nuggets. Cluster numbers therefore refer to the same fitted clustering across files; they are not independently validated cell-type labels. [methodology.md](methodology.md#the-datanuggets-flow-pipeline) explains the method and its design choices.
 
-The command needs the `flow` extra, which adds flowio, matplotlib and pandas ([installation.md](installation.md#extras)). In a clone, `uv sync` installs them and `uv run datanuggets-flow` runs it. The [quickstart](quickstart.md#a-first-datanuggets-flow-run) walks through a first run.
+The command needs the `flow` extra, which adds flowio, matplotlib, pandas and scikit-learn ([installation.md](installation.md#extras)). In a clone, `uv sync` installs them and `uv run datanuggets-flow` runs it. The [quickstart](quickstart.md#a-first-datanuggets-flow-run) walks through a first run.
 
 > **Experimental workflow.** Each run creates a fresh folder under `outputs/` by default. Existing output paths are refused, and unfinished runs retain an `INCOMPLETE.txt` marker. Choose at least two distinct fluorescence channels and enough retained cells to make at least three occupied nuggets.
 
@@ -138,6 +138,7 @@ Figures and tables share one run folder: `outputs/flow-<timestamp>/` by default,
 | `cluster_centers.csv` | One row per cluster: its center |
 | `dendrogram.png` | The Ward tree of the pooled nuggets, leaves at 0, titled with the nugget count. 150 dpi |
 | `clusters_pca.png` | The nuggets' weighted PCA scores, colored by cluster and sized by weight. 150 dpi |
+| `clusters_tsne.png` | A t-SNE of the nugget centers in the transformed units, colored by cluster as in `clusters_pca.png`, with marker area proportional to the square root of each nugget's weight. scikit-learn's `TSNE` with `init="pca"`, `random_state=0` and perplexity 30, lowered to (nuggets − 1) / 3 for small runs. 150 dpi |
 | `cluster_centers.png` | `cluster_centers.csv` as a heat map, one column per cluster and one row per channel, in the transformed units. 150 dpi |
 
 The headers from the three-file run, with the 32 channel columns between the first and the last cut:
