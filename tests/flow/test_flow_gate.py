@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 from scipy.spatial import ConvexHull, Delaunay
 
-from datanuggets.flow import hull_gate, lymphmacro_finder
+from datanuggets.flow import finder_peaks, hull_gate, lymphmacro_finder
 from datanuggets.flow import mirrored_area as flow_mirrored_area
 from datanuggets.flow.gate import _finder, bin_mask
 from flowcases import NAMES, FlowCase, assert_gate_close, load_case, mirrored_area
@@ -159,3 +159,23 @@ def test_finder_rejects_a_constant_channel_and_unequal_lengths():
         lymphmacro_finder(np.arange(100.0), np.full(100, 5.0))
     with pytest.raises(ValueError, match="same length"):
         lymphmacro_finder(np.arange(100.0), np.arange(99.0))
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_finder_peaks_gives_his_candidates_and_the_finders_peaks(name):
+    c = load_case(name)
+    fp = finder_peaks(c.fsc, c.ssc)
+    assert np.array_equal(fp.candidates, c.candidates)
+    assert np.array_equal(fp.peaks, c.peaks)
+    assert np.array_equal(fp.density, c.z.T)
+    assert fp.peaks.shape[0] == lymphmacro_finder(c.fsc, c.ssc).shape[1]
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_finder_peaks_maps_the_grid_back_to_raw_units(name):
+    c = load_case(name)
+    fp = finder_peaks(c.fsc, c.ssc)
+    nr, nc = fp.density.shape
+    assert fp.fsc.shape == (nc,) and fp.ssc.shape == (nr,)
+    assert fp.fsc[0] == pytest.approx(c.fsc.min()) and fp.fsc[-1] == pytest.approx(c.fsc.max())
+    assert fp.ssc[0] == pytest.approx(c.ssc.min()) and fp.ssc[-1] == pytest.approx(c.ssc.max())

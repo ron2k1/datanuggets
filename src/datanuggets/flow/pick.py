@@ -274,14 +274,16 @@ def _check_args(args) -> tuple[list[Path], list[float], list[float], Path, list[
 
 def _gate_files(args, paths, t11, t21, out, plt) -> list[dict]:
     """Each file gated with Cabrera's lymphmacro_finder and its populations counted, all of them
-    drawn on one figure, gates.png."""
+    drawn on one figure, gates.png, and the density grid, local maxima and peaks behind them on
+    another, local_maxima.png, with the same Pop numbers."""
     from datanuggets import plot
-    from datanuggets.flow import find_area, lymphmacro_finder, mirrored_area
+    from datanuggets.flow import find_area, finder_peaks, lymphmacro_finder, mirrored_area
 
     area = mirrored_area if args.disc == "his" else find_area
     cols = min(len(paths), 2)
     rows = -(-len(paths) // cols)
     fig, axs = plt.subplots(rows, cols, figsize=(5.5 * cols, 4.8 * rows), squeeze=False)
+    pfig, paxs = plt.subplots(rows, cols, figsize=(6.5 * cols, 5.2 * rows), squeeze=False)
     samples = []
     for i, path in enumerate(paths):
         events, pnn, pns = read_fcs(path)
@@ -299,12 +301,18 @@ def _gate_files(args, paths, t11, t21, out, plt) -> list[dict]:
         print(f"\nFile {i + 1}, {path.name}: {len(fsc):,} events")
         print("\n".join(table))
         plot.gates(fsc, ssc, masks, title=f"File {i + 1}: {path.name}", ax=axs.flat[i])
+        fp = finder_peaks(fsc, ssc)
+        plot.peaks(fp, title=f"File {i + 1}: {path.name}", ax=paxs.flat[i])
+        print(f"  {len(fp.candidates)} local maxima, {len(fp.peaks)} kept as peaks")
         samples.append({"path": path, "masks": masks, "pnn": pnn, "pns": pns, "table": table})
-    for ax in axs.flat[len(paths) :]:
+    for ax in (*axs.flat[len(paths) :], *paxs.flat[len(paths) :]):
         ax.set_visible(False)
     fig.tight_layout()
     fig.savefig(out / "gates.png", dpi=110)
+    pfig.tight_layout()
+    pfig.savefig(out / "local_maxima.png", dpi=110)
     print(f"\nThe populations are drawn in {out / 'gates.png'}")
+    print(f"Their density peaks are drawn in {out / 'local_maxima.png'}")
     return samples
 
 

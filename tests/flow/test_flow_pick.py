@@ -19,7 +19,13 @@ COLUMNS = {
     "cluster_summary.csv": ["file_number", "file", "cluster", "cells", "percent"],
     "cluster_centers.csv": ["cluster", *LABELS],
 }
-FIGURES = ("gates.png", "dendrogram.png", "clusters_pca.png", "cluster_centers.png")
+FIGURES = (
+    "gates.png",
+    "local_maxima.png",
+    "dendrogram.png",
+    "clusters_pca.png",
+    "cluster_centers.png",
+)
 # _digest of each table, recorded from pick.py before its main() was cut into steps
 DIGESTS = {
     "selection.csv": "23b2c99d62f2c8dd40ec9f70602aef5ac59c0d001dfe8225c6589a2f302c133e",
