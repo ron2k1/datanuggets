@@ -61,10 +61,11 @@ def _label_colors(labels, palette) -> list:
 
 
 def _sizes(w, n: int, size: str) -> np.ndarray:
-    """Marker areas in points squared: proportional to weight ("area", 6 to 406), or R's
-    cex = log(w) for pch = 16 ("log"), where a log that isn't positive draws nothing."""
-    if size not in ("area", "log"):
-        raise ValueError(f"size must be 'area' or 'log', got {size!r}")
+    """Marker areas in points squared: proportional to weight ("area", 6 to 406) or to its
+    square root ("sqrt", 6 to 406, so heavy points dominate less), or R's cex = log(w) for
+    pch = 16 ("log"), where a log that isn't positive draws nothing."""
+    if size not in ("area", "sqrt", "log"):
+        raise ValueError(f"size must be 'area', 'sqrt' or 'log', got {size!r}")
     if w is None:
         if size == "log":
             raise ValueError("size='log' needs w")
@@ -77,7 +78,9 @@ def _sizes(w, n: int, size: str) -> np.ndarray:
             cex = np.log(w)
         return np.where(cex > 0, (PCH16 * cex) ** 2, 0.0)
     if not (np.all(np.isfinite(w)) and np.all(w >= 0) and w.max() > 0):
-        raise ValueError("size='area' needs finite weights, none negative and not all zero")
+        raise ValueError(f"size={size!r} needs finite weights, none negative and not all zero")
+    if size == "sqrt":
+        w = np.sqrt(w)
     return 6.0 + 400.0 * w / w.max()
 
 

@@ -81,6 +81,7 @@ def test_cli_reads_fcs_and_writes_consistent_cell_clusters(recorded_fcs, tmp_pat
         "local_maxima.png",
         "dendrogram.png",
         "clusters_pca.png",
+        "clusters_tsne.png",
         "cluster_centers.png",
     )
     assert {p.name for p in out.iterdir()} == {*tables, *figures}

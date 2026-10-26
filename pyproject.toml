@@ -47,7 +47,7 @@ frame = ["pandas>=2.2"]
 progress = ["tqdm>=4.66"]
 plot = ["matplotlib>=3.9"]
 # datanuggets-flow: FCS files in, the populations you pick out of the gates clustered
-flow = ["flowio>=1.4,<1.5", "matplotlib>=3.9", "pandas>=2.2"]
+flow = ["flowio>=1.4,<1.5", "matplotlib>=3.9", "pandas>=2.2", "scikit-learn>=1.5"]
 
 [project.scripts]
 datanuggets-flow = "datanuggets.flow.pick:main"
