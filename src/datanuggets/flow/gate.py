@@ -3,6 +3,8 @@ events whose bin lies in the hull of the population's area."""
 
 from __future__ import annotations
 
+from typing import NamedTuple
+
 import numpy as np
 from scipy.spatial import ConvexHull, Delaunay, QhullError
 
@@ -11,6 +13,19 @@ from datanuggets.flow.peaks import find_area, local_maxima, refine_peaks
 
 MSIZE = 100  # cfc.py's grid, 100 by 100 bins
 MIN_POINTS = 3  # cfc.py's guard: a hull needs more than 3 cells, and more than 3 kept events
+
+
+class FinderPeaks(NamedTuple):
+    """The finder's view of a file: density, its log(1 + count) grid with SSC-A bins as rows and
+    FSC-A bins as columns, cells below cfc.py's 0.1 of its maximum at 0; candidates, the 1-based
+    (row, col) of every local maximum; peaks, the refined peaks in the finder's order, so peak k
+    seeds population k; and fsc and ssc, the raw channel value at each column and row."""
+
+    density: np.ndarray
+    candidates: np.ndarray
+    peaks: np.ndarray
+    fsc: np.ndarray
+    ssc: np.ndarray
 
 
 def _inside(vertices: np.ndarray, q: np.ndarray) -> np.ndarray:
@@ -77,6 +92,25 @@ def lymphmacro_finder(
 
 
 def _finder(fsc_a, ssc_a, n_row, n_col, t11, t21, t12, t22, area) -> np.ndarray:
+    fsc_a, ssc_a, grid, x, _, peaks = _grid_peaks(fsc_a, ssc_a, n_row, n_col)
+    masks = np.zeros((len(fsc_a), len(peaks)), dtype=bool)
+    for k, (i, j) in enumerate(peaks):
+        t1, t2 = (t11, t21) if k == 0 else (t12, t22)
+        masks[:, k] = hull_gate(fsc_a, ssc_a, grid.zz, area(x, i, j, t1, t2))
+    return masks
+
+
+def finder_peaks(fsc_a, ssc_a, *, n_row=11, n_col=11) -> FinderPeaks:
+    """The density grid lymphmacro_finder gates on, its local maxima and the peaks it keeps, for
+    drawing with plot.peaks. n_row and n_col are the finder's focal window."""
+    fsc_a, ssc_a, grid, x, candidates, peaks = _grid_peaks(fsc_a, ssc_a, n_row, n_col)
+    shift = min(ssc_a.min(), fsc_a.min()) - 3  # sqrt_coords' shift, undone
+    return FinderPeaks(x, candidates, peaks, grid.y**2 + shift, grid.x**2 + shift)
+
+
+def _grid_peaks(fsc_a, ssc_a, n_row, n_col):
+    """cfc.py's grid of sqrt SSC-A (rows) by sqrt FSC-A (columns), its local maxima and the
+    refined peaks, with the checked channels and the grid itself for the gates."""
     fsc_a, ssc_a = channel("fsc_a", fsc_a), channel("ssc_a", ssc_a)
     if len(fsc_a) != len(ssc_a):
         raise ValueError(
@@ -84,9 +118,5 @@ def _finder(fsc_a, ssc_a, n_row, n_col, t11, t21, t12, t22, area) -> np.ndarray:
         )
     grid = f_plot(*sqrt_coords(fsc_a, ssc_a), nr=MSIZE, nc=MSIZE, scale="l")
     x = grid.z.T
-    peaks = refine_peaks(x, local_maxima(x, n_row=n_row, n_col=n_col))
-    masks = np.zeros((len(fsc_a), len(peaks)), dtype=bool)
-    for k, (i, j) in enumerate(peaks):
-        t1, t2 = (t11, t21) if k == 0 else (t12, t22)
-        masks[:, k] = hull_gate(fsc_a, ssc_a, grid.zz, area(x, i, j, t1, t2))
-    return masks
+    candidates = local_maxima(x, n_row=n_row, n_col=n_col)
+    return fsc_a, ssc_a, grid, x, candidates, refine_peaks(x, candidates)

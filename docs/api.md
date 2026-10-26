@@ -943,7 +943,40 @@ events_in_any_gate = masks.any(axis=1)
 events_per_gate = masks.sum(axis=0)  # Overlapping events can contribute to multiple gates.
 ```
 
-**See also:** [`find_area`](#find_area), [`mirrored_area`](#mirrored_area), [`gates`](#gates), [CLI guide](cli.md).
+**See also:** [`find_area`](#find_area), [`mirrored_area`](#mirrored_area), [`finder_peaks`](#finder_peaks), [`gates`](#gates), [CLI guide](cli.md).
+
+### `finder_peaks`
+
+**Description**
+
+Return the density grid `lymphmacro_finder` gates on, its local maxima, and the peaks it keeps, for inspection or drawing with [`plot.peaks`](#peaks).
+
+**Usage**
+
+```text
+finder_peaks(fsc_a, ssc_a, *, n_row=11, n_col=11)
+```
+
+**Arguments**
+
+`fsc_a` and `ssc_a` are the channels given to `lymphmacro_finder`. `n_row` and `n_col` are its local-maximum neighborhood.
+
+**Details**
+
+The grid, candidates and peaks are computed by the same steps as the finder's, so peak *k* (counting from 1) is the peak that seeds the finder's population column *k* − 1, "Pop *k*" in `gates`. A candidate missing from `peaks` was removed by `refine_peaks`: too near the grid's edge, or below the 0.9 density quantile.
+
+**Value**
+
+A [`FinderPeaks`](#finderpeaks).
+
+**Examples**
+
+```python
+fp = flow.finder_peaks(fsc, ssc)
+assert len(fp.peaks) == masks.shape[1]
+```
+
+**See also:** [`local_maxima`](#local_maxima), [`refine_peaks`](#refine_peaks), [`peaks`](#peaks).
 
 ### Grid and gate helpers
 
@@ -1201,6 +1234,18 @@ The result of `f_plot`, exported from `datanuggets.flow`.
 | `zz` | `(n_events, 2)` | Per-event 1-based `(x bin, y bin)` coordinates. |
 
 The container is frozen, but its arrays do not have the read-only-copy guarantee of the core result classes.
+
+### `FinderPeaks`
+
+The result of `finder_peaks`, a named tuple exported from `datanuggets.flow`.
+
+| Field | Shape | Meaning |
+| --- | --- | --- |
+| `density` | `(100, 100)` | The finder's `log1p` density grid, `grid.z.T`: SSC-A bins as rows, FSC-A bins as columns. |
+| `candidates` | `(q, 2)` | 1-based `(row, col)` of every local maximum. |
+| `peaks` | `(p, 2)` | 1-based `(row, col)` of the refined peaks, in the finder's population order. |
+| `fsc` | `(100,)` | Raw FSC-A value at each column. |
+| `ssc` | `(100,)` | Raw SSC-A value at each row. |
 
 ## Plotting
 
@@ -1473,7 +1518,40 @@ fig, ax = plt.subplots()
 plot.gates(fsc, ssc, masks, title="Candidate populations", ax=ax)
 ```
 
-**See also:** [`lymphmacro_finder`](#lymphmacro_finder), [`hull_gate`](#hull_gate).
+**See also:** [`lymphmacro_finder`](#lymphmacro_finder), [`hull_gate`](#hull_gate), [`peaks`](#peaks).
+
+### `peaks`
+
+**Description**
+
+Draw the gate finder's density grid with its local maxima and the peaks that seed each population.
+
+**Usage**
+
+```text
+peaks(fp, *, title=None, ax=None)
+```
+
+**Arguments**
+
+`fp` is a [`FinderPeaks`](#finderpeaks) from `finder_peaks`. `title` optionally labels the plot, and `ax` supplies axes.
+
+**Details**
+
+The grid is drawn FSC-A across and SSC-A up, as in `gates`, on the finder's square-root scale with tick labels in raw units; empty bins are blank. Every local maximum is an open circle and each kept peak a red cross labelled with the Pop number it seeds in `gates`. A colorbar is added to the axes' figure.
+
+**Value**
+
+The Matplotlib axes.
+
+**Examples**
+
+```python
+fig, ax = plt.subplots()
+plot.peaks(flow.finder_peaks(fsc, ssc), title="Density peaks", ax=ax)
+```
+
+**See also:** [`finder_peaks`](#finder_peaks), [`gates`](#gates).
 
 ### `style`
 
