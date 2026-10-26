@@ -54,7 +54,7 @@ jobs:
         run: |
           uv venv --python 3.14 tmp/wheel
           wheel=$(echo dist/datanuggets-*-py3-none-any.whl)
-          uv pip install --python tmp/wheel "$wheel[frame,progress,plot,flow]" pytest==9.1.1 pytest-xdist==3.8.0
+          uv pip install --python tmp/wheel "$wheel[frame,progress,plot,flow,cli]" pytest==9.1.1 pytest-xdist==3.8.0
           uv pip check --python tmp/wheel
           cd tmp/sdist
           ../wheel/bin/python -c "import datanuggets as d; assert 'site-packages' in d.__file__, d.__file__"

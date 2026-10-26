@@ -6,7 +6,7 @@ Data nuggets represent a dataset with a smaller set of points. Each nugget store
 
 This is a native Python port of methods from R's `datanugget` 1.5.0 and `WCluster` 1.3.0. R is not required. See the [R-to-Python function map](https://github.com/ron2k1/datanuggets/blob/main/docs/api.md#r-to-python-function-map) for coverage; automatic nugget-count selection (`optimal.DN`) is not implemented.
 
-[Getting started](https://github.com/ron2k1/datanuggets/blob/main/docs/quickstart.md) · [Function reference](https://github.com/ron2k1/datanuggets/blob/main/docs/api.md) · [Flow cytometry](https://github.com/ron2k1/datanuggets/blob/main/docs/cli.md) · [Limitations](https://github.com/ron2k1/datanuggets/blob/main/docs/limitations.md)
+[CSV command line](https://github.com/ron2k1/datanuggets/blob/main/docs/cli.md#analyze-a-csv) · [Python walkthrough](https://github.com/ron2k1/datanuggets/blob/main/docs/quickstart.md) · [Function reference](https://github.com/ron2k1/datanuggets/blob/main/docs/api.md) · [Limitations](https://github.com/ron2k1/datanuggets/blob/main/docs/limitations.md)
 
 > **Research alpha — `0.1.0a1`.** The API may change. The port is tested against recorded R cases, with [known differences](https://github.com/ron2k1/datanuggets/blob/main/docs/compatibility.md). See the [release notes](https://github.com/ron2k1/datanuggets/blob/main/docs/releases.md) for scope and limitations.
 
@@ -19,20 +19,34 @@ Publication is on hold while the provenance of the GNU sorting helpers is review
 Use Python 3.12 or newer. Create and activate a [virtual environment](https://github.com/ron2k1/datanuggets/blob/main/docs/installation.md#choose-a-python-version). Once the alpha is published, install its exact version from PyPI:
 
 ```sh
-python -m pip install "datanuggets[frame,plot]==0.1.0a1"
+python -m pip install "datanuggets[cli]==0.1.0a1"
 ```
 
 For the current source, including before the first publication, install from `main` with Git and repository access:
 
 ```sh
-python -m pip install "datanuggets[frame,plot] @ git+https://github.com/ron2k1/datanuggets.git@main"
+python -m pip install "datanuggets[cli] @ git+https://github.com/ron2k1/datanuggets.git@main"
 ```
 
-The extras add pandas and matplotlib. **Python 3.14 and 3.15 run the same package**; they are alternative interpreter versions, not separate editions of datanuggets. You only need one. Contributors testing both use separate environments, as explained in [installation](https://github.com/ron2k1/datanuggets/blob/main/docs/installation.md#choose-a-python-version).
+The `cli` extra adds pandas and matplotlib for CSV analysis, tables, and plots. On a MacBook, you can also [install a supplied wheel once](https://github.com/ron2k1/datanuggets/blob/main/docs/installation.md#macbook-install-once-from-a-wheel) without Git or uv.
+
+**Python 3.14 and 3.15 run the same package**; they are alternative interpreter versions, not separate editions of datanuggets. You only need one. Contributors testing both use separate environments, as explained in [installation](https://github.com/ron2k1/datanuggets/blob/main/docs/installation.md#choose-a-python-version).
 
 Prefer a ready-to-run example? [Clone the repository](https://github.com/ron2k1/datanuggets/blob/main/docs/installation.md#from-a-local-checkout) and run `python examples/first_analysis.py`. It uses the included R `quakes` data and saves a plot and tables under `outputs/`.
 
-### 2. Create nuggets
+### Analyze your own CSV from Terminal
+
+Keep your dataset wherever you normally store it. In your installed environment, replace the path and column names below with yours:
+
+```sh
+datanuggets analyze "path/to/study.csv" --columns measurement_a measurement_b --transform standardize --nuggets 200 --analysis kmeans pca --clusters 3
+```
+
+This creates nuggets, runs weighted k-means and PCA, and writes tables and a `plots/` folder under a new `outputs/analysis-.../` directory in your current working folder. `assignments.csv` maps every input row to its nugget and cluster; `cluster_summary.csv` reports cluster sizes and feature means in the original units. The Terminal prints a summary and the result location.
+
+Choose numeric measurement columns, leaving out IDs and outcome labels. Missing or nonfinite values stop the run. Standardization and the requested counts are choices to review for your data; the command does not select them automatically. See the [CSV guide](https://github.com/ron2k1/datanuggets/blob/main/docs/cli.md#analyze-a-csv) for transformations, refinement, hierarchical clustering, and output details. `python -m datanuggets` also works in place of `datanuggets`.
+
+### 2. Create nuggets in Python
 
 Choose the columns you want to analyze; leave out IDs and known outcome labels. Replace `feature_a` and `feature_b` with your CSV's column names.
 
@@ -71,18 +85,18 @@ The [walkthrough](https://github.com/ron2k1/datanuggets/blob/main/docs/quickstar
 
 ## Working with FCS files
 
-The experimental `datanuggets-flow` command finds candidate gates, lets you choose populations, and clusters their events across files. Once the alpha is published, install the `flow` extra at the same version:
+The experimental `datanuggets-flow` command is a separate downstream workflow using the package. It finds candidate gates, lets you choose populations, and clusters their events across files. Once the alpha is published, install the `flow` extra at the same version:
 
 ```sh
 python -m pip install "datanuggets[flow]==0.1.0a1"
 datanuggets-flow path/to/fcs_folder
 ```
 
-Before publication, use the [source install](https://github.com/ron2k1/datanuggets/blob/main/docs/installation.md#install-from-github) with `[flow]` in place of `[frame,plot]`.
+Before publication, use the [source install](https://github.com/ron2k1/datanuggets/blob/main/docs/installation.md#install-from-github) with `[flow]` in place of `[cli]`.
 
 Figures and tables go into a new `outputs/flow-<timestamp>/` folder for each run. Run from the repository root to keep them together there; `outputs/` is ignored by Git. You can choose another new folder with `--out`; existing paths are refused.
 
-Inspect the gates, choose at least two fluorescence channels, and check your compensation and preprocessing: the tool does not apply compensation. See the [CLI guide](https://github.com/ron2k1/datanuggets/blob/main/docs/cli.md) before using it on a study.
+Inspect the gates, choose at least two fluorescence channels, and check your compensation and preprocessing: the tool does not apply compensation. See the [FCS guide](https://github.com/ron2k1/datanuggets/blob/main/docs/cli.md#fcs-pipeline) before using it on a study.
 
 ## Know the limits
 
