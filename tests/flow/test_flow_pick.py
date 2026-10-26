@@ -97,6 +97,27 @@ def test_main_clusters_real_events_end_to_end(tmp_path, monkeypatch, close_figur
     assert {name: _digest(out / name) for name in COLUMNS} == DIGESTS
 
 
+def test_populations_are_chosen_from_the_local_maxima_before_gates_are_drawn(
+    tmp_path, monkeypatch, close_figures
+):
+    folder, out = tmp_path / "in", tmp_path / "out"
+    folder.mkdir()
+    (folder / "202.fcs").write_bytes(b"")
+    monkeypatch.setattr(pick, "read_fcs", _read_202)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    seen = []
+
+    def answer(prompt, plt, show):
+        seen.append(sorted(p.name for p in out.iterdir()))
+        raise SystemExit("\ncancelled; nothing was clustered")
+
+    monkeypatch.setattr(pick, "_live_input", answer)
+    with pytest.raises(SystemExit, match="cancelled"):
+        main([str(folder), "--no-show", "--out", str(out)])
+    assert seen == [["INCOMPLETE.txt", "local_maxima.png"]]
+    assert not (out / "gates.png").exists()
+
+
 # _digest of each table of the three-file run, recorded from pick.py before its main() was cut
 # into steps
 DIGESTS_3 = {
