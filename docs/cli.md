@@ -287,9 +287,9 @@ A gate folder holds:
 | --- | --- |
 | `local_maxima.png`, `gates.png` | The one-shot run's two gate figures |
 | `gates.npz` | Each file's masks, one bit per event and population, and the finder's density grid, local maxima, peaks and grid positions |
-| `gates.json` | Written last: the gate settings, the finder's fixed constants, the reader, the package versions, and each file's path, size, SHA-256, event count, channels, thresholds and populations |
+| `gates.json` | The record of the gating, written last. [Flow run records](reproducibility.md#flow-run-records) lists its keys |
 
-`--from-gates` checks everything before it asks: the gate folder and its record, each FCS file at its recorded path with the size and SHA-256 it was gated with, that `--out` doesn't exist, and the channels to cluster. It then shows both figures, or prints their paths with `--no-show`, and asks. A folder gated under other package versions isn't refused, since the masks are the gates, but the run first prints a line such as `note: GATES was gated with numpy 2.3.4 (now 2.4.0); its masks are used as saved`, because the packages that cluster can move the tables. The run folder is made only after the answer, so stopping at the prompt writes nothing. Both figures are copied into the run folder byte for byte, the gate folder's masks choose the events, and `run.json` records the run. The gate folder is only read.
+`--from-gates` checks everything before it asks: the gate folder and its record, each FCS file at its recorded path with the size and SHA-256 it was gated with, that `--out` doesn't exist, and the channels to cluster. It then shows both figures, or prints their paths with `--no-show`, and asks. A folder gated under other package versions isn't refused, since the masks are the gates, but the run first prints a line naming each package whose version differs, such as `note: GATES was gated with numpy 2.3.4 (now 2.4.0); its masks are used as saved`, because the packages that cluster can move the tables. The run folder is made only after the answer, so stopping at the prompt writes nothing. Both figures are copied into the run folder byte for byte, the gate folder's masks choose the events, and `run.json` records the run. The gate folder is only read.
 
 The masks choose events by their row in the file, so they fit only the bytes they were found in. A file that moved or changed after gating is refused; gate it again with `--gates-only`. A gate folder records file paths, hashes and event counts, so keep it with the FCS data and out of Git, as the default under the ignored `outputs/` does.
 
@@ -322,9 +322,9 @@ Figures and tables share one run folder: `outputs/flow-<timestamp>/` by default,
 | `cluster_centers.csv` | One row per cluster: its center |
 | `dendrogram.png` | The Ward tree of the pooled nuggets, leaves at 0, titled with the nugget count. 150 dpi |
 | `clusters_pca.png` | The nuggets' weighted PCA scores, colored by cluster and sized by weight. 150 dpi |
-| `clusters_tsne.png` | A t-SNE of the nugget centers in the transformed units, colored by cluster as in `clusters_pca.png`, with marker area proportional to the square root of each nugget's weight. scikit-learn's `TSNE` given `n_components=2`, `init="pca"`, `learning_rate="auto"` and `max_iter=1000`, `random_state` from `--tsne-seed` and the perplexity from `--tsne-perplexity`, lowered to (nuggets − 1) / 3 for small runs. Left out with `--no-tsne`. 150 dpi |
+| `clusters_tsne.png` | A t-SNE of the nugget centers in the transformed units, colored by cluster as in `clusters_pca.png`, with marker area proportional to the square root of each nugget's weight. [The t-SNE figure](methodology.md#the-t-sne-figure) gives the arguments scikit-learn's `TSNE` is called with. Left out with `--no-tsne`. 150 dpi |
 | `cluster_centers.png` | `cluster_centers.csv` as a heat map, one column per cluster and one row per channel, in the transformed units. 150 dpi |
-| `run.json` | Only in a `--from-gates` run: the gate folder, the clustering settings, the populations kept as `--pops` writes them, the channels and their labels, and the package versions |
+| `run.json` | Only in a `--from-gates` run: the record of the run. [Flow run records](reproducibility.md#flow-run-records) lists its keys |
 
 A `--from-gates` run's `local_maxima.png` and `gates.png` are byte-for-byte copies of its gate folder's, so its folder holds the one-shot run's files plus `run.json`.
 

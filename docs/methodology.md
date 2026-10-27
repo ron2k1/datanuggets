@@ -149,7 +149,7 @@ These choices come from the code. Nothing in the repository measures how they af
 
 ### Staged runs
 
-A `--gates-only` run saves each file's populations as masks, one bit per event and population, in `gates.npz`, beside the grid, local maxima and peaks its figures were drawn from. A `--from-gates` run takes the kept events from those masks and doesn't run the finder again, so the populations it clusters are the ones the figures show. The masks pick events by their row in the file, so the run first checks each file's size and SHA-256 against the record, and its event count and channels when it reads the file again. For the same files, settings and populations, the two stages write the one-shot run's tables byte for byte. `tests/flow/test_flow_stages.py` checks that on one and three files of the fixtures, and `tests/flow/test_flow_fcs_integration.py` on an FCS file.
+A `--gates-only` run saves each file's populations as masks. A `--from-gates` run takes the kept events from those masks and doesn't run the finder again, so the populations it clusters are the ones its gate figures show. [Staged runs](cli.md#staged-runs) describes the gate folder and the checks that hold the masks to the files they were found in.
 
 ### The t-SNE figure
 
@@ -258,7 +258,7 @@ The suite compares with three fixtures recorded from the reference code on files
 | `datanuggets-flow`'s argument and population parsing, the union of picks, the file listing, the prompt | unit tests in `tests/flow/test_flow_pick.py` |
 | `datanuggets-flow`'s transform, per-file nuggets, pooling, Ward and `k` | design choices. `test_flow_pick.py` runs the command end to end on 50,000 real events of `202.fcs` from the fixtures, not on an FCS file, and pins its tables' digests, which catches a change in the output but doesn't show the clusters are right. No result in the repository validates the clusters |
 | The finder's parameters, the flow settings' checks | `tests/flow/test_flow_settings.py` pins every constant in the tables above and every default, and checks each refusal |
-| Staged runs, `gates.json` and `run.json` | `tests/flow/test_flow_state.py` saves and loads gate folders and refuses each damaged one. `test_flow_stages.py` checks that the two stages give the one-shot run's table digests |
+| Staged runs, `gates.json` and `run.json` | `tests/flow/test_flow_state.py` saves and loads gate folders and refuses each damaged one. `test_flow_stages.py` checks that the two stages give the one-shot run's table digests on one and three files of the fixtures, and `test_flow_fcs_integration.py` that they write its tables byte for byte from an FCS file |
 | The paper's claims about structure preservation | not tested here |
 
 The clustering steps of `datanuggets-flow` call `create_dn`, `whclust`, `cut_tree` and `wmean`, which are the R-checked functions above. What isn't checked is the pipeline that composes them.
