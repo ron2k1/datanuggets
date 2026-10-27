@@ -319,7 +319,7 @@ uv run python benchmarks/flow/compare.py --metadata <folder>/study_metadata.xlsx
 
 It stops with a usage error if it gets both `target` and `--metadata` or `--dir`, or neither a `target` nor both of them, a `--repeat` below 1, or a number of thresholds that isn't one per file. `--t0` and `--t00` pair with the files in the order they run, so with `--metadata` they follow the workbook's rows. The reference script itself pairs its thresholds with the samples in FlowKit's `$FIL` order instead, which [methodology.md](methodology.md) explains.
 
-On Windows, `.\benchmarks\flow\compare.ps1` takes the same arguments, `--metadata` and an unquoted `22,20,18,18` included. It runs `compare.py` in the repo's `.venv`, writes to `tmp\flow`, refuses `--out`, and opens the picture the run wrote. `-Mini` runs it on the Mac mini over SSH and copies the pictures and CSV files back to `tmp\flow\mini`; it depends on the maintainer's SSH setup for that machine.
+On Windows, `.\benchmarks\flow\compare.ps1` takes the same arguments, `--metadata` and an unquoted `22,20,18,18` included. It runs `compare.py` in the repo's `.venv`, writes to `tmp\flow`, refuses `--out`, and opens the picture the run wrote.
 
 ```powershell
 .\benchmarks\flow\compare.ps1 --metadata <folder>/study_metadata.xlsx --dir <folder> --t0 22,20,18,18 --t00 0.25,0.5,0.5,0.5

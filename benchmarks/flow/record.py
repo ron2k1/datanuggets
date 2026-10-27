@@ -1,8 +1,7 @@
 """Record the flow fixtures: his pieces on files thinned to every k-th event for 50,000 events,
-the inputs and each piece's output saved to <out>/<file>.npz. Run on the mini:
+the inputs and each piece's output saved to <out>/<file>.npz:
 
-bash ~/.claude/tools/mini-run.sh uv run python benchmarks/flow/record.py \\
-    ~/flowdata/zenodo-22079206/154.fcs ... --out tmp/flow/fixtures
+uv run python benchmarks/flow/record.py <files...> --out tmp/flow/fixtures
 """
 
 import argparse
