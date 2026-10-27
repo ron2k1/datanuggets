@@ -13,6 +13,8 @@ from datanuggets.flow import pick, pipeline, state
 from datanuggets.flow.pick import main
 from flowcases import COLUMNS, DIGESTS, DIGESTS_3, FIGURES, digest, read_202
 
+FLOW_EXTRA = 'datanuggets-flow needs the flow extra: pip install "datanuggets[flow]"'
+
 
 @pytest.fixture
 def staged(monkeypatch, close_figures):
@@ -232,7 +234,43 @@ def test_every_mode_names_the_flow_extra_without_matplotlib(tmp_path, monkeypatc
     }[mode]
     with pytest.raises(SystemExit) as e:
         main([*argv, "--no-show"])
-    assert e.value.code == 'datanuggets-flow needs the flow extra: pip install "datanuggets[flow]"'
+    assert e.value.code == FLOW_EXTRA
+
+
+# the flow extra's packages a run needs only once it clusters, as the modules that block them
+CLUSTERING_EXTRAS = {"pandas": ("pandas",), "scikit-learn": ("sklearn", "sklearn.manifold")}
+
+
+@pytest.mark.parametrize("package", CLUSTERING_EXTRAS)
+@pytest.mark.parametrize("mode", ["one-shot", "from-gates"])
+def test_a_clustering_mode_names_the_flow_extra_without_pandas_or_sklearn(
+    tmp_path, monkeypatch, staged, mode, package
+):
+    """The tables need pandas and the t-SNE scikit-learn, so a run that clusters without one stops
+    on the flow extra's message before it reads a file or makes its folder, rather than once the
+    files are gated and the populations chosen, leaving the folder marked incomplete."""
+    if mode == "one-shot":
+        (tmp_path / "202.fcs").write_bytes(b"")
+        argv = [str(tmp_path / "202.fcs")]
+    else:
+        argv = ["--from-gates", str(_gates_only(tmp_path))]
+    for name in CLUSTERING_EXTRAS[package]:
+        monkeypatch.setitem(sys.modules, name, None)
+    monkeypatch.setattr(pick, "read_fcs", lambda path: pytest.fail("file read"))
+    out = tmp_path / "out"
+    with pytest.raises(SystemExit) as e:
+        main([*argv, "--pops", "1", "--no-show", "--out", str(out)])
+    assert e.value.code == FLOW_EXTRA
+    assert not out.exists()
+
+
+def test_gates_only_needs_neither_pandas_nor_sklearn(tmp_path, monkeypatch, staged):
+    """--gates-only writes no table and draws no t-SNE, so it saves its gates without either."""
+    for names in CLUSTERING_EXTRAS.values():
+        for name in names:
+            monkeypatch.setitem(sys.modules, name, None)
+    gates = _gates_only(tmp_path)
+    assert sorted(p.name for p in gates.iterdir()) == sorted(state.GATE_FILES)
 
 
 def test_gates_only_and_from_gates_are_exclusive(tmp_path, capsys):
@@ -265,6 +303,34 @@ def test_from_gates_refuses_an_existing_out_before_the_prompt(tmp_path, monkeypa
     assert e.value.code == f"output path already exists: {out}; choose a new --out folder"
     assert [p.name for p in out.iterdir()] == ["events_1.csv"]
     assert (out / "events_1.csv").read_bytes() == b"earlier events"
+
+
+@pytest.mark.parametrize(
+    ("flags", "message"),
+    [
+        (["--channels", "CD9-A,CD3-A"], "202.fcs has no channel CD9-A; its channels: "),
+        (
+            ["--exclude-channels", "CD9-A"],
+            "--exclude-channels names CD9-A, which 202.fcs doesn't have; its channels: ",
+        ),
+        (["--channels", "CD9-A,CD3-A", "--pops", "1"], "202.fcs has no channel CD9-A; "),
+        (["--pops", "1;1"], "--pops gives 2 choices for 1 files; "),
+    ],
+    ids=["channels", "exclude-channels", "channels-with-pops", "pops"],
+)
+def test_from_gates_refuses_a_bad_channel_or_pops_before_the_prompt(
+    tmp_path, monkeypatch, staged, flags, message
+):
+    """A channel the gated files don't have, or a --pops that doesn't fit their count, is refused
+    against the gate folder before the populations are asked and before the run folder is made.
+    With --pops there is no prompt, so the folder is what shows the channels were checked first:
+    checked inside it, they would leave it marked incomplete with the gate figures copied in."""
+    gates, out = _gates_only(tmp_path), tmp_path / "out"
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    with pytest.raises(SystemExit) as e:
+        main(["--from-gates", str(gates), "--no-show", "--out", str(out), *flags])
+    assert e.value.code.startswith(message)
+    assert not out.exists()
 
 
 def test_failed_from_gates_run_is_marked_and_leaves_the_gates_alone(
