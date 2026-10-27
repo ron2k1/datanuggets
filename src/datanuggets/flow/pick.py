@@ -163,6 +163,20 @@ def _parser() -> argparse.ArgumentParser:
         help=f"rows of the window the finder's local maxima are found in (default: {gate.n_row})",
     )
     p.add_argument("--n-col", type=int, help=f"columns of that window (default: {gate.n_col})")
+    p.add_argument(
+        "--no-tsne",
+        dest="tsne",
+        action="store_false",
+        default=None,
+        help="leave out the t-SNE of the nuggets, clusters_tsne.png, and the need for scikit-learn",
+    )
+    p.add_argument(
+        "--tsne-perplexity",
+        type=float,
+        help="the t-SNE's perplexity, lowered to (nuggets - 1) / 3 when that's smaller "
+        f"(default: {cluster.tsne_perplexity:g})",
+    )
+    p.add_argument("--tsne-seed", type=int, help=f"the t-SNE's seed (default: {cluster.tsne_seed})")
     p.add_argument("--no-show", action="store_true", help="save the figures without opening them")
     return p
 
@@ -226,14 +240,16 @@ def _ask(samples, plt, show):
     return chosen
 
 
-def _pyplot(no_show: bool):
+def _pyplot(no_show: bool, *, tsne: bool):
     """matplotlib's pyplot, once the flow extra is known to be there, drawing off screen with
-    --no-show. pandas and scikit-learn are checked here too, for the tables and the t-SNE the
-    steps make, so a missing one stops the run before any file is read."""
+    --no-show. pandas is checked here too, for the tables, and scikit-learn when the t-SNE is
+    drawn, so a missing one stops the run before any file is read."""
     try:
         import matplotlib
         import pandas  # noqa: F401
-        import sklearn  # noqa: F401
+
+        if tsne:
+            import sklearn  # noqa: F401
     except ImportError as e:
         raise SystemExit(
             'datanuggets-flow needs the flow extra: pip install "datanuggets[flow]"'
@@ -260,6 +276,9 @@ def _gate_settings(args, t11, t21) -> GateSettings:
 def _settings(args) -> ClusterSettings:
     """The settings the flags give, checked before any file is read, so a bad value stops the run
     first; the clustering's are returned. --t11 and --t21 wait for the files to be counted."""
+    for name in ("tsne_perplexity", "tsne_seed"):
+        if args.tsne is False and getattr(args, name) is not None:
+            raise SystemExit(f"{cli_flag(name)} has no effect with --no-tsne")
     _flags(GateSettings, args, t11=None, t21=None).check()
     cluster = _flags(
         ClusterSettings,
@@ -326,10 +345,13 @@ def _draw_gates(samples, plt, out) -> None:
 
 
 def _choose_pops(samples, spec, plt, show) -> list[list[int]]:
-    """The populations to keep in each file: --pops, or asked file by file."""
-    if spec is None:
-        return _ask(samples, plt, show)
-    return pipeline.parse_selection(spec, [s["masks"].shape[1] for s in samples])
+    """The populations to keep in each file: --pops, or asked file by file, the answers then
+    printed as the --pops that repeats them without the prompt."""
+    if spec is not None:
+        return pipeline.parse_selection(spec, [s["masks"].shape[1] for s in samples])
+    chosen = _ask(samples, plt, show)
+    print(f'\nTo repeat this choice: --pops "{pipeline.pops_spec(chosen)}"')
+    return chosen
 
 
 def _channel_names(names: str | None) -> tuple[str, ...] | None:
@@ -364,7 +386,7 @@ def main(argv=None) -> None:
 def _run(args) -> None:
     """The run: every check, then the output folder, the steps, and the figures shown."""
     cluster = _settings(args)
-    plt = _pyplot(args.no_show)
+    plt = _pyplot(args.no_show, tsne=cluster.tsne)
     paths, t11, t21, out, spec = _check_args(args)
     try:
         out.mkdir(parents=True, exist_ok=False)

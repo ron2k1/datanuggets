@@ -1,7 +1,7 @@
 """The flow pipeline's settings. The constants fixed for parity keep the values of Cabrera's
 cfc.py, the tunable defaults live once, in _defaults, so a signature can't drift from them, and the
 settings classes refuse a bad value with the message the CLI prints, the setting named as its flag
-there and by its name in the library."""
+there, a flag every setting has, and by its name in the library."""
 
 import dataclasses
 import inspect
@@ -12,7 +12,7 @@ import pytest
 
 from datanuggets import _defaults, flow
 from datanuggets.exceptions import FlowError
-from datanuggets.flow import gate, grid, peaks
+from datanuggets.flow import gate, grid, peaks, pick
 from datanuggets.flow.settings import ClusterSettings, GateSettings, cli_flag
 
 # each constant fixed for parity with cfc.py, at the value its code has
@@ -206,6 +206,14 @@ def test_flow_error_renders_settings_as_flags():
     assert str(FlowError("no file has cells kept")) == "no file has cells kept"
     flags = [cli_flag(n) for n in ("dn_num2", "tsne_seed", "tsne", "from_gates")]
     assert flags == ["--dn-num2", "--tsne-seed", "--no-tsne", "--from-gates"]
+
+
+def test_every_setting_names_a_real_flag():
+    """cli_flag of every setting is a datanuggets-flow flag, so an error the CLI shows names a
+    flag that can be typed."""
+    flags = pick._parser()._option_string_actions
+    names = [f.name for cls in (GateSettings, ClusterSettings) for f in dataclasses.fields(cls)]
+    assert [name for name in names if cli_flag(name) not in flags] == []
 
 
 def test_gate_settings_spread_per_file_thresholds():

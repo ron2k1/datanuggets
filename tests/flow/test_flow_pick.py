@@ -289,7 +289,7 @@ def test_parser_defaults_are_all_resolved_from_settings():
     default, the one place that value is kept."""
     names = {f.name for cls in (GateSettings, ClusterSettings) for f in dataclasses.fields(cls)}
     defaults = {a.dest: a.default for a in pick._parser()._actions if a.dest in names}
-    assert defaults == dict.fromkeys(names - {"tsne", "tsne_perplexity", "tsne_seed"})
+    assert defaults == dict.fromkeys(names)
 
 
 def test_explicit_defaults_give_the_same_tables(tmp_path, monkeypatch, close_figures):
@@ -312,19 +312,22 @@ def test_explicit_defaults_give_the_same_tables(tmp_path, monkeypatch, close_fig
         "--cofactor": "6000",
         "--dn-num1": "10000",
         "--seed": "291102",
+        "--tsne-perplexity": "30",
+        "--tsne-seed": "0",
     }
     argv = [str(source), "--no-show", "--out", str(out), "--jobs", "1", "--pops", "1"]
     main([*argv, "--dn-num2", "50", "--k", "3", *(t for item in defaults.items() for t in item)])
     assert {name: digest(out / name) for name in COLUMNS} == DIGESTS
 
 
-def test_new_flags_reach_the_finder_and_create_dn(tmp_path, monkeypatch, close_figures):
-    """The finder gets --t12, --t22, --n-row and --n-col, and create_dn --dn-num1, --seed and
-    --jobs, with the channels --exclude-channels leaves. The run stops at the first create_dn."""
+def test_new_flags_reach_the_finder_create_dn_and_tsne(tmp_path, monkeypatch, close_figures):
+    """The finder gets --t12, --t22, --n-row and --n-col, create_dn --dn-num1, --seed and --jobs,
+    with the channels --exclude-channels leaves, and the t-SNE --tsne-perplexity and --tsne-seed.
+    The run stops there, before the figures."""
     source = tmp_path / "202.fcs"
     source.touch()
     monkeypatch.setattr(pick, "read_fcs", read_202)
-    finder, seen = pipeline.gate_peaks, {}
+    finder, nuggets, seen = pipeline.gate_peaks, pipeline.create_dn, {}
 
     def gate_peaks(fsc, ssc, **kwargs):
         seen["finder"] = kwargs
@@ -333,10 +336,15 @@ def test_new_flags_reach_the_finder_and_create_dn(tmp_path, monkeypatch, close_f
     def create_dn(x, **kwargs):
         seen["create_dn"] = kwargs
         seen["channels"] = x.shape[1]
+        return nuggets(x, **kwargs)
+
+    def tsne_embedding(centers, settings):
+        seen["tsne"] = (settings.tsne_perplexity, settings.tsne_seed)
         raise _Stop
 
     monkeypatch.setattr(pipeline, "gate_peaks", gate_peaks)
     monkeypatch.setattr(pipeline, "create_dn", create_dn)
+    monkeypatch.setattr(pipeline, "tsne_embedding", tsne_embedding)
     flags = {
         "--t12": "19",
         "--t22": "0.4",
@@ -347,6 +355,8 @@ def test_new_flags_reach_the_finder_and_create_dn(tmp_path, monkeypatch, close_f
         "--seed": "7",
         "--jobs": "1",
         "--exclude-channels": "FJComp-BV510-A",
+        "--tsne-perplexity": "12.5",
+        "--tsne-seed": "3",
     }
     argv = [str(source), "--pops", "1", "--no-show", "--out", str(tmp_path / "out")]
     with pytest.raises(_Stop):
@@ -355,6 +365,7 @@ def test_new_flags_reach_the_finder_and_create_dn(tmp_path, monkeypatch, close_f
     assert finder_flags == {"t12": 19.0, "t22": 0.4, "n_row": 9, "n_col": 13}
     assert seen["create_dn"] == {"dn_num1": 5000, "dn_num2": 50, "seed": 7, "n_jobs": 1}
     assert seen["channels"] == 2
+    assert seen["tsne"] == (12.5, 3)
 
 
 @pytest.mark.parametrize(
@@ -368,6 +379,8 @@ def test_new_flags_reach_the_finder_and_create_dn(tmp_path, monkeypatch, close_f
         ("--n-row", "0", "--n-row is 0; it takes 1 to 100 grid cells"),
         ("--t12", "0", "--t12 is 0.0; it takes a positive distance in grid cells"),
         ("--t22", "nan", "--t22 is nan; it takes a fraction of the peak's density, 0 or more"),
+        ("--tsne-perplexity", "0", "--tsne-perplexity is 0.0; it takes a positive number"),
+        ("--tsne-seed", "-1", "--tsne-seed is -1; it takes a whole number from 0"),
     ],
 )
 def test_bad_settings_stop_before_any_file_is_read(tmp_path, flag, value, message):
@@ -384,3 +397,40 @@ def test_exclude_channels_and_channels_are_exclusive(tmp_path, capsys):
         main([str(tmp_path), "--channels", "CD3-A,CD4-A", "--exclude-channels", "Live-A"])
     assert e.value.code == 2
     assert "--exclude-channels: not allowed with argument --channels" in capsys.readouterr().err
+
+
+def test_no_tsne_keeps_the_tables_and_drops_its_figure(tmp_path, monkeypatch, close_figures):
+    """Without the t-SNE the tables are the same, clusters_tsne.png isn't drawn, and scikit-learn
+    is never needed."""
+    monkeypatch.setitem(sys.modules, "sklearn", None)
+    monkeypatch.setitem(sys.modules, "sklearn.manifold", None)
+    source, out = tmp_path / "202.fcs", tmp_path / "out"
+    source.touch()
+    monkeypatch.setattr(pick, "read_fcs", read_202)
+    argv = [str(source), "--no-tsne", "--pops", "1", "--no-show", "--out", str(out)]
+    main([*argv, "--dn-num2", "50", "--k", "3"])
+    figures = set(FIGURES) - {"clusters_tsne.png"}
+    assert sorted(p.name for p in out.iterdir()) == sorted([*COLUMNS, *figures])
+    assert {name: digest(out / name) for name in COLUMNS} == DIGESTS
+
+
+@pytest.mark.parametrize(("flag", "value"), [("--tsne-perplexity", "10"), ("--tsne-seed", "1")])
+def test_tsne_flags_are_refused_with_no_tsne(tmp_path, flag, value):
+    out = tmp_path / "out"
+    with pytest.raises(SystemExit) as e:
+        main([str(tmp_path / "missing"), "--no-tsne", flag, value, "--no-show", "--out", str(out)])
+    assert e.value.code == f"{flag} has no effect with --no-tsne"
+    assert not out.exists()
+
+
+def test_asked_run_prints_the_pops_that_repeat_it(monkeypatch, capsys):
+    """The answers, Enter's among them, end with the --pops that makes the same choice without
+    the prompt. A choice --pops gave has no such line."""
+    answers = iter(["1,2", "none", ""])
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(pick, "_live_input", lambda prompt, plt, show: next(answers))
+    samples = [_sample(name, 3) for name in ("a.fcs", "b.fcs", "c.fcs")]
+    assert pick._choose_pops(samples, None, None, False) == [[1, 2], [], []]
+    assert capsys.readouterr().out.endswith('\nTo repeat this choice: --pops "1,2;none;none"\n')
+    assert pick._choose_pops(samples, "1", None, False) == [[1]] * 3
+    assert capsys.readouterr().out == ""
