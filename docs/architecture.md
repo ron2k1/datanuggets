@@ -142,7 +142,7 @@ So R's arithmetic and the draw sources never import a workflow, and new code in 
 | `tests/wcluster/` | `wcluster/`: the statistics in `test_wstats.py`, `cluster_predict` in `test_predict.py`, `wpca` in `test_wpca.py` and its row-weight total in `test_wpca_sums.py`, the iterative functions in `test_whclust.py` and `test_wkmeans.py`, which holds the compiled `wkmeans` to the plain-Python reference in `wkmeans_reference.py`, and the kernels they share in `test_wstatsjit.py`, the DN wrappers in `test_dn.py`, and `cut_tree` in `test_cutree.py` |
 | `tests/flow/` | `flow/`. `test_flow_grid.py`, `test_flow_peaks.py`, `test_flow_area.py` and `test_flow_gate.py` test the finder's steps against fixtures recorded from Prof. Cabrera's own Python. `test_flow_import.py` runs the finder with matplotlib blocked and checks that `import datanuggets` doesn't load `flow`. `test_flow_pick.py` unit-tests `datanuggets-flow`'s threshold and population parsing, the union of picks, the file listing, the prompt and the checks that stop a run before any file is read, and runs the command end to end on the events of `202.npz` and `202_fluor.npz`, one file asked or given `--pops` and three files with their own thresholds, checking its output files, their columns and their tables' digests |
 | `tests/plot/` | `plot/`, on matplotlib's Agg backend, one file per module: `test_plot_tree.py`, `test_plot_points.py`, `test_plot_pca.py`, `test_plot_flow.py` and `test_plot_style.py`, and `test_plot_import.py` for the matplotlib check. Its `conftest.py` closes every figure and turns matplotlib's `UserWarning`s into failures |
-| `tests/compat/` | `_compat/`: R's means and `splitIndices` in `test_rcompat.py`, the long double statistics, `unique()`, `%*%`, `weighted.mean` and `eigen()` in `test_rstats.py`, Rfast in `test_rfast.py`, which holds the compiled distances and `gnu_sort_first` to the plain-Python references in `rfast_reference.py`, the compiled long double kernels in `test_ldjit.py`, and the numba decorator rule and cache in `test_compiled.py` |
+| `tests/compat/` | `_compat/`: R's means and `splitIndices` in `test_rcompat.py`, which holds `r_mean` to the plain-Python reference in `rmean_reference.py`, the long double statistics, `unique()`, `%*%`, `weighted.mean` and `eigen()` in `test_rstats.py`, Rfast in `test_rfast.py`, which holds the compiled distances and `gnu_sort_first` to the plain-Python references in `rfast_reference.py`, the compiled long double kernels in `test_ldjit.py`, and the numba decorator rule and cache in `test_compiled.py` |
 | `tests/randomness/` | `_random/`: the draw sources and `as_draws` in `test_draws.py`, and `RDraws` against R in `test_rdraws.py` |
 | `tests/clustering/` | `_clustering/`, in `test_hartigan_wong.py`, which holds the compiled kmns.f to the plain-Python port in `kmns_reference.py` |
 | `tests/scripts/` | `scripts/check_dist.py`, in `test_check_dist.py`, on small sdists and wheels built by the tests. The sdist leaves this folder out, so these tests run only from a clone |
@@ -195,12 +195,13 @@ Older references may use paths from before the package reorganization. These tab
 | `tests/test_draws.py`, `test_rdraws.py` | `tests/randomness/` |
 | `tests/test_hartigan_wong.py` | `tests/clustering/` |
 
-| Was in | Names | Now in `_compat/` or `_random/` |
+| Was in | Names | Now in `_compat/`, `_random/` or `tests/compat/` |
 |---|---|---|
 | `_rcompat` | `split_indices`, `unique_first`, `_r_seq_length_out` | `_compat/indexing.py` |
-| `_rcompat` | `r_mean`, `_r_mean_py`, `_ldouble_mean`, `_round_half_even` | `_compat/arithmetic.py` |
+| `_rcompat` | `r_mean` | `_compat/arithmetic.py` |
+| `_rcompat` | `_r_mean_py`, `_ldouble_mean`, `_round_half_even` | `tests/compat/rmean_reference.py`, the test reference |
 | `_rcompat` | `_R_NAN`, `_NA_BITS`, `_QUIET`, `_FRACTION`, `_INDEFINITE`, `_non_finite_sum` | `_compat/missing.py` |
-| `_rcompat` | `_LDOUBLE_DIGITS` | `_compat/ldouble.py` as `DIGITS`, which `arithmetic.py` imports under the old name |
+| `_rcompat` | `_LDOUBLE_DIGITS` | `_compat/ldouble.py` as `DIGITS`, which `tests/compat/rmean_reference.py` imports under the old name |
 | `_rstats` | `r_sum`, `r_vec_mean`, `r_median`, `r_mad`, `r_quantile7`, `r_cov`, `_r_cov_py`, `r_weighted_mean`, `_ld_sum`, `_DBL_MAX` | `_compat/arithmetic.py` |
 | `_rstats` | `group_moments`, `_run_threaded`, `_layer_forbids_fork`, `_after_fork_in_child`, `_THREADS`, `_FORKED_UNSAFE`, and the `os.register_at_fork` call | `_compat/moments.py` |
 | `_rstats` | `r_matvec`, `r_matmul`, `r_eigen_sym` | `_compat/linalg.py` |
