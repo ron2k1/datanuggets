@@ -23,7 +23,7 @@ Internal specs, plans and reviews are local files in ignored folders under `docs
 
 ```
 src/datanuggets/
-  __init__.py          the public API: imports, __all__ and the old module paths, nothing else
+  __init__.py          the public API: imports and __all__, nothing else
   exceptions.py        DataNuggetWarning
   result.py            DataNuggets, CentersResult, WpcaResult, WwcssResult, WkmeansResult,
                        DnWkmeansResult, WhclustResult
@@ -86,17 +86,17 @@ src/datanuggets/
     hartigan_wong.py   R's kmeans with the Hartigan-Wong algorithm
     kmnsjit.py         kmns.f compiled, statement for statement with the plain-Python port in
                        tests/clustering/kmns_reference.py
-  create.py  refine.py  centers.py  means.py  complexity.py  _draws.py
-                       old import paths that only forward (see Retained import paths)
+  _draws.py            the draw sources' old import path, which only forwards (see Retained
+                       import paths)
 ```
 
 ## Public and private
 
 The public API is `datanuggets.__all__`, imported from `datanuggets` as the README does. `datanuggets.nuggets` and `datanuggets.wcluster` re-export the same functions from the modules that define them. `result` and `exceptions` hold the public classes. `datanuggets.plot` is public too, with its own `__all__`, but it's imported only when asked for by name, since it needs matplotlib from the `plot` extra. Without matplotlib, importing it raises an `ImportError` that names the extra. `datanuggets.flow` is public in the same way, with its own `__all__`, and is imported only when asked for by name. The finder's modules import numpy, scipy and `_validate`, though importing `datanuggets.flow` runs `datanuggets/__init__.py`, numba included, as any submodule does. `datanuggets.flow.pick` is the `datanuggets-flow` command, the entry point `datanuggets.flow.pick:main` in `pyproject.toml`, and `datanuggets.flow` doesn't import it. At module level it imports numpy, the standard library and `_defaults`, for `create_dn`'s first-stage count, which caps `--dn-num2`. Its steps import matplotlib and pandas, the workflows, `plot` and the finder from `datanuggets.flow` only when they run, and `read_fcs` imports flowio. The `flow` extra installs matplotlib, pandas and flowio.
 
-A module or package whose name starts with an underscore is private. It can change without notice, and code outside this repo shouldn't import it. `datanuggets._draws` is the one private path kept working on purpose, for the reasons below.
+A module or package whose name starts with an underscore is private. It can change without notice, and code outside this repo shouldn't import it. `datanuggets._draws` is the one private path kept working on purpose, and the one old path kept at all, for the reasons below.
 
-`datanuggets/__init__.py` imports the two workflow packages, the result and warning classes and the six old module paths, and does nothing else. Importing an old path binds it as an attribute of the package, as the old `__init__` did when it imported those modules directly, so `datanuggets.create.create_dn` works after a bare `import datanuggets`. Importing the package compiles no kernel, starts no thread or process, draws no random number and doesn't import matplotlib.
+`datanuggets/__init__.py` imports the two workflow packages and the result and warning classes, and does nothing else. Importing the package compiles no kernel, starts no thread or process, draws no random number and doesn't import matplotlib.
 
 ## Dependency direction
 
@@ -113,8 +113,8 @@ Imports run from the workflows down to the R-compatibility layer and never back 
 | `flow`, the finder: `__init__.py`, `grid`, `peaks`, `gate` | `flow`, `_validate` |
 | `plot` | `plot`, `wcluster`, `_compat` |
 | `flow/pick.py`, the `datanuggets-flow` command | `datanuggets` itself (for `create_dn`, `whclust`, `cut_tree`, `wmean` and `wpca`), `plot`, `flow`, `_defaults`, and `result` for type hints only |
-| the old paths: `create`, `refine`, `centers`, `means`, `complexity`, `_draws` | `nuggets`, `_random` |
-| `datanuggets/__init__.py` | `nuggets`, `wcluster`, the old paths, `result`, `exceptions` |
+| the old path `_draws` | `_random` |
+| `datanuggets/__init__.py` | `nuggets`, `wcluster`, `result`, `exceptions` |
 
 So R's arithmetic and the draw sources never import a workflow, and new code in them can't create a cycle. Wkmeans draws its starts through `_random`, the other WCluster functions draw nothing, and `wcluster` never imports `nuggets`: the DN wrappers take a `DataNuggets` from `result`. `plot` sits above the workflows: it imports `wcluster` for R's merge numbering and `_compat` for the sum and quantile in R's nugget colors, and in the package only `flow/pick.py` imports it. The finder's modules in `flow` sit beside the workflows and import only `_validate`. `plot.gates` takes the finder's masks as an array, so `plot` doesn't import `flow` either. `flow/pick.py` is an application layer above `plot`: it reaches `nuggets` and `wcluster` through `datanuggets/__init__.py`, draws with `plot` and gates with `lymphmacro_finder` and an area rule from `flow`, and nothing in the package imports it, `datanuggets.flow` included. The table is the whole import graph of the package by layer, imports inside a layer and inside functions included.
 
@@ -167,12 +167,13 @@ A test file holds the R parity cases and the unit cases for the module it covers
 
 | Old path | Forwards to | Kept because | Tested by |
 |---|---|---|---|
-| `datanuggets.create`, `.refine`, `.centers`, `.means`, `.complexity` | the function of the same name in `datanuggets.nuggets` | they were the module paths of the public functions | `tests/test_result.py::test_nugget_functions_are_exported_and_their_old_paths_forward` |
 | `datanuggets._draws` | the eight public names now in `datanuggets._random` | scripts outside the repo import it, and a pickle of a draw source made before the split names it | `tests/randomness/test_draws.py`, the last two tests |
 
-A forwarding module imports the names and lists them in `__all__`, so each name keeps one implementation. Only those names forward. A private helper is reachable only at its new path.
+`_draws` imports the names and lists them in `__all__`, so each name keeps one implementation. Only those names forward. A private helper is reachable only at its new path.
 
-`datanuggets/__init__.py` imports all six old paths, so after a bare `import datanuggets` each is an attribute of the package, as it was before. `tests/test_result.py::test_a_bare_import_binds_the_old_module_paths` checks that in a fresh interpreter. None of the six is in `__all__`, so `from datanuggets import *` gives the same names as before.
+`datanuggets.create`, `.refine`, `.centers`, `.means` and `.complexity` forwarded to `datanuggets.nuggets` the same way until they were removed. Each function had two module paths, and no guide imported from the old ones. [releases.md](releases.md#unreleased) lists what replaces them, and `tests/test_result.py::test_the_old_nugget_module_paths_are_gone` checks that they stay removed.
+
+`datanuggets/__init__.py` doesn't import `_draws`, so a bare `import datanuggets` doesn't make it an attribute of the package. Scripts outside the repo import it by name, as in `from datanuggets._draws import DrawRecord, ReplayDraws`.
 
 The other moved private modules (`_rcompat`, `_rstats`, `_ldjit`, `_ldouble`, `_rfast`, `_compiled`, `_hartigan_wong`) don't forward. Nothing outside the repo imports them, and none defines a class that gets pickled.
 
@@ -182,7 +183,7 @@ Older references may use paths from before the package reorganization. These tab
 
 | Old file | Now |
 |---|---|
-| `src/datanuggets/create.py`, `refine.py`, `centers.py`, `means.py`, `complexity.py` | `src/datanuggets/nuggets/`, same file names. The old files now only forward |
+| `src/datanuggets/create.py`, `refine.py`, `centers.py`, `means.py`, `complexity.py` | `src/datanuggets/nuggets/`, same file names |
 | `src/datanuggets/_hartigan_wong.py` | `src/datanuggets/_clustering/hartigan_wong.py` |
 | `src/datanuggets/_compiled.py` | `src/datanuggets/_compat/_compiled.py` |
 | `src/datanuggets/_ldjit.py` | `src/datanuggets/_compat/ldjit.py` |
