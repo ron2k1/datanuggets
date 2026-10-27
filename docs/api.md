@@ -1289,7 +1289,7 @@ The result of `finder_peaks`, a named tuple exported from `datanuggets.flow`.
 | Module | Public names |
 | --- | --- |
 | `datanuggets.flow.settings` | `GateSettings`, `ClusterSettings`, `cli_flag` |
-| `datanuggets.flow.pipeline` | `gate_stage` and `cluster_stage`; the steps they run, `read_fcs`, `gate_files`, `population_stats`, `population_table`, `parse_pops`, `parse_selection`, `pops_spec`, `pick_events`, `resolve_channels`, `selection_table`, `make_nuggets`, `cluster_nuggets`, `tsne_embedding`, `result_tables` and `write_tables`; the types `StageEvent`, `Sample`, `PopStats`, `Kept`, `Pool`, `Tables`, `RunResult`, `Reader` and `OnEvent`; `MIN_KEPT_EVENTS` (2) and `MIN_OCCUPIED_NUGGETS` (3) |
+| `datanuggets.flow.pipeline` | `gate_stage` and `cluster_stage`; the steps they run, `read_fcs`, `gate_files`, `population_stats`, `population_table`, `parse_pops`, `selection_choices`, `parse_selection`, `pops_spec`, `pick_events`, `resolve_channels`, `selection_table`, `make_nuggets`, `cluster_nuggets`, `tsne_embedding`, `result_tables` and `write_tables`; the types `StageEvent`, `Sample`, `PopStats`, `Kept`, `Pool`, `Tables`, `RunResult`, `Reader` and `OnEvent`; `MIN_KEPT_EVENTS` (2) and `MIN_OCCUPIED_NUGGETS` (3) |
 | `datanuggets.flow.state` | `save_gates`, `load_gates`, `GateFolder`, `check_identity`, `file_sha256`, `check_new`, `begin`, `finish` and `write_run`; the record's constants `GATES_SCHEMA`, `RUN_SCHEMA`, `MARKER`, `MARKER_TEXT`, `GATE_FILES`, `NPZ_KEYS`, `FIXED`, `READER` and `PACKAGES` |
 | `datanuggets.flow.figures` | `local_maxima_figure`, `gates_figure`, `result_figures`, `png_figure` and `save_figures` |
 | `datanuggets.exceptions` | `FlowError` |

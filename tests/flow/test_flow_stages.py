@@ -167,6 +167,34 @@ def test_misplaced_flags_are_refused_before_anything_happens(tmp_path, monkeypat
     assert [p.name for p in tmp_path.iterdir()] == ["202.fcs"]
 
 
+@pytest.mark.parametrize("mode", ["one-shot", "from-gates"])
+def test_an_empty_pops_asks_in_both_modes(tmp_path, monkeypatch, staged, mode):
+    """--pops "", as a script that expands an unset variable gives it, counts as no --pops in
+    either mode that clusters, so both ask over the same populations rather than one asking and
+    the other refusing it."""
+    if mode == "one-shot":
+        (tmp_path / "202.fcs").write_bytes(b"")
+        argv = [str(tmp_path / "202.fcs")]
+    else:
+        argv = ["--from-gates", str(_gates_only(tmp_path))]
+    seen = []
+
+    def cancel(prompt, plt, show):
+        seen.append(prompt)
+        raise SystemExit("\ncancelled; nothing was clustered")
+
+    _asked(monkeypatch, cancel)
+    with pytest.raises(SystemExit, match="cancelled"):
+        main([*argv, "--pops", "", "--no-show", "--out", str(tmp_path / "out")])
+    assert len(seen) == 1 and seen[0].startswith("Keep which, Pop 1 to ")
+
+
+def test_an_empty_pops_is_no_clustering_flag_with_gates_only(tmp_path, staged):
+    """For the same reason --gates-only takes --pops "" as no --pops, and saves its gates."""
+    gates = _gates_only(tmp_path, "--pops", "")
+    assert sorted(p.name for p in gates.iterdir()) == sorted(state.GATE_FILES)
+
+
 def test_gates_only_and_from_gates_are_exclusive(tmp_path, capsys):
     with pytest.raises(SystemExit) as e:
         main([str(tmp_path), "--gates-only", "--from-gates", str(tmp_path / "gates")])

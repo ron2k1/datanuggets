@@ -198,11 +198,18 @@ def test_fcs_paths_stops_on_an_empty_folder(tmp_path):
         _fcs_paths([tmp_path])
 
 
-def test_pops_must_give_one_choice_or_one_per_file(tmp_path):
+def test_pops_must_give_one_choice_or_one_per_file(tmp_path, monkeypatch):
+    """pipeline.selection_choices counts the --pops entries against the files before any is
+    read."""
     for name in ("a.fcs", "b.fcs", "c.fcs"):
         (tmp_path / name).write_bytes(b"")
-    with pytest.raises(SystemExit, match="2 choices for 3 files"):
+    monkeypatch.setattr(pick, "read_fcs", lambda path: pytest.fail("read before the count"))
+    with pytest.raises(SystemExit) as e:
         main([str(tmp_path), "--pops", "1;2", "--no-show", "--out", str(tmp_path / "out")])
+    assert e.value.code == (
+        "--pops gives 2 choices for 3 files; give one for all of them or one per file, "
+        "separated by ;"
+    )
     assert not (tmp_path / "out").exists()
 
 

@@ -248,7 +248,7 @@ Without `--no-show`, the gate figure opens before the first question and stays r
 datanuggets-flow a.fcs b.fcs --pops "1,2;1" --out outputs/selection-run
 ```
 
-Enter has no meaning here. A file in which the finder found no population takes `all` or `none`. An entry that doesn't parse or names a missing population stops the run, as the failure table below shows. `--pops ""` counts as no `--pops`, so the run asks.
+Enter has no meaning here. A file in which the finder found no population takes `all` or `none`. An entry that doesn't parse or names a missing population stops the run, as the failure table below shows. `--pops ""` counts as no `--pops` in every mode: a one-shot or `--from-gates` run asks, and `--gates-only` doesn't refuse it.
 
 An event in two kept populations counts once: the kept events are the union of the chosen populations.
 

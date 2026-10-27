@@ -191,17 +191,25 @@ def pick_events(masks: np.ndarray, pops: Sequence[int]) -> np.ndarray:
     return masks[:, [p - 1 for p in pops]].any(axis=1)
 
 
+def selection_choices(spec: str, n_files: int) -> list[str]:
+    """spec's choices, separated by ;, when it gives one for every file or one for each of
+    n_files, and a FlowError naming pops when it gives neither. The rule is kept here alone: the
+    CLI counts --pops with it before any file is read, and parse_selection reads its choices."""
+    choices = spec.split(";")
+    if len(choices) not in (1, n_files):
+        raise FlowError(
+            f"{{param}} gives {len(choices)} choices for {n_files} files; give one for all of "
+            "them or one per file, separated by ;",
+            "pops",
+        )
+    return choices
+
+
 def parse_selection(spec: str, counts: Sequence[int]) -> list[list[int]]:
     """The populations to keep in each file, from one choice for every file ("1,2") or one per
     file separated by ; ("1,2;none;1"), each read by parse_pops. counts holds each file's number
     of populations."""
-    choices = spec.split(";")
-    if len(choices) not in (1, len(counts)):
-        raise FlowError(
-            f"{{param}} gives {len(choices)} choices for {len(counts)} files; give one for all of "
-            "them or one per file, separated by ;",
-            "pops",
-        )
+    choices = selection_choices(spec, len(counts))
     try:
         return [parse_pops(choices[0 if len(choices) == 1 else i], n) for i, n in enumerate(counts)]
     except ValueError as e:

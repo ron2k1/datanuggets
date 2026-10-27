@@ -29,6 +29,7 @@ from datanuggets.flow.pipeline import (
     population_stats,
     population_table,
     resolve_channels,
+    selection_choices,
     tsne_embedding,
 )
 from datanuggets.flow.settings import ClusterSettings, GateSettings, cli_flag
@@ -144,16 +145,25 @@ def test_population_table_keeps_the_cli_format():
     ]
 
 
-def test_parse_selection_one_for_all_or_one_per_file():
-    assert parse_selection("1,2", [3, 3, 3]) == [[1, 2]] * 3
-    assert parse_selection("1;none;1,2", [2, 2, 2]) == [[1], [], [1, 2]]
+def test_selection_choices_gives_one_for_all_or_one_per_file():
+    """The rule on how many choices --pops gives, which the CLI checks before any file is read
+    and parse_selection once the populations are counted."""
+    assert selection_choices("1,2", 3) == ["1,2"]
+    assert selection_choices("1;none;1,2", 3) == ["1", "none", "1,2"]
     with pytest.raises(FlowError) as e:
-        parse_selection("1;2", [2, 2, 2])
+        selection_choices("1;2", 3)
     assert e.value.param == "pops"
     assert e.value.cli(cli_flag) == (
         "--pops gives 2 choices for 3 files; give one for all of them or one per file, "
         "separated by ;"
     )
+
+
+def test_parse_selection_one_for_all_or_one_per_file():
+    assert parse_selection("1,2", [3, 3, 3]) == [[1, 2]] * 3
+    assert parse_selection("1;none;1,2", [2, 2, 2]) == [[1], [], [1, 2]]
+    with pytest.raises(FlowError, match="pops gives 2 choices for 3 files"):
+        parse_selection("1;2", [2, 2, 2])
     with pytest.raises(FlowError) as e:
         parse_selection("5", [4])
     assert str(e.value) == "pops: there is no Pop 5; this file has Pop 1 to Pop 4"

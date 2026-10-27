@@ -340,21 +340,18 @@ def _out(args, name: str) -> Path:
     return Path(args.out) if args.out else Path(FLOW_OUT_DIR) / datetime.now(UTC).strftime(name)
 
 
-def _check_args(args) -> tuple[list[Path], GateSettings, Path, str | None]:
-    """Validate arguments without writing files; return inputs, the gate settings, output and
-    --pops. The gate settings are built once, here, with --t11 and --t21 as given and checked
-    against the files; one left out gives the settings' one value for every file."""
+def _check_args(args) -> tuple[list[Path], GateSettings, Path]:
+    """Validate arguments without writing files; return inputs, the gate settings and output.
+    The gate settings are built once, here, with --t11 and --t21 as given and checked against the
+    files; one left out gives the settings' one value for every file. --pops is counted against
+    the files too, by the rule parse_selection reads it with."""
     paths = _fcs_paths(args.paths)
     t11, t21 = per_file(args.t11, "--t11"), per_file(args.t21, "--t21")
     gate = _flags(GateSettings, args, t11=t11, t21=t21).check(len(paths))
     out = _out(args, FLOW_GATES_NAME if args.gates_only else FLOW_RUN_NAME)
-    choices = args.pops.split(";") if args.pops else None
-    if choices is not None and len(choices) not in (1, len(paths)):
-        raise SystemExit(
-            f"--pops gives {len(choices)} choices for {len(paths)} files; give one for "
-            "all of them or one per file, separated by ;"
-        )
-    return paths, gate, out, args.pops or None
+    if args.pops is not None:
+        pipeline.selection_choices(args.pops, len(paths))
+    return paths, gate, out
 
 
 def _print_event(event: pipeline.StageEvent) -> None:
@@ -444,6 +441,9 @@ def _marked(out: Path):
 def _run(args) -> None:
     """The run in its mode: every check, then the output folder, the steps, and the figures
     shown. --gates-only stops once the gates are saved; --from-gates goes to _from_gates."""
+    # --pops "", as a script that expands an unset variable gives it, is no --pops in every mode:
+    # the run asks, and --gates-only doesn't count it as a clustering flag
+    args.pops = args.pops or None
     _mode_rules(args)
     cluster = _settings(args)
     if args.from_gates is not None:
@@ -451,7 +451,7 @@ def _run(args) -> None:
         return
     stop = args.gates_only
     plt = _pyplot(args.no_show, tables=not stop, tsne=cluster.tsne and not stop)
-    paths, gate, out, spec = _check_args(args)
+    paths, gate, out = _check_args(args)
     with _marked(out):
         samples = _gate_files(paths, gate, out, plt)
         if stop:
@@ -459,7 +459,7 @@ def _run(args) -> None:
             state.save_gates(out, samples, gate)
         else:
             _choose_channels(samples, args.channels, args.exclude_channels)
-            chosen = _choose_pops(samples, spec, plt, not args.no_show)
+            chosen = _choose_pops(samples, args.pops, plt, not args.no_show)
             _draw_gates(samples, plt, out)
             pipeline.cluster_stage(
                 samples, chosen, out, cluster, read=_read, on_event=_print_event, figure=plt.figure
