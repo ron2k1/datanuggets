@@ -1,6 +1,6 @@
 # Architecture
 
-Where the code, tests, fixtures and tools of datanuggets live, which way the imports run, and where new work goes. The last section maps module paths used before the package reorganization.
+Where the code, tests, fixtures and tools of datanuggets live, which way the imports run, and where new work goes.
 
 ## Repository
 
@@ -13,7 +13,7 @@ Where the code, tests, fixtures and tools of datanuggets live, which way the imp
 | `.github/workflows/` | `tests.yml`, `matrix.yml`, `package.yml` and `release.yml`, which [development.md](development.md#what-ci-runs) describes |
 | `docs/` | the pages for users and maintainers: installation, quickstart, the `datanuggets-flow` command, methodology, compatibility, reproducibility, development, limitations, releasing and this one |
 | `examples/` | runnable examples, starting with `first_analysis.py` |
-| `docs/validation/` | one parity table per public function, written by `scripts/parity_report.py` |
+| `docs/validation/` | parity tables for ten of the ported functions, written by `scripts/parity_report.py`. The table in [methodology.md](methodology.md#against-r) shows which, and how each function is checked |
 
 The package imports nothing from `tests/`, `scripts/` or `benchmarks/`. The wheel contains the Python package and its metadata. The source archive adds the tests and fixtures (except `tests/scripts/`), user guides, `examples/first_analysis.py`, README, license, `pyproject.toml` and `.gitignore`. Maintainer scripts, benchmarks, internal notes and R source files do not ship.
 
@@ -23,7 +23,7 @@ Internal specs, plans and reviews are local files in ignored folders under `docs
 
 ```
 src/datanuggets/
-  __init__.py          the public API: imports, __all__ and the old module paths, nothing else
+  __init__.py          the public API: imports and __all__, nothing else
   exceptions.py        DataNuggetWarning, and FlowError, the flow pipeline's refusals
   result.py            DataNuggets, CentersResult, WpcaResult, WwcssResult, WkmeansResult,
                        DnWkmeansResult, WhclustResult
@@ -44,7 +44,8 @@ src/datanuggets/
     wstatsjit.py       the sums, means and nearest centers the iterative kernels share, compiled
     whclust.py         whclust (Whclust), and the plain-Python reference its kernel is held to
     whclustjit.py      Whclust's merges compiled, each wss computed once
-    wkmeans.py         wkmeans (Wkmeans): its random starts, and the plain-Python reference
+    wkmeans.py         wkmeans (Wkmeans) and its random starts, which the plain-Python reference
+                       in tests/wcluster/wkmeans_reference.py shares
     wkmeansjit.py      Wkmeans_single compiled, each trial move over two clusters' rows
     dn.py              dn_wkmeans, dn_whclust, dn_wpca and dn_cluster_predict (the DN wrappers)
     cutree.py          cut_tree (stats::cutree), and R's merge numbering from the port's
@@ -78,7 +79,8 @@ src/datanuggets/
     moments.py         every nugget's colMeans and cov in one compiled call, with its threading
     rfast.py           Rfast's Dist and dista, Armadillo's accumulation order, libstdc++'s sort
     rfastjit.py        Dist, dista and dista's nearest center compiled, in rfast's order
-    ldouble.py         x87 long double replayed with Python integers, the reference
+    ldouble.py         x87 long double replayed with Python integers: the reference for ldjit,
+                       and the runtime path of sum, mean and median, and of cov's fallback
     ldjit.py           the same long double arithmetic compiled with numba
     _compiled.py       the numba decorator every kernel goes through, and read-only input views
   _random/             sources of randomness
@@ -89,18 +91,19 @@ src/datanuggets/
     seeds.py           as_draws, what seed= becomes
   _clustering/         algorithms the workflows call internally
     hartigan_wong.py   R's kmeans with the Hartigan-Wong algorithm
-    kmnsjit.py         kmns.f compiled, statement for statement with hartigan_wong's port
-  create.py  refine.py  centers.py  means.py  complexity.py  _draws.py
-                       old import paths that only forward (see Retained import paths)
+    kmnsjit.py         kmns.f compiled, statement for statement with the plain-Python port in
+                       tests/clustering/kmns_reference.py
+  _draws.py            the draw sources' old import path, which only forwards (see Retained
+                       import paths)
 ```
 
 ## Public and private
 
 The public API is `datanuggets.__all__`, imported from `datanuggets` as the README does. `datanuggets.nuggets` and `datanuggets.wcluster` re-export the same functions from the modules that define them. `result` and `exceptions` hold the public classes. `datanuggets.plot` is public too, with its own `__all__`, but it's imported only when asked for by name, since it needs matplotlib from the `plot` extra. Without matplotlib, importing it raises an `ImportError` that names the extra. `datanuggets.flow` is public in the same way, with its own `__all__`, and is imported only when asked for by name. The finder's modules import numpy, scipy, `_validate` and `_defaults`, though importing `datanuggets.flow` runs `datanuggets/__init__.py`, numba included, as any submodule does. `datanuggets.flow.pick` is the `datanuggets-flow` command, the entry point `datanuggets.flow.pick:main` in `pyproject.toml`, and `datanuggets.flow` doesn't import it. The pipeline's library, `datanuggets.flow.settings`, `.pipeline`, `.state` and `.figures`, is public by module, and `datanuggets.flow` doesn't import it either. `settings`, `pipeline` and `state` import only numpy, the standard library and the package at module level, and their steps import pandas, matplotlib, scikit-learn's `TSNE` and flowio when they run, so the three import without the `flow` extra, as `test_flow_import.py` checks. `figures` imports matplotlib at module level, and `pipeline` imports `figures` only when it draws. `pick` imports `pipeline`, `state` and `settings`, and pyplot, scikit-learn and `figures` only when a run needs them. The `flow` extra installs matplotlib, pandas, scikit-learn and flowio.
 
-A module or package whose name starts with an underscore is private. It can change without notice, and code outside this repo shouldn't import it. `datanuggets._draws` is the one private path kept working on purpose, for the reasons below.
+A module or package whose name starts with an underscore is private. It can change without notice, and code outside this repo shouldn't import it. `datanuggets._draws` is the one private path kept working on purpose, and the one old path kept at all, for the reasons below.
 
-`datanuggets/__init__.py` imports the two workflow packages, the result and warning classes and the six old module paths, and does nothing else. Importing an old path binds it as an attribute of the package, as the old `__init__` did when it imported those modules directly, so `datanuggets.create.create_dn` works after a bare `import datanuggets`. Importing the package compiles no kernel, starts no thread or process, draws no random number and doesn't import matplotlib.
+`datanuggets/__init__.py` imports the two workflow packages and the result and warning classes, and does nothing else. Importing the package compiles no kernel, starts no thread or process, draws no random number and doesn't import matplotlib.
 
 ## Dependency direction
 
@@ -112,7 +115,7 @@ Imports run from the workflows down to the R-compatibility layer and never back 
 | `_compat` | `_compat`, `_defaults` |
 | `_random` | `_random`, `exceptions` |
 | `_clustering` | `_compat`, `_random` |
-| `wcluster` | `wcluster`, `_compat`, `_random`, `_validate`, `result`, `exceptions` |
+| `wcluster` | `wcluster`, `_compat`, `_random`, `_defaults`, `_validate`, `result`, `exceptions` |
 | `nuggets` | `nuggets`, `_clustering`, `_compat`, `_random`, `_defaults`, `_validate`, `result`, `exceptions` |
 | `flow`, the finder: `__init__.py`, `grid`, `peaks`, `gate` | `flow`, `_validate`, `_defaults` |
 | `plot` | `plot`, `wcluster`, `_compat` |
@@ -121,8 +124,8 @@ Imports run from the workflows down to the R-compatibility layer and never back 
 | `flow/state.py`, gate folders and run records | `flow`, `exceptions` |
 | `flow/figures.py`, the pipeline's figures | `datanuggets` itself (for `wpca`), `plot` |
 | `flow/pick.py`, the `datanuggets-flow` command | `flow`, `_defaults`, `exceptions` |
-| the old paths: `create`, `refine`, `centers`, `means`, `complexity`, `_draws` | `nuggets`, `_random` |
-| `datanuggets/__init__.py` | `nuggets`, `wcluster`, the old paths, `result`, `exceptions` |
+| the old path `_draws` | `_random` |
+| `datanuggets/__init__.py` | `nuggets`, `wcluster`, `result`, `exceptions` |
 
 So R's arithmetic and the draw sources never import a workflow, and new code in them can't create a cycle. Wkmeans draws its starts through `_random`, the other WCluster functions draw nothing, and `wcluster` never imports `nuggets`: the DN wrappers take a `DataNuggets` from `result`. `plot` sits above the workflows: it imports `wcluster` for R's merge numbering and `_compat` for the sum and quantile in R's nugget colors, and `flow/figures.py` imports it to draw the flow figures. The finder's modules in `flow` sit beside the workflows and import only `_validate` and `_defaults`, for the finder's tunable defaults. The constants they keep fixed for parity with Cabrera's code stay named in the module that uses them. `plot.gates` takes the finder's masks as an array, so `plot` doesn't import `flow` either. The pipeline's modules are an application layer above `plot`: `pipeline` reaches `nuggets` and `wcluster` through `datanuggets/__init__.py` and gates with `gate_peaks` and an area rule from `flow`, `figures` draws with `plot`, and `state` saves and reads back what `pipeline` gives. `flow/pick.py` sits on top of them, and nothing in the package imports it, `datanuggets.flow` included. The table is the whole import graph of the package by layer, imports inside a layer and inside functions included.
 
@@ -148,19 +151,19 @@ So R's arithmetic and the draw sources never import a workflow, and new code in 
 
 | Folder | Covers |
 |---|---|
-| `tests/nuggets/` | `nuggets/`, one file per module: `test_create.py`, `test_centers.py`, `test_refine.py`, `test_means.py` and `test_complexity.py` |
-| `tests/wcluster/` | `wcluster/`: the statistics in `test_wstats.py`, `cluster_predict` in `test_predict.py`, `wpca` in `test_wpca.py` and its row-weight total in `test_wpca_sums.py`, the iterative functions in `test_whclust.py` and `test_wkmeans.py` and the kernels they share in `test_wstatsjit.py`, the DN wrappers in `test_dn.py`, and `cut_tree` in `test_cutree.py` |
+| `tests/nuggets/` | `nuggets/`, one file per module: `test_create.py`, `test_centers.py`, which holds the compiled deletion rounds to the plain-Python reference in `centers_reference.py`, `test_refine.py`, `test_means.py` and `test_complexity.py` |
+| `tests/wcluster/` | `wcluster/`: the statistics in `test_wstats.py`, `cluster_predict` in `test_predict.py`, `wpca` in `test_wpca.py` and its row-weight total in `test_wpca_sums.py`, the iterative functions in `test_whclust.py` and `test_wkmeans.py`, which holds the compiled `wkmeans` to the plain-Python reference in `wkmeans_reference.py`, and the kernels they share in `test_wstatsjit.py`, the DN wrappers in `test_dn.py`, and `cut_tree` in `test_cutree.py` |
 | `tests/flow/` | `flow/`. `test_flow_grid.py`, `test_flow_peaks.py`, `test_flow_area.py` and `test_flow_gate.py` test the finder's steps against fixtures recorded from Prof. Cabrera's own Python. `test_flow_import.py` runs the finder with matplotlib blocked, checks that `import datanuggets` doesn't load `flow`, and imports `settings`, `pipeline` and `state` with the `flow` extra's packages blocked. `test_flow_settings.py` pins the finder's constants and defaults and tests the settings' checks, `test_flow_pipeline.py` the library's steps without the command, `test_flow_state.py` gate folders and their refusals, and `test_flow_stages.py` the two stages against the one-shot run's digests. `test_flow_fcs_integration.py` runs the command on an FCS file written from measured events, in one run and in two stages. `conftest.py` holds `close_figures`, which closes the pyplot figures a run leaves open. `test_flow_pick.py` unit-tests `datanuggets-flow`'s threshold and population parsing, the union of picks, the file listing, the prompt and the checks that stop a run before any file is read, and runs the command end to end on the events of `202.npz` and `202_fluor.npz`, one file asked or given `--pops` and three files with their own thresholds, checking its output files, their columns and their tables' digests |
 | `tests/plot/` | `plot/`, on matplotlib's Agg backend, one file per module: `test_plot_tree.py`, `test_plot_points.py`, `test_plot_pca.py`, `test_plot_flow.py` and `test_plot_style.py`, and `test_plot_import.py` for the matplotlib check. Its `conftest.py` closes every figure and turns matplotlib's `UserWarning`s into failures |
-| `tests/compat/` | `_compat/`: R's means and `splitIndices` in `test_rcompat.py`, the long double statistics, `unique()`, `%*%`, `weighted.mean` and `eigen()` in `test_rstats.py`, Rfast in `test_rfast.py`, the compiled long double kernels in `test_ldjit.py`, and the numba decorator rule and cache in `test_compiled.py` |
+| `tests/compat/` | `_compat/`: R's means and `splitIndices` in `test_rcompat.py`, which holds `r_mean` to the plain-Python reference in `rmean_reference.py`, the long double statistics, `unique()`, `%*%`, `weighted.mean` and `eigen()` in `test_rstats.py`, Rfast in `test_rfast.py`, which holds the compiled distances and `gnu_sort_first` to the plain-Python references in `rfast_reference.py`, the compiled long double kernels in `test_ldjit.py`, and the numba decorator rule and cache in `test_compiled.py` |
 | `tests/randomness/` | `_random/`: the draw sources and `as_draws` in `test_draws.py`, and `RDraws` against R in `test_rdraws.py` |
-| `tests/clustering/` | `_clustering/`, in `test_hartigan_wong.py` |
+| `tests/clustering/` | `_clustering/`, in `test_hartigan_wong.py`, which holds the compiled kmns.f to the plain-Python port in `kmns_reference.py` |
 | `tests/scripts/` | `scripts/check_dist.py`, in `test_check_dist.py`, on small sdists and wheels built by the tests. The sdist leaves this folder out, so these tests run only from a clone |
 | `tests/` | `test_result.py` (the result classes and the import paths), `test_validate.py` (`_validate`), `test_compat_inputs.py` (R's handling of inputs across the public functions, from the `compat` fixture group), `test_version.py` (the version, written once in `pyproject.toml` and read from the package metadata), `conftest.py`, `rfixtures.py`, and `flowcases.py`, which loads the flow fixtures and holds the flow tests' independent area rules and edge check, and what the `datanuggets-flow` tests share: `read_202`, the files a run writes and the digests its tables are pinned to |
 
 A test file holds the R parity cases and the unit cases for the module it covers. Each file mixes both against the same fixtures, so the suite is grouped by area and not into unit and parity folders. The long fuzz cases carry the `slow` mark and run with `pytest -m slow`.
 
-- Test folders have no `__init__.py`, and pytest imports each test file by its file name, so a file name must be unique across all the folders.
+- Test folders have no `__init__.py`, and pytest imports each test file by its file name, so a file name must be unique across all the folders. That includes a helper beside the tests, such as `kmns_reference.py`: pytest puts a test file's folder on `sys.path` before it imports the file, and the test imports the helper by its bare name.
 - In its default import mode, prepend, pytest puts the folder of each `conftest.py` on `sys.path` when it loads that file, before it imports any test module. `tests/conftest.py` is there for that, and it's how a test in any folder imports `rfixtures`. So the suite runs in the default mode and not with `--noconftest`, and `--import-mode=importlib` doesn't work with it, before the reorganization or after. Tests don't change `sys.path` themselves.
 - A test that patches a name patches the module that looks it up when the code runs. `group_moments` looks up `r_mean` and `r_cov` in `moments`, for example, so a test patches `moments.r_cov`, not `arithmetic.r_cov`.
 
@@ -176,46 +179,12 @@ A test file holds the R parity cases and the unit cases for the module it covers
 
 | Old path | Forwards to | Kept because | Tested by |
 |---|---|---|---|
-| `datanuggets.create`, `.refine`, `.centers`, `.means`, `.complexity` | the function of the same name in `datanuggets.nuggets` | they were the module paths of the public functions | `tests/test_result.py::test_nugget_functions_are_exported_and_their_old_paths_forward` |
 | `datanuggets._draws` | the eight public names now in `datanuggets._random` | scripts outside the repo import it, and a pickle of a draw source made before the split names it | `tests/randomness/test_draws.py`, the last two tests |
 
-A forwarding module imports the names and lists them in `__all__`, so each name keeps one implementation. Only those names forward. A private helper is reachable only at its new path.
+`_draws` imports the names and lists them in `__all__`, so each name keeps one implementation. Only those names forward. A private helper is reachable only at its new path.
 
-`datanuggets/__init__.py` imports all six old paths, so after a bare `import datanuggets` each is an attribute of the package, as it was before. `tests/test_result.py::test_a_bare_import_binds_the_old_module_paths` checks that in a fresh interpreter. None of the six is in `__all__`, so `from datanuggets import *` gives the same names as before.
+`datanuggets.create`, `.refine`, `.centers`, `.means` and `.complexity` forwarded to `datanuggets.nuggets` the same way until they were removed. Each function had two module paths, and no guide imported from the old ones. [releases.md](releases.md#unreleased) lists what replaces them, and `tests/test_result.py::test_the_old_nugget_module_paths_are_gone` checks that they stay removed.
+
+`datanuggets/__init__.py` doesn't import `_draws`, so a bare `import datanuggets` doesn't make it an attribute of the package. Scripts outside the repo import it by name, as in `from datanuggets._draws import DrawRecord, ReplayDraws`.
 
 The other moved private modules (`_rcompat`, `_rstats`, `_ldjit`, `_ldouble`, `_rfast`, `_compiled`, `_hartigan_wong`) don't forward. Nothing outside the repo imports them, and none defines a class that gets pickled.
-
-## Old paths in older documents
-
-Older references may use paths from before the package reorganization. These tables map them to the current modules.
-
-| Old file | Now |
-|---|---|
-| `src/datanuggets/create.py`, `refine.py`, `centers.py`, `means.py`, `complexity.py` | `src/datanuggets/nuggets/`, same file names. The old files now only forward |
-| `src/datanuggets/_hartigan_wong.py` | `src/datanuggets/_clustering/hartigan_wong.py` |
-| `src/datanuggets/_compiled.py` | `src/datanuggets/_compat/_compiled.py` |
-| `src/datanuggets/_ldjit.py` | `src/datanuggets/_compat/ldjit.py` |
-| `src/datanuggets/_ldouble.py` | `src/datanuggets/_compat/ldouble.py` |
-| `src/datanuggets/_rfast.py` | `src/datanuggets/_compat/rfast.py` |
-| `src/datanuggets/_rcompat.py`, `_rstats.py` | split across `src/datanuggets/_compat/`, by name below |
-| `src/datanuggets/_draws.py` | split across `src/datanuggets/_random/`, by name below. The old file now only forwards |
-| `tests/test_centers.py`, `test_complexity.py`, `test_create.py`, `test_means.py`, `test_refine.py` | `tests/nuggets/` |
-| `tests/test_predict.py`, `test_wpca.py`, `test_wpca_sums.py`, `test_wstats.py` | `tests/wcluster/` |
-| `tests/test_compiled.py`, `test_ldjit.py`, `test_rcompat.py`, `test_rfast.py`, `test_rstats.py` | `tests/compat/` |
-| `tests/test_draws.py`, `test_rdraws.py` | `tests/randomness/` |
-| `tests/test_hartigan_wong.py` | `tests/clustering/` |
-
-| Was in | Names | Now in `_compat/` or `_random/` |
-|---|---|---|
-| `_rcompat` | `split_indices`, `unique_first`, `_r_seq_length_out` | `_compat/indexing.py` |
-| `_rcompat` | `r_mean`, `_r_mean_py`, `_ldouble_mean`, `_round_half_even` | `_compat/arithmetic.py` |
-| `_rcompat` | `_R_NAN`, `_NA_BITS`, `_QUIET`, `_FRACTION`, `_INDEFINITE`, `_non_finite_sum` | `_compat/missing.py` |
-| `_rcompat` | `_LDOUBLE_DIGITS` | `_compat/ldouble.py` as `DIGITS`, which `arithmetic.py` imports under the old name |
-| `_rstats` | `r_sum`, `r_vec_mean`, `r_median`, `r_mad`, `r_quantile7`, `r_cov`, `_r_cov_py`, `r_weighted_mean`, `_ld_sum`, `_DBL_MAX` | `_compat/arithmetic.py` |
-| `_rstats` | `group_moments`, `_run_threaded`, `_layer_forbids_fork`, `_after_fork_in_child`, `_THREADS`, `_FORKED_UNSAFE`, and the `os.register_at_fork` call | `_compat/moments.py` |
-| `_rstats` | `r_matvec`, `r_matmul`, `r_eigen_sym` | `_compat/linalg.py` |
-| `_draws` | `Draws` | `_random/interfaces.py` |
-| `_draws` | `NumpyDraws` | `_random/numpy_draws.py` |
-| `_draws` | `RDraws`, `r_use_hash`, `_r_seed`, `_M32`, `_I2_32M1`, `_TWO_M32`, `_MT_KINDS`, `_HASH_TRIES` | `_random/r_draws.py` |
-| `_draws` | `DrawRecord`, `ReplayDraws`, `ReplayMismatch` | `_random/replay.py` |
-| `_draws` | `as_draws` | `_random/seeds.py` |

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from datanuggets._defaults import SEED
 from datanuggets.result import DataNuggets, DnWkmeansResult, WhclustResult, WpcaResult
 from datanuggets.wcluster.predict import cluster_predict
 from datanuggets.wcluster.whclust import whclust
@@ -32,7 +33,7 @@ def _one_variable(dn: DataNuggets, what: str) -> None:
 
 
 def dn_wkmeans(
-    dn, k, *, centers=None, num_init=1, max_iter=10, seed=291102, n_jobs=1
+    dn, k, *, centers=None, num_init=1, max_iter=10, seed=SEED, n_jobs=1
 ) -> DnWkmeansResult:
     """DN.Wkmeans: wkmeans on the nuggets with their weights, plus row_labels, each original
     row's cluster, the one its nugget gets. Pass seed=RDraws(seed) to match R. R stops on a

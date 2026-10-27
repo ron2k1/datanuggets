@@ -4,9 +4,10 @@ import warnings
 import numpy as np
 import pytest
 
+from centers_reference import _select_centers_py
 from datanuggets import DataNuggetWarning, create_dn_centers
 from datanuggets.nuggets import centersjit
-from datanuggets.nuggets.centers import _select_centers_py, select_centers
+from datanuggets.nuggets.centers import select_centers
 from rfixtures import load_group
 
 CASES = load_group("create_dn")

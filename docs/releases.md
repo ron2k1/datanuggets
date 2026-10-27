@@ -17,6 +17,22 @@
 - The finder's tunable defaults are in `datanuggets._defaults`, and the constants it keeps for parity with Cabrera's code are named in their modules ([methodology](methodology.md#the-finders-parameters)). Its results are unchanged.
 - The wheel's core-only smoke test also checks that scikit-learn isn't installed.
 
+### Removed import paths
+
+The package reorganization moved each datanugget function into a module of the same name in `datanuggets.nuggets` and left a module at the package root that only re-exported it. Each function had two module paths, and no guide imported from the root ones, so those five modules are gone. Import each function from `datanuggets`, as the README does:
+
+| Removed | Use instead | Defined in |
+|---|---|---|
+| `datanuggets.create.create_dn` | `datanuggets.create_dn` | `datanuggets.nuggets.create` |
+| `datanuggets.refine.refine_dn` | `datanuggets.refine_dn` | `datanuggets.nuggets.refine` |
+| `datanuggets.centers.create_dn_centers` | `datanuggets.create_dn_centers` | `datanuggets.nuggets.centers` |
+| `datanuggets.complexity.arithmetic_complexity` | `datanuggets.arithmetic_complexity` | `datanuggets.nuggets.complexity` |
+| `datanuggets.means.get_dn_means` | `datanuggets.get_dn_means` | `datanuggets.nuggets.means` |
+
+So `from datanuggets.create import create_dn` becomes `from datanuggets import create_dn`.
+
+The private `datanuggets._draws` stays, for scripts that import `DrawRecord` and `ReplayDraws` from it, but a bare `import datanuggets` no longer makes it an attribute of the package. Import it by name, as `from datanuggets._draws import DrawRecord, ReplayDraws` does.
+
 ## 0.1.0a1 — first public alpha candidate
 
 This version is intended for research evaluation. Preparing these files does not publish the package; check the [PyPI project page](https://pypi.org/project/datanuggets/) for availability.

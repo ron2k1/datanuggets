@@ -2,10 +2,10 @@
 
 Every distance adds its per-feature terms in Rfast's order, in double, with no fused multiply-add:
 Armadillo's two accumulators over even and odd features, added at the end, or left to right for
-dista's Euclidean kernel over more than 32 features. So the bits match rfast's numpy replay. Each
-kernel fills one output row at a time, looping over centers innermost, which keeps a row's
-accumulators in cache and lets LLVM vectorize across centers without reordering any sum. The
-inputs are finite, which as_matrix guarantees upstream.
+dista's Euclidean kernel over more than 32 features. So the bits match the numpy replay in
+tests/compat/rfast_reference.py. Each kernel fills one output row at a time, looping over centers
+innermost, which keeps a row's accumulators in cache and lets LLVM vectorize across centers
+without reordering any sum. The inputs are finite, which as_matrix guarantees upstream.
 """
 
 import math

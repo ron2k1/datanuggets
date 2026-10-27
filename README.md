@@ -4,7 +4,7 @@
 
 Data nuggets represent a dataset with a smaller set of points. Each nugget stores a center, the number of observations it represents, and a measure of spread. You can cluster these weighted points, explore them with PCA, and map cluster labels back to the original rows.
 
-This is a native Python port of methods from R's `datanugget` 1.5.0 and `WCluster` 1.3.0. R is not required. See the [R-to-Python function map](https://github.com/ron2k1/datanuggets/blob/main/docs/api.md#r-to-python-function-map) for coverage; automatic nugget-count selection (`optimal.DN`) is not implemented.
+This is a native Python port of methods from R's `datanugget` 1.5.0 and `WCluster` 1.3.0. R is not required. See the [R-to-Python function map](https://github.com/ron2k1/datanuggets/blob/main/docs/compatibility.md#ported-functions) for coverage; automatic nugget-count selection (`optimal.DN`) is not implemented.
 
 [CSV command line](https://github.com/ron2k1/datanuggets/blob/main/docs/cli.md#analyze-a-csv) · [Python walkthrough](https://github.com/ron2k1/datanuggets/blob/main/docs/quickstart.md) · [Function reference](https://github.com/ron2k1/datanuggets/blob/main/docs/api.md) · [Limitations](https://github.com/ron2k1/datanuggets/blob/main/docs/limitations.md)
 

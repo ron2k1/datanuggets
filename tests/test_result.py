@@ -1,6 +1,4 @@
 import importlib
-import subprocess
-import sys
 from dataclasses import FrozenInstanceError, fields
 
 import numpy as np
@@ -59,8 +57,7 @@ def test_wcluster_leaves_are_exported_from_both_packages():
         assert hasattr(datanuggets, name), name
 
 
-# Each datanugget function and its module in datanuggets.nuggets. The module of the same name at
-# the package root is its old import path, which forwards to it.
+# Each datanugget function and the module in datanuggets.nuggets that defines it.
 NUGGET_FUNCTIONS = {
     "arithmetic_complexity": "complexity",
     "create_dn": "create",
@@ -70,34 +67,23 @@ NUGGET_FUNCTIONS = {
 }
 
 
-def test_nugget_functions_are_exported_and_their_old_paths_forward():
+def test_nugget_functions_are_exported_from_both_packages():
     nuggets = importlib.import_module("datanuggets.nuggets")
     for name, module in NUGGET_FUNCTIONS.items():
         defined = getattr(importlib.import_module(f"datanuggets.nuggets.{module}"), name)
         assert defined.__module__ == f"datanuggets.nuggets.{module}", name
         assert getattr(nuggets, name) is defined, name
         assert getattr(datanuggets, name) is defined, name
-        old = importlib.import_module(f"datanuggets.{module}")
-        assert getattr(old, name) is defined, name
-        assert old.__all__ == [name], name
     assert nuggets.__all__ == sorted(NUGGET_FUNCTIONS)
 
 
-# The old module paths stay attributes of the package after a bare `import datanuggets`, as they
-# were when its __init__ imported them, so `datanuggets.create.create_dn` still resolves. It runs
-# in a fresh interpreter, because here any test that imported an old path has already bound it.
-OLD_MODULES = [*sorted(NUGGET_FUNCTIONS.values()), "_draws"]
-
-
-def test_a_bare_import_binds_the_old_module_paths():
-    code = (
-        "import sys\n"
-        "import datanuggets\n"
-        f"for name in {OLD_MODULES!r}:\n"
-        "    assert getattr(datanuggets, name) is sys.modules['datanuggets.' + name], name\n"
-    )
-    run = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
-    assert run.returncode == 0, run.stderr[-2000:]
+# datanuggets.create and the four other package-root modules named like those above used to
+# forward to them. The release notes record their removal: each function now has one module
+# path, and code imports it from datanuggets or datanuggets.nuggets.
+def test_the_old_nugget_module_paths_are_gone():
+    for module in NUGGET_FUNCTIONS.values():
+        with pytest.raises(ModuleNotFoundError, match=rf"'datanuggets\.{module}'"):
+            importlib.import_module(f"datanuggets.{module}")
 
 
 def _dn(**over):

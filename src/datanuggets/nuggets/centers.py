@@ -1,8 +1,12 @@
-"""create.DNcenters: reduce a sample to data nugget centers by deleting close pairs."""
+"""create.DNcenters: reduce a sample to data nugget centers by deleting close pairs.
+
+select_centers runs R's deletion rounds compiled, in centersjit, inside one distance matrix. The
+tests hold it to _select_centers_py in tests/nuggets/centers_reference.py, the rounds as R writes
+them.
+"""
 
 from __future__ import annotations
 
-import math
 import warnings
 
 import numpy as np
@@ -31,51 +35,6 @@ def select_centers(
     np.fill_diagonal(d, d.max() + 1)
     kept = _centersjit.delete_rounds(frozen(d), dn_num, delete_percent)
     return kept.astype(np.intp, copy=False), False
-
-
-def _select_centers_py(
-    rs: np.ndarray, dn_num: int, delete_percent: float, dist_metric: str
-) -> tuple[np.ndarray, bool]:
-    """select_centers as R writes it, copying the matrix down every round. The reference the
-    compiled rounds are tested against."""
-    n_obs = rs.shape[0]
-    keep = np.arange(n_obs)
-    if n_obs <= dn_num:
-        return keep, True
-
-    d = dist_matrix(rs, dist_metric)
-    np.fill_diagonal(d, d.max() + 1)
-    tmp_num = n_obs
-    while tmp_num > dn_num:
-        delete_num = max(1, math.floor(tmp_num * delete_percent))
-        delete_num = min(delete_num, tmp_num - dn_num)
-
-        nn_index = d.argmin(axis=1)  # Rfast::rowMins: first index on ties
-        nn_dist = d[np.arange(tmp_num), nn_index]
-        order = np.argsort(nn_dist, kind="stable").tolist()  # R's order() is stable
-        nn = nn_index.tolist()
-
-        marked = [False] * tmp_num
-        taken = 0
-        for p in order:
-            if taken >= delete_num:
-                break
-            if not marked[nn[p]] and not marked[p]:
-                marked[p] = True
-                taken += 1
-        if taken < delete_num:
-            for p in order:
-                if taken >= delete_num:
-                    break
-                if not marked[p]:
-                    marked[p] = True
-                    taken += 1
-
-        keep_mask = ~np.asarray(marked)
-        keep = keep[keep_mask]
-        d = d[np.ix_(keep_mask, keep_mask)]
-        tmp_num = keep.size
-    return keep, False
 
 
 def create_dn_centers(

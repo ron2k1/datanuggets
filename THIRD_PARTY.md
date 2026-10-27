@@ -6,10 +6,16 @@ below. The dataset described below retains its separate CC BY 4.0 license.
 
 ## Publication hold: GNU sorting helpers
 
-`src/datanuggets/_compat/rfast.py` describes its `gnu_sort_first`, `gnu_sort_order`
-and supporting introsort, insertion-sort and heap-sort helpers as reproducing
-libstdc++ step for step. Their exact upstream revision and license provenance have
-not been established.
+`src/datanuggets/_compat/rfast.py` holds `gnu_sort_first` and the median-of-three
+partition and heap-sort helpers it calls. The test reference
+`tests/compat/rfast_reference.py` holds `gnu_sort_order` and its introsort and
+insertion-sort helpers, which call the same partition and heap-sort helpers.
+`rfast.py` names these helpers after libstdc++'s std::sort internals, such as
+`_unguarded_partition_pivot` and `_adjust_heap`, and cites libstdc++'s `_S_threshold`
+and `std::__partial_sort`. The test reference describes `gnu_sort_order`, which calls
+them, as replaying std::sort step for step. The wheel includes `rfast.py`, and the
+source distribution includes both files. Their exact upstream revision and license
+provenance have not been established.
 
 Current GCC [stl_algo.h](https://github.com/gcc-mirror/gcc/blob/master/libstdc%2B%2B-v3/include/bits/stl_algo.h)
 and [stl_heap.h](https://github.com/gcc-mirror/gcc/blob/master/libstdc%2B%2B-v3/include/bits/stl_heap.h)
@@ -42,8 +48,10 @@ The Python port is independently maintained; upstream authors do not endorse thi
 
 ## R's Hartigan–Wong implementation
 
-`src/datanuggets/_clustering/hartigan_wong.py` and `kmnsjit.py` adapt
+`src/datanuggets/_clustering/hartigan_wong.py` and `kmnsjit.py`, and the test reference
+`tests/clustering/kmns_reference.py`, adapt
 [R's `src/library/stats/src/kmns.f`](https://svn.r-project.org/R/trunk/src/library/stats/src/kmns.f).
+The test reference is included in the source distribution, not the wheel.
 
 > (C) Royal Statistical Society 1979
 
@@ -51,8 +59,8 @@ The source credits B. D. Ripley's modifications dated 1998-06-17 and M. Maechler
 modifications dated 2001-04-12. R distributes this source under the GNU General Public
 License; this port uses version 2. See [R's copyright notices](https://svn.r-project.org/R/trunk/doc/COPYRIGHTS).
 The Python adaptations preserve operation order while adding zero-based indices,
-Python result types and Numba compilation. Changed-file notices also appear in both modules.
-The software is provided without warranty, as stated in `LICENSE`.
+Python result types and Numba compilation. Changed-file notices also appear in all
+three modules. The software is provided without warranty, as stated in `LICENSE`.
 
 ## Other R source adaptations
 

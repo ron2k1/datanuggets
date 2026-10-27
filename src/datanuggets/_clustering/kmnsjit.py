@@ -5,9 +5,9 @@
 # See LICENSE and THIRD_PARTY.md for the license and source notices.
 """Hartigan-Wong k-means (R's kmns.f), compiled.
 
-The same operations in the same order as hartigan_wong._HW, which ports kmns.f line by line, in
-double with no fused multiply-add, so the two agree bit for bit. Cluster and row indices are
-0-based. LIVE and NCP hold the Fortran's 1-based row numbers, as in _HW.
+The same operations in the same order as _HW in tests/clustering/kmns_reference.py, which ports
+kmns.f line by line, in double with no fused multiply-add, so the two agree bit for bit. Cluster
+and row indices are 0-based. LIVE and NCP hold the Fortran's 1-based row numbers, as in _HW.
 """
 
 import numpy as np

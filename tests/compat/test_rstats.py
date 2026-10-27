@@ -19,7 +19,6 @@ from numba.np import ufunc as numba_ufunc
 from datanuggets._compat import arithmetic, moments
 from datanuggets._compat.arithmetic import (
     _r_cov_py,
-    _r_mean_py,
     r_cov,
     r_mad,
     r_mean,
@@ -33,6 +32,7 @@ from datanuggets._compat.indexing import unique_first
 from datanuggets._compat.linalg import r_eigen_sym, r_matmul, r_matvec
 from datanuggets._compat.moments import group_moments
 from rfixtures import ATOL, RTOL, fixture_data, hex_bits, load_group, same_bits
+from rmean_reference import _r_mean_py
 
 CASES = load_group("rcompat_stats")
 WCASES = load_group("rcompat_wstats")
