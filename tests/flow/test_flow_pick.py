@@ -1,13 +1,19 @@
 import csv
+import dataclasses
 import sys
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from datanuggets.flow import pick
+from datanuggets.flow import pick, pipeline
 from datanuggets.flow.pick import _fcs_paths, main, parse_pops, per_file, pick_events
+from datanuggets.flow.settings import ClusterSettings, GateSettings
 from flowcases import COLUMNS, DIGESTS, DIGESTS_3, FIGURES, digest, read_202
+
+
+class _Stop(Exception):
+    """Raised by a spy that has seen what it was waiting for, to end the run there."""
 
 
 @pytest.mark.parametrize("asked", [False, True], ids=["pops", "asked"])
@@ -276,3 +282,105 @@ def test_too_few_distinct_channels_stop_before_clustering(names):
 def test_bad_k_or_dn_num2_stops_before_any_file_is_read(tmp_path, flag, value, match):
     with pytest.raises(SystemExit, match=match):
         main([str(tmp_path / "missing"), flag, value, "--no-show"])
+
+
+def test_parser_defaults_are_all_resolved_from_settings():
+    """A flag that sets a setting defaults to None, so a run without it takes the settings class's
+    default, the one place that value is kept."""
+    names = {f.name for cls in (GateSettings, ClusterSettings) for f in dataclasses.fields(cls)}
+    defaults = {a.dest: a.default for a in pick._parser()._actions if a.dest in names}
+    assert defaults == dict.fromkeys(names - {"tsne", "tsne_perplexity", "tsne_seed"})
+
+
+def test_explicit_defaults_give_the_same_tables(tmp_path, monkeypatch, close_figures):
+    """Every gate and clustering flag spelled at the value it takes when left out: the tables
+    are the ones the run writes without them."""
+    source, out = tmp_path / "202.fcs", tmp_path / "out"
+    source.touch()
+    monkeypatch.setattr(pick, "read_fcs", read_202)
+    defaults = {
+        "--fsc": "FSC-A",
+        "--ssc": "SSC-A",
+        "--disc": "his",
+        "--t11": "22",
+        "--t21": "0.25",
+        "--t12": "20",
+        "--t22": "0.5",
+        "--n-row": "11",
+        "--n-col": "11",
+        "--channels": ",".join(read_202(source)[1][2:]),  # the default rule's, in file order
+        "--cofactor": "6000",
+        "--dn-num1": "10000",
+        "--seed": "291102",
+    }
+    argv = [str(source), "--no-show", "--out", str(out), "--jobs", "1", "--pops", "1"]
+    main([*argv, "--dn-num2", "50", "--k", "3", *(t for item in defaults.items() for t in item)])
+    assert {name: digest(out / name) for name in COLUMNS} == DIGESTS
+
+
+def test_new_flags_reach_the_finder_and_create_dn(tmp_path, monkeypatch, close_figures):
+    """The finder gets --t12, --t22, --n-row and --n-col, and create_dn --dn-num1, --seed and
+    --jobs, with the channels --exclude-channels leaves. The run stops at the first create_dn."""
+    source = tmp_path / "202.fcs"
+    source.touch()
+    monkeypatch.setattr(pick, "read_fcs", read_202)
+    finder, seen = pipeline.gate_peaks, {}
+
+    def gate_peaks(fsc, ssc, **kwargs):
+        seen["finder"] = kwargs
+        return finder(fsc, ssc, **kwargs)
+
+    def create_dn(x, **kwargs):
+        seen["create_dn"] = kwargs
+        seen["channels"] = x.shape[1]
+        raise _Stop
+
+    monkeypatch.setattr(pipeline, "gate_peaks", gate_peaks)
+    monkeypatch.setattr(pipeline, "create_dn", create_dn)
+    flags = {
+        "--t12": "19",
+        "--t22": "0.4",
+        "--n-row": "9",
+        "--n-col": "13",
+        "--dn-num1": "5000",
+        "--dn-num2": "50",
+        "--seed": "7",
+        "--jobs": "1",
+        "--exclude-channels": "FJComp-BV510-A",
+    }
+    argv = [str(source), "--pops", "1", "--no-show", "--out", str(tmp_path / "out")]
+    with pytest.raises(_Stop):
+        main([*argv, *(t for item in flags.items() for t in item)])
+    finder_flags = {k: seen["finder"][k] for k in ("t12", "t22", "n_row", "n_col")}
+    assert finder_flags == {"t12": 19.0, "t22": 0.4, "n_row": 9, "n_col": 13}
+    assert seen["create_dn"] == {"dn_num1": 5000, "dn_num2": 50, "seed": 7, "n_jobs": 1}
+    assert seen["channels"] == 2
+
+
+@pytest.mark.parametrize(
+    ("flag", "value", "message"),
+    [
+        ("--dn-num1", "2", "--dn-num1 is 2; it takes 3 or more nuggets"),
+        ("--cofactor", "-1", "--cofactor is -1.0; it takes 0 (linear) or a positive number"),
+        ("--cofactor", "nan", "--cofactor is nan; it takes 0 (linear) or a positive number"),
+        ("--jobs", "0", "--jobs is 0; it takes -1 (every core) or 1 or more"),
+        ("--seed", "-1", "--seed is -1; it takes a whole number from 0"),
+        ("--n-row", "0", "--n-row is 0; it takes 1 to 100 grid cells"),
+        ("--t12", "0", "--t12 is 0.0; it takes a positive distance in grid cells"),
+        ("--t22", "nan", "--t22 is nan; it takes a fraction of the peak's density, 0 or more"),
+    ],
+)
+def test_bad_settings_stop_before_any_file_is_read(tmp_path, flag, value, message):
+    """The path doesn't exist, so a check made after the files are found would say that first."""
+    out = tmp_path / "out"
+    with pytest.raises(SystemExit) as e:
+        main([str(tmp_path / "missing"), flag, value, "--no-show", "--out", str(out)])
+    assert e.value.code == message
+    assert not out.exists()
+
+
+def test_exclude_channels_and_channels_are_exclusive(tmp_path, capsys):
+    with pytest.raises(SystemExit) as e:
+        main([str(tmp_path), "--channels", "CD3-A,CD4-A", "--exclude-channels", "Live-A"])
+    assert e.value.code == 2
+    assert "--exclude-channels: not allowed with argument --channels" in capsys.readouterr().err

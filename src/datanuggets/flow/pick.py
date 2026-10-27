@@ -22,12 +22,13 @@ from __future__ import annotations
 import argparse
 import sys
 import warnings
+from dataclasses import fields
 from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
 
-from datanuggets._defaults import DN_NUM1, FLOW_GATE_DPI
+from datanuggets._defaults import FLOW_GATE_DPI, FLOW_OUT_DIR, FLOW_RUN_NAME
 from datanuggets.exceptions import DataNuggetWarning, FlowError
 from datanuggets.flow import pipeline
 
@@ -79,6 +80,9 @@ def _fcs_paths(items) -> list[Path]:
 
 
 def _parser() -> argparse.ArgumentParser:
+    """The flags. One that sets a GateSettings or ClusterSettings field, under the field's name,
+    defaults to None, so a run without it takes the settings' default, which its help shows."""
+    gate, cluster = GateSettings(), ClusterSettings()
     p = argparse.ArgumentParser(
         prog="datanuggets-flow",
         description="Gate FCS files on FSC-A vs SSC-A, keep the populations you pick, and cluster "
@@ -94,38 +98,71 @@ def _parser() -> argparse.ArgumentParser:
         "--out",
         help="new output folder (default: outputs/flow-<timestamp>); existing paths are refused",
     )
-    p.add_argument("--k", type=int, default=8, help="clusters cut from the tree")
+    p.add_argument("--k", type=int, help=f"clusters cut from the tree (default: {cluster.k})")
     p.add_argument(
         "--cofactor",
         type=float,
-        default=6000,
-        help="fluorescence is clustered as arcsinh(x / cofactor); 0 keeps it linear",
+        help="fluorescence is clustered as arcsinh(x / cofactor); 0 keeps it linear "
+        f"(default: {cluster.cofactor:g})",
     )
-    p.add_argument("--dn-num2", type=int, default=1000, help="nuggets per file")
     p.add_argument(
+        "--dn-num1",
+        type=int,
+        help="create_dn's dn_num1, the nuggets its first pass makes from a file's kept cells "
+        f"before they are reduced to --dn-num2 (default: {cluster.dn_num1})",
+    )
+    p.add_argument("--dn-num2", type=int, help=f"nuggets per file (default: {cluster.dn_num2})")
+    p.add_argument("--seed", type=int, help=f"create_dn's seed (default: {cluster.seed})")
+    p.add_argument(
+        "--jobs",
+        type=int,
+        dest="n_jobs",
+        metavar="JOBS",
+        help="cores create_dn uses, -1 for every one; the results are the same for any "
+        f"(default: {cluster.n_jobs})",
+    )
+    channels = p.add_mutually_exclusive_group()
+    channels.add_argument(
         "--channels",
         help="comma-separated channels to cluster (default: every -A channel but FSC and SSC)",
     )
-    p.add_argument("--fsc", default="FSC-A")
-    p.add_argument("--ssc", default="SSC-A")
+    channels.add_argument(
+        "--exclude-channels", help="comma-separated channels to leave out of the default ones"
+    )
+    p.add_argument("--fsc", help=f"the channel gated as FSC (default: {gate.fsc})")
+    p.add_argument("--ssc", help=f"the channel gated as SSC (default: {gate.ssc})")
     p.add_argument(
         "--disc",
         choices=("his", "peak"),
-        default="his",
         help="his: cfc.py's gates, so the populations match cfc.py's figures; peak: "
-        "datanuggets.flow.find_area, the disc centred on the peak",
+        f"datanuggets.flow.find_area, the disc centred on the peak (default: {gate.disc})",
     )
     p.add_argument(
         "--t11",
-        default="22",
         help="the first peak's distance threshold, one for all files or one per file, e.g. "
-        "22,20,18,18 as in cfc.py",
+        f"22,20,18,18 as in cfc.py (default: {gate.t11[0]})",
     )
     p.add_argument(
         "--t21",
-        default="0.25",
-        help="the first peak's density threshold, the same way, e.g. 0.25,0.5,0.5,0.5",
+        help="the first peak's density threshold, the same way, e.g. 0.25,0.5,0.5,0.5 "
+        f"(default: {gate.t21[0]})",
     )
+    p.add_argument(
+        "--t12",
+        type=float,
+        help=f"every other peak's distance threshold, in every file (default: {gate.t12})",
+    )
+    p.add_argument(
+        "--t22",
+        type=float,
+        help=f"every other peak's density threshold, in every file (default: {gate.t22})",
+    )
+    p.add_argument(
+        "--n-row",
+        type=int,
+        help=f"rows of the window the finder's local maxima are found in (default: {gate.n_row})",
+    )
+    p.add_argument("--n-col", type=int, help=f"columns of that window (default: {gate.n_col})")
     p.add_argument("--no-show", action="store_true", help="save the figures without opening them")
     return p
 
@@ -208,21 +245,43 @@ def _pyplot(no_show: bool):
     return plt
 
 
+def _flags(cls, args, **values):
+    """cls's settings from the flags named for them, values standing in for flags that are read
+    another way first. A flag left out, or a value of None, keeps cls's default."""
+    given = {f.name: getattr(args, f.name, None) for f in fields(cls)} | values
+    return cls(**{name: v for name, v in given.items() if v is not None})
+
+
+def _gate_settings(args, t11, t21) -> GateSettings:
+    """GateSettings from the gate flags, with --t11 and --t21 as _check_args reads them."""
+    return _flags(GateSettings, args, t11=tuple(t11), t21=tuple(t21))
+
+
+def _settings(args) -> ClusterSettings:
+    """The settings the flags give, checked before any file is read, so a bad value stops the run
+    first; the clustering's are returned. --t11 and --t21 wait for the files to be counted."""
+    _flags(GateSettings, args, t11=None, t21=None).check()
+    cluster = _flags(
+        ClusterSettings,
+        args,
+        channels=_channel_names(args.channels),
+        exclude_channels=_channel_names(args.exclude_channels),
+    )
+    return cluster.check()
+
+
 def _check_args(args) -> tuple[list[Path], list[float], list[float], Path, str | None]:
-    """Validate arguments without writing files; return inputs, thresholds, output and --pops."""
-    if args.k < 1:
-        raise SystemExit(f"--k is {args.k}; it takes 1 or more clusters")
-    if not 2 <= args.dn_num2 < DN_NUM1:  # create_dn's dn_num1, which dn_num2 stays under
-        raise SystemExit(
-            f"--dn-num2 is {args.dn_num2}; it takes 2 to {DN_NUM1 - 1} nuggets per file"
-        )
+    """Validate arguments without writing files; return inputs, thresholds, output and --pops.
+    --t11 or --t21 left out gives the settings' one value for every file."""
     paths = _fcs_paths(args.paths)
-    t11 = per_file(args.t11, len(paths), "--t11")
-    t21 = per_file(args.t21, len(paths), "--t21")
+    gate = GateSettings()
+    t11 = per_file(args.t11, len(paths), "--t11") if args.t11 is not None else list(gate.t11)
+    t21 = per_file(args.t21, len(paths), "--t21") if args.t21 is not None else list(gate.t21)
+    _gate_settings(args, t11, t21).check()
     out = (
         Path(args.out)
         if args.out
-        else Path("outputs") / datetime.now(UTC).strftime("flow-%Y%m%d-%H%M%S-%fZ")
+        else Path(FLOW_OUT_DIR) / datetime.now(UTC).strftime(FLOW_RUN_NAME)
     )
     choices = args.pops.split(";") if args.pops else None
     if choices is not None and len(choices) not in (1, len(paths)):
@@ -249,9 +308,7 @@ def _gate_files(args, paths, t11, t21, out, plt) -> list[dict]:
     local_maxima.png, the one the populations are chosen from. gates.png waits for the choice."""
     from datanuggets.flow.figures import local_maxima_figure, save_figures
 
-    settings = GateSettings(
-        fsc=args.fsc, ssc=args.ssc, disc=args.disc, t11=tuple(t11), t21=tuple(t21)
-    )
+    settings = _gate_settings(args, t11, t21)
     samples = pipeline.gate_files(paths, settings, read=_read, on_event=_print_event)
     figs = {"local_maxima.png": local_maxima_figure(samples, figure=plt.figure)}
     save_figures(figs, out, FLOW_GATE_DPI)
@@ -276,22 +333,37 @@ def _choose_pops(samples, spec, plt, show) -> list[list[int]]:
 
 
 def _channel_names(names: str | None) -> tuple[str, ...] | None:
-    """--channels as ClusterSettings takes it: its names, or None for the default rule."""
+    """--channels or --exclude-channels as ClusterSettings takes it: its names, or None when it
+    is left out."""
     return tuple(c.strip() for c in names.split(",")) if names else None
 
 
-def _choose_channels(samples, names) -> tuple[list[str], list[str]]:
+def _choose_channels(samples, names, exclude=None) -> tuple[list[str], list[str]]:
     """The fluorescence channels to cluster and their labels, by pipeline.resolve_channels, for
-    --channels given as names. The run checks them before asking for populations, so a bad
-    channel stops it first."""
+    --channels and --exclude-channels given as names. The run checks them before asking for
+    populations, so a bad channel stops it first."""
+    settings = ClusterSettings(
+        channels=_channel_names(names), exclude_channels=_channel_names(exclude) or ()
+    )
     try:
-        return pipeline.resolve_channels(samples, ClusterSettings(channels=_channel_names(names)))
+        return pipeline.resolve_channels(samples, settings)
     except FlowError as e:
         raise SystemExit(e.cli(cli_flag)) from None
 
 
 def main(argv=None) -> None:
+    """datanuggets-flow. A FlowError, a bad setting's or a step's, stops it with its message, the
+    setting written as its flag."""
     args = _parser().parse_args(argv)
+    try:
+        _run(args)
+    except FlowError as e:
+        raise SystemExit(e.cli(cli_flag)) from None
+
+
+def _run(args) -> None:
+    """The run: every check, then the output folder, the steps, and the figures shown."""
+    cluster = _settings(args)
     plt = _pyplot(args.no_show)
     paths, t11, t21, out, spec = _check_args(args)
     try:
@@ -306,23 +378,15 @@ def main(argv=None) -> None:
     )
     try:
         samples = _gate_files(args, paths, t11, t21, out, plt)
-        _choose_channels(samples, args.channels)
+        _choose_channels(samples, args.channels, args.exclude_channels)
         chosen = _choose_pops(samples, spec, plt, not args.no_show)
         _draw_gates(samples, plt, out)
-        settings = ClusterSettings(
-            channels=_channel_names(args.channels),
-            cofactor=args.cofactor,
-            dn_num2=args.dn_num2,
-            k=args.k,
-        )
         pipeline.cluster_stage(
-            samples, chosen, out, settings, read=_read, on_event=_print_event, figure=plt.figure
+            samples, chosen, out, cluster, read=_read, on_event=_print_event, figure=plt.figure
         )
         incomplete.unlink()
-    except (Exception, SystemExit, KeyboardInterrupt) as e:
+    except (Exception, SystemExit, KeyboardInterrupt):
         print(f"\nRun incomplete; partial outputs are in {out.resolve()}", file=sys.stderr)
-        if isinstance(e, FlowError):  # a step's error, shown with its flag
-            raise SystemExit(e.cli(cli_flag)) from None
         raise
     print(f"\nOutputs are in {out.resolve()}")
     if not args.no_show:
