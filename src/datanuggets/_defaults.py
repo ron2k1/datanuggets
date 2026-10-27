@@ -1,5 +1,7 @@
-"""R's default argument values (datanugget 1.5.0), the flow gate finder's, and internal sizes,
-kept in one place."""
+"""R's default argument values (datanugget 1.5.0), the flow pipeline's, and internal sizes, kept
+in one place."""
+
+from types import MappingProxyType
 
 SEED = 291102
 R_CHUNK = 5000
@@ -34,3 +36,31 @@ FINDER_T11 = 22
 FINDER_T21 = 0.25
 FINDER_T12 = 20
 FINDER_T22 = 0.5
+
+
+# datanuggets-flow's defaults: the scatter channels it gates on; his, cfc.py's mirrored_area, as
+# the area rule, where the library's lymphmacro_finder defaults to find_area; the channels it
+# clusters, every -A channel but the scatter ones; the arcsinh cofactor; nuggets per file, where
+# create_dn's own default is DN_NUM2; every core for create_dn, which doesn't change its results;
+# the clusters cut from the tree; and the output folder, named by the UTC time a run starts
+FLOW_FSC = "FSC-A"
+FLOW_SSC = "SSC-A"
+FLOW_DISC = "his"
+FLOW_CHANNEL_SUFFIX = "-A"
+FLOW_SCATTER_PREFIXES = ("FSC", "SSC")
+FLOW_COFACTOR = 6000.0
+FLOW_DN_NUM2 = 1000
+FLOW_N_JOBS = -1
+FLOW_K = 8
+FLOW_OUT_DIR = "outputs"
+FLOW_RUN_NAME = "flow-%Y%m%d-%H%M%S-%fZ"
+FLOW_GATES_NAME = "flow-gates-%Y%m%d-%H%M%S-%fZ"
+
+# the t-SNE of the clustered nuggets: its perplexity, lowered to (n - 1) / 3 for n nuggets when
+# that's smaller, as scikit-learn needs it below n, and its seed; and the arguments that shape the
+# picture, pinned so a change of scikit-learn's defaults can't move it
+TSNE_PERPLEXITY = 30.0
+TSNE_SEED = 0
+TSNE_ARGS = MappingProxyType(
+    {"n_components": 2, "init": "pca", "learning_rate": "auto", "max_iter": 1000}
+)
