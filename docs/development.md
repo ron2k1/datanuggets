@@ -85,7 +85,7 @@ uv run ruff check
 uv run ruff format --check
 ```
 
-No workflow runs ruff, so run both before pushing. `uv run ruff format` rewrites the files the check flags. The settings in `pyproject.toml` set the line length to 100 and leave out `docs/`, whose snippets are illustrative, and `benchmarks/flow/cabrera_reference.py` and `benchmarks/flow/run_cabrera.py`, which keep Prof. Cabrera's code as written.
+No workflow runs ruff, so run both before pushing. `uv run ruff format` rewrites the files the check flags. The settings in `pyproject.toml` set the line length to 100, sort a helper module beside its tests, such as `tests/clustering/kmns_reference.py`, with the first-party imports, and leave out `docs/`, whose snippets are illustrative, and `benchmarks/flow/cabrera_reference.py` and `benchmarks/flow/run_cabrera.py`, which keep Prof. Cabrera's code as written.
 
 ## Check a build
 

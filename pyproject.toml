@@ -98,7 +98,8 @@ markers = ["slow: the long long-double fuzz, 10,000,000 cases per operation (pyt
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests", "scripts", "benchmarks"]
+# tests/*: a helper module beside its tests, which they import by its bare name, is first-party
+src = ["src", "tests", "tests/*", "scripts", "benchmarks"]
 extend-exclude = [
     "docs",  # prose with illustrative snippets, not sources
     # Cabrera's code word for word, kept as he wrote it

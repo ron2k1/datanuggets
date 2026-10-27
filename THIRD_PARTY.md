@@ -42,8 +42,10 @@ The Python port is independently maintained; upstream authors do not endorse thi
 
 ## R's Hartigan–Wong implementation
 
-`src/datanuggets/_clustering/hartigan_wong.py` and `kmnsjit.py` adapt
+`src/datanuggets/_clustering/hartigan_wong.py` and `kmnsjit.py`, and the test reference
+`tests/clustering/kmns_reference.py`, adapt
 [R's `src/library/stats/src/kmns.f`](https://svn.r-project.org/R/trunk/src/library/stats/src/kmns.f).
+The test reference is included in the source distribution, not the wheel.
 
 > (C) Royal Statistical Society 1979
 
@@ -51,8 +53,8 @@ The source credits B. D. Ripley's modifications dated 1998-06-17 and M. Maechler
 modifications dated 2001-04-12. R distributes this source under the GNU General Public
 License; this port uses version 2. See [R's copyright notices](https://svn.r-project.org/R/trunk/doc/COPYRIGHTS).
 The Python adaptations preserve operation order while adding zero-based indices,
-Python result types and Numba compilation. Changed-file notices also appear in both modules.
-The software is provided without warranty, as stated in `LICENSE`.
+Python result types and Numba compilation. Changed-file notices also appear in all
+three modules. The software is provided without warranty, as stated in `LICENSE`.
 
 ## Other R source adaptations
 
