@@ -7,10 +7,10 @@ To analyze your own dataset from Terminal, start with installation and the CSV g
 | [Installation](installation.md) | Install a supplied wheel, the alpha, or `main`; MacBook setup without Git or uv |
 | [CSV CLI](cli.md#analyze-a-csv) | Select columns, transform data, create nuggets, and export weighted analyses |
 | [Getting started](quickstart.md) | Prepare data, create and refine nuggets, cluster, plot, and predict |
-| [Function reference](api.md) | Python functions, result types, examples, and the R-to-Python map |
+| [Function reference](api.md) | Python functions, result types, and examples |
 | [Flow CLI](cli.md#fcs-pipeline) | The separate FCS pipeline: population selection, flags, and output files |
 | [Limitations](limitations.md) | Memory, statistical assumptions, missing features, and alpha status |
-| [R compatibility](compatibility.md) | Recorded comparisons and intentional differences from R |
+| [R compatibility](compatibility.md) | The [R-to-Python function map](compatibility.md#ported-functions), recorded comparisons, and intentional differences from R |
 | [Methodology](methodology.md) | How the implemented analysis fits together |
 | [Reproducibility](reproducibility.md) | Recorded datasets, fixtures, and validation procedures |
 | [Development](https://github.com/ron2k1/datanuggets/blob/main/docs/development.md) | Run tests, lint, and distribution checks |
