@@ -16,6 +16,7 @@ import numpy as np
 from datanuggets import create_dn, cut_tree, whclust, wmean
 from datanuggets._defaults import (
     FLOW_CHANNEL_SUFFIX,
+    FLOW_GATE_DPI,
     FLOW_RESULT_DPI,
     FLOW_SCATTER_PREFIXES,
     FLOW_SPILL_TOL,
@@ -93,7 +94,8 @@ class PopStats(NamedTuple):
 
 class Sample(TypedDict):
     """A gated file, as gate_files gives it. It is a dict, so the CLI's prompt reads it as before;
-    fsc and ssc are kept for gates.png."""
+    fsc and ssc are kept for gates.png, and are None in a sample state.load_gates reads, whose
+    gates.png is drawn already."""
 
     number: int  # numbered from 1, in the order the files were given
     path: Path
@@ -107,8 +109,8 @@ class Sample(TypedDict):
     local_maxima: int
     t11: float
     t21: float
-    fsc: np.ndarray
-    ssc: np.ndarray
+    fsc: np.ndarray | None
+    ssc: np.ndarray | None
 
 
 class Kept(NamedTuple):
@@ -288,6 +290,32 @@ def gate_files(
             ]
             data = {"events": len(fsc), "local_maxima": len(peaks.candidates), "populations": stats}
             on_event(StageEvent("gate", i + 1, len(paths), "\n".join(lines), data))
+    return samples
+
+
+def gate_stage(
+    paths: Sequence[Path],
+    out: Path,
+    settings: GateSettings,
+    *,
+    read: Reader = read_fcs,
+    on_event: OnEvent | None = None,
+    figure: Callable[..., Figure] | None = None,
+) -> list[Sample]:
+    """The gate stage in the folder out, which must exist: each file gated by gate_files,
+    local_maxima.png and gates.png drawn on figure (see flow.figures), and the gate folder's
+    record saved by state.save_gates, gates.json last. cluster_stage clusters the samples it
+    gives, or the ones state.load_gates reads back from out."""
+    from datanuggets.flow.figures import gates_figure, local_maxima_figure, save_figures
+    from datanuggets.flow.state import save_gates
+
+    samples = gate_files(paths, settings, read=read, on_event=on_event)
+    figs = {
+        "local_maxima.png": local_maxima_figure(samples, figure=figure),
+        "gates.png": gates_figure(samples, figure=figure),
+    }
+    save_figures(figs, out, FLOW_GATE_DPI)
+    save_gates(out, samples, settings)
     return samples
 
 

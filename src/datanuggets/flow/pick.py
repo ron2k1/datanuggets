@@ -30,7 +30,7 @@ import numpy as np
 
 from datanuggets._defaults import FLOW_GATE_DPI, FLOW_OUT_DIR, FLOW_RUN_NAME
 from datanuggets.exceptions import DataNuggetWarning, FlowError
-from datanuggets.flow import pipeline
+from datanuggets.flow import pipeline, state
 
 # parse_pops and pick_events are pipeline's, and still importable from here
 from datanuggets.flow.pipeline import parse_pops, pick_events  # noqa: F401
@@ -388,16 +388,7 @@ def _run(args) -> None:
     cluster = _settings(args)
     plt = _pyplot(args.no_show, tsne=cluster.tsne)
     paths, t11, t21, out, spec = _check_args(args)
-    try:
-        out.mkdir(parents=True, exist_ok=False)
-    except FileExistsError:
-        raise SystemExit(f"output path already exists: {out}; choose a new --out folder") from None
-    incomplete = out / "INCOMPLETE.txt"
-    incomplete.write_text(
-        "This run has not completed. Its tables and figures may be partial.\n"
-        "A successful run removes this marker; rerun in a new output folder.\n",
-        encoding="utf-8",
-    )
+    state.begin(out)
     try:
         samples = _gate_files(args, paths, t11, t21, out, plt)
         _choose_channels(samples, args.channels, args.exclude_channels)
@@ -406,7 +397,7 @@ def _run(args) -> None:
         pipeline.cluster_stage(
             samples, chosen, out, cluster, read=_read, on_event=_print_event, figure=plt.figure
         )
-        incomplete.unlink()
+        state.finish(out)
     except (Exception, SystemExit, KeyboardInterrupt):
         print(f"\nRun incomplete; partial outputs are in {out.resolve()}", file=sys.stderr)
         raise
