@@ -56,6 +56,8 @@ FLOW_OUT_DIR = "outputs"
 FLOW_RUN_NAME = "flow-%Y%m%d-%H%M%S-%fZ"
 FLOW_GATES_NAME = "flow-gates-%Y%m%d-%H%M%S-%fZ"
 FLOW_SPILL_TOL = 1e-3  # how far from the identity a file's spillover matrix may be before a warning
+FLOW_GATE_DPI = 110  # local_maxima.png and gates.png
+FLOW_RESULT_DPI = 150  # the clustering's figures
 
 # the t-SNE of the clustered nuggets: its perplexity, lowered to (n - 1) / 3 for n nuggets when
 # that's smaller, as scikit-learn needs it below n, and its seed; and the arguments that shape the

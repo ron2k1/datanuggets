@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 
-from datanuggets._defaults import DN_NUM1
+from datanuggets._defaults import DN_NUM1, FLOW_GATE_DPI, FLOW_RESULT_DPI
 from datanuggets.exceptions import DataNuggetWarning
 from datanuggets.flow import pipeline
 
@@ -268,13 +268,10 @@ def _gate_files(args, paths, t11, t21, out, plt) -> list[dict]:
     """Each file gated with Cabrera's lymphmacro_finder and its populations counted, and the
     density grid, local maxima and the peak each Pop grows from drawn on one figure,
     local_maxima.png, the one the populations are chosen from. gates.png waits for the choice."""
-    from datanuggets import plot
     from datanuggets.flow import find_area, finder_peaks, lymphmacro_finder, mirrored_area
+    from datanuggets.flow.figures import local_maxima_figure, save_figures
 
     area = mirrored_area if args.disc == "his" else find_area
-    cols = min(len(paths), 2)
-    rows = -(-len(paths) // cols)
-    fig, axs = plt.subplots(rows, cols, figsize=(6.5 * cols, 5.2 * rows), squeeze=False)
     samples = []
     for i, path in enumerate(paths):
         events, pnn, pns = read_fcs(path)
@@ -292,15 +289,12 @@ def _gate_files(args, paths, t11, t21, out, plt) -> list[dict]:
         print(f"\nFile {i + 1}, {path.name}: {len(fsc):,} events")
         print("\n".join(table))
         fp = finder_peaks(fsc, ssc)
-        plot.peaks(fp, title=f"File {i + 1}: {path.name}", ax=axs.flat[i])
         print(f"  {len(fp.candidates)} local maxima, {len(fp.peaks)} kept as peaks")
         fsc, ssc = fsc.copy(), ssc.copy()  # for gates.png; copies, so events can be freed
         sample = {"path": path, "masks": masks, "pnn": pnn, "pns": pns, "table": table}
-        samples.append(sample | {"fsc": fsc, "ssc": ssc})
-    for ax in axs.flat[len(paths) :]:
-        ax.set_visible(False)
-    fig.tight_layout()
-    fig.savefig(out / "local_maxima.png", dpi=110)
+        samples.append(sample | {"peaks": fp, "fsc": fsc, "ssc": ssc})
+    figs = {"local_maxima.png": local_maxima_figure(samples, figure=plt.figure)}
+    save_figures(figs, out, FLOW_GATE_DPI)
     print(f"\nThe local maxima and each Pop's peak are drawn in {out / 'local_maxima.png'}")
     return samples
 
@@ -308,18 +302,9 @@ def _gate_files(args, paths, t11, t21, out, plt) -> list[dict]:
 def _draw_gates(samples, plt, out) -> None:
     """gates.png, once the populations are chosen: each file's events in gray and each of its
     populations in color, one panel per file."""
-    from datanuggets import plot
+    from datanuggets.flow.figures import gates_figure, save_figures
 
-    cols = min(len(samples), 2)
-    rows = -(-len(samples) // cols)
-    fig, axs = plt.subplots(rows, cols, figsize=(5.5 * cols, 4.8 * rows), squeeze=False)
-    for i, s in enumerate(samples):
-        title = f"File {i + 1}: {s['path'].name}"
-        plot.gates(s["fsc"], s["ssc"], s["masks"], title=title, ax=axs.flat[i])
-    for ax in axs.flat[len(samples) :]:
-        ax.set_visible(False)
-    fig.tight_layout()
-    fig.savefig(out / "gates.png", dpi=110)
+    save_figures({"gates.png": gates_figure(samples, figure=plt.figure)}, out, FLOW_GATE_DPI)
     print(f"The populations are drawn in {out / 'gates.png'}")
 
 
@@ -476,39 +461,11 @@ def _write_tables(kept, pool, labels, out) -> pd.DataFrame:
 
 def _draw_figures(pool, cc, labels, cofactor, plt, out) -> None:
     """dendrogram.png, clusters_pca.png, clusters_tsne.png and cluster_centers.png."""
-    from datanuggets import plot, wpca
+    from datanuggets.flow.figures import result_figures, save_figures
 
-    use, k = pool.use, pool.k
-    fig, ax = plt.subplots(figsize=(8, 4))
-    plot.dendrogram(pool.tree, labels=False, hang=-1, ax=ax)
-    ax.set_title(f"Whclust of {use.sum():,} nuggets")
-    fig.savefig(out / "dendrogram.png", dpi=150)
-    fig, ax = plt.subplots(figsize=(6, 6))
-    pca = wpca(pool.centers[use], wrow=pool.weights[use])
-    plot.scores(pca, w=pool.weights[use], labels=pool.cl[use], ax=ax)
-    ax.set_title(f"Nuggets of the kept cells, {k} clusters")
-    fig.savefig(out / "clusters_pca.png", dpi=150)
-    fig, ax = plt.subplots(figsize=(6.5, 6))
-    xy = _tsne(pool.centers[use])
-    plot.clusters(xy, pool.cl[use], w=pool.weights[use], size="sqrt", ax=ax)
-    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]  # plot.clusters' and scores'
-    handles = [
-        plt.Line2D([], [], ls="none", marker="o", color=colors[c % len(colors)], label=str(c + 1))
-        for c in range(k)
-    ]
-    ax.legend(handles=handles, title="cluster", loc="center left", bbox_to_anchor=(1, 0.5))
-    ax.set(xlabel="t-SNE 1", ylabel="t-SNE 2")
-    ax.set_title(f"t-SNE of {use.sum():,} nuggets, {k} clusters; area ∝ √weight")
-    fig.tight_layout()
-    fig.savefig(out / "clusters_tsne.png", dpi=150)
-    fig, ax = plt.subplots(figsize=(8, 8))
-    im = ax.imshow(cc[labels].to_numpy().T, aspect="auto", cmap="viridis")
-    ax.set_xticks(range(k), [str(c) for c in range(1, k + 1)])
-    ax.set_yticks(range(len(labels)), labels, fontsize=7)
-    ax.set_xlabel("cluster")
-    fig.colorbar(im, ax=ax, label=f"arcsinh(x / {cofactor:g})" if cofactor else "x")
-    fig.tight_layout()
-    fig.savefig(out / "cluster_centers.png", dpi=150)
+    xy = _tsne(pool.centers[pool.use])
+    figs = result_figures(pool, cc, labels, cofactor, xy, figure=plt.figure)
+    save_figures(figs, out, FLOW_RESULT_DPI)
 
 
 def _tsne(x) -> np.ndarray:
