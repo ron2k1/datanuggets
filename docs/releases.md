@@ -10,12 +10,15 @@ This version is intended for research evaluation. Preparing these files does not
 
 - Native Python implementations of 18 functions from R's `datanugget` 1.5.0 and `WCluster` 1.3.0, with no R runtime dependency.
 - Nugget creation and refinement, weighted clustering, weighted PCA, prediction, and optional plotting and pandas support.
+- A `datanuggets analyze` command for your own CSV files: explicit feature selection, optional transformations and refinement, weighted analyses, row assignments, summaries, and plots in a fresh output folder. Install the `cli` extra; `python -m datanuggets` is also supported.
 - An experimental FCS workflow with new output folders under `outputs/`, protection against overwriting existing paths, and markers for incomplete runs.
-- Installation and analysis walkthroughs, function documentation, and an example using the recorded `quakes` data. The source archive includes the guides, example, and recorded test fixtures.
+- Installation and analysis walkthroughs, MacBook wheel setup without Git or uv, function documentation, and an example using the recorded `quakes` data. The source archive includes the guides, example, and recorded test fixtures.
 - CI coverage for Python 3.12–3.15 on Linux, Windows, and macOS, plus installed-wheel and distribution-content checks.
 
 ### Before using it in a study
 
 The API may change before a stable release. Pin the package version and record preprocessing choices, seeds, and source revisions. `optimal.DN` is not implemented. Hierarchical clustering uses quadratic memory, and numerical results are not universally identical to R. The flow command does not apply compensation or establish biological cell identities.
 
-Read the [compatibility notes](compatibility.md), [limitations](limitations.md), and [flow guide](cli.md) before interpreting results. Python 3.14 and 3.15 are alternative interpreters for this same package.
+The CSV command does not infer appropriate transformations or optimal nugget and cluster counts. It rejects missing or nonfinite selected values instead of dropping rows. If you received an earlier `0.1.0a1` wheel, reinstall the newly supplied build to get this command; the version number alone does not distinguish unpublished builds.
+
+Read the [CSV guide](cli.md#analyze-a-csv), [compatibility notes](compatibility.md), and [limitations](limitations.md) before interpreting results; use the [FCS guide](cli.md#fcs-pipeline) for that separate pipeline. Python 3.14 and 3.15 are alternative interpreters for this same package.

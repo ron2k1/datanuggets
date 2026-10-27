@@ -1,4 +1,114 @@
-# The datanuggets-flow command
+# Command-line analysis
+
+Use `datanuggets analyze` for a CSV of your own measurements. The separate [FCS pipeline](#fcs-pipeline) uses `datanuggets-flow` and has its own preprocessing and options.
+
+## Analyze a CSV
+
+Install the `cli` extra using the [installation guide](installation.md). On a MacBook, a [supplied wheel](installation.md#macbook-install-once-from-a-wheel) gives you both the command and Python library without Git or uv. An older alpha wheel must be replaced with the current build to get this command.
+
+Keep the CSV in your usual data folder. In an activated environment, this macOS Terminal example selects two measurements, standardizes them, creates up to 200 nuggets, then runs weighted k-means and PCA:
+
+```sh
+datanuggets analyze "$HOME/Documents/study.csv" \
+  --columns measurement_a measurement_b \
+  --transform standardize \
+  --nuggets 200 \
+  --analysis kmeans pca \
+  --clusters 3
+```
+
+Replace the path and feature names with yours; quote a name containing spaces, such as `--columns "Cell size" "Signal intensity"`. On Windows, enter the command on one line or use PowerShell's continuation syntax. `python -m datanuggets analyze ...` runs the same command through your chosen Python interpreter.
+
+The Terminal prints a summary and the output location. Open the CSV results in a spreadsheet or Python and the PNG files in any image viewer. No plotting window opens during the run. To see all options:
+
+```sh
+datanuggets analyze --help
+```
+
+### CSV input
+
+Use a UTF-8 CSV with one header row and at least two data rows. Headers must be nonempty and unique, and each row must have the same number of fields. Only the columns named by `--columns` enter the analysis; exclude identifiers, names, and known outcome labels. Those selected columns must contain finite numeric values in every row. Missing values, text, infinity, and NaN stop the run with an error; rows are never silently dropped or imputed.
+
+Choose at least two features for clustering or PCA. Nuggets alone (`--analysis none`) can use one feature. Files are read into memory, so the CSV and intermediate arrays must fit on your machine. Your original file stays unchanged and does not need to be copied into the package or repository.
+
+### CSV options
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `INPUT` | required | Path to one CSV file |
+| `--columns NAME ...` | required | Feature names, in the order used for transforms and analysis |
+| `--transform STEP ...` | `none` | `standardize`, `log1p`, or `arcsinh`, applied in the listed order; `none` must appear alone |
+| `--cofactor NUMBER` | `5` | Positive finite divisor for `arcsinh` |
+| `--nuggets N` | `200` | Requested final nugget count |
+| `--intermediate-nuggets N` | `1000` | Intermediate target; must be at least the final target |
+| `--analysis METHOD ...` | `kmeans pca` | Choose `kmeans`, `hclust`, and/or `pca`; use `none` alone for nuggets only |
+| `--clusters K` | `3` | Requested number of clusters for k-means or a hierarchy cut |
+| `--refine` | off | Refine the created nuggets before analysis |
+| `--max-splits N` | `2` | Maximum refinement rounds; nonnegative |
+| `--num-init N` | `10` | Random starts for weighted k-means |
+| `--max-iter N` | `100` | Iteration limit for weighted k-means |
+| `--seed N` | `42` | Nonnegative random seed |
+| `--jobs N` | `1` | Number of worker processes; `-1` uses all available cores |
+| `--no-plots` | off | Write tables and metadata without PNG figures |
+| `--out FOLDER` | unique `outputs/analysis-...` | New output folder, relative to the current working directory |
+
+Nugget and cluster counts are positive targets you choose, not estimated optimal values. The actual nugget count can differ with small inputs, duplicate values, or refinement. Weighted k-means requires at least `2 × K` occupied nuggets and enough distinct centers. Hierarchical clustering needs at least three occupied nuggets and one per requested cluster. A requested analysis stops with an error when its requirements are not met; it is not silently skipped. If you change to a large final nugget count, also increase `--intermediate-nuggets`. List each column, transformation, and analysis only once.
+
+### Transformations
+
+Transforms act on the selected columns before nugget creation. Choose them for the measurement scale and scientific question; none is universally appropriate.
+
+| Transform | Calculation | When it fails or needs care |
+| --- | --- | --- |
+| `none` | Keep input values | Features with larger numeric ranges can dominate distances |
+| `standardize` | Subtract each feature's mean and divide by its population standard deviation (`ddof=0`) | Constant features use a divisor of 1 and become zero |
+| `log1p` | `log(1 + x)` | Requires nonnegative values at this step |
+| `arcsinh` | `arcsinh(x / cofactor)` | The cofactor must be positive and finite; the default of 5 is a starting setting, not a validated choice for your data |
+
+For example, `--transform arcsinh standardize --cofactor 5` first applies arcsinh, then fits standardization on those transformed values. Order matters. `run.json` records the order and fitted parameters so you can apply the same transformation to later data; do not refit standardization independently on new observations used for prediction.
+
+### CSV results
+
+Every run gets a new folder under `outputs/` by default. Run from the repository root to keep results in its ignored `outputs/` folder, or from your study folder to keep results there. Use `--out` for another **unused** destination.
+
+| File | Contents |
+| --- | --- |
+| `nuggets.csv` | One row per nugget: `nugget0`, `feature:<name>` centers in transformed units, `weight`, `scale`, and requested cluster labels |
+| `assignments.csv` | Every original input row's `row0`, `nugget0`, and requested `kmeans_cluster` / `hclust_cluster` labels |
+| `cluster_summary.csv` | One row per method and cluster: `method`, `cluster`, `rows`, `percent`, and `mean:<name>` for each selected feature in the original input units |
+| `pca_scores.csv` | Each nugget's `nugget0`, `weight`, and principal-component scores |
+| `pca_loadings.csv` | Each feature's principal-component loadings |
+| `pca_variance.csv` | Component names, standard deviations, and explained-variance ratios |
+| `pca_center.csv` | Per-feature center used by PCA, in analysis units |
+| `hierarchy.csv` | Hierarchical linkage rows: `left`, `right`, `height`, and `nuggets` |
+| `plots/` | Nugget and requested analysis plots, saved as PNG files unless `--no-plots` is used |
+| `run.json` | Input filename and hash, feature order, fitted transforms, settings, seed, versions, and row/nugget counts |
+
+Cluster and PCA files appear only for the analyses requested. All CSV row indices, nugget indices, and cluster labels start at **0**. `row0=0` means the first data row after the header, so you can join assignments back to the original CSV by row position. Input ID and label columns are not copied into the results.
+
+The Terminal reports cluster sizes; `cluster_summary.csv` also gives feature means in the original units. These are descriptive results, not automatic cell-type labels or scientific conclusions. PCA describes the weighted nugget centers. It does not reconstruct the original dataset's full covariance or supply a PCA score for every original row. Compare transformations, nugget counts, and cluster counts before interpreting results; automatic count selection with `optimal.DN` is not implemented.
+
+### CSV output safety
+
+An existing file, directory (even an empty one), or symbolic link at `--out` is refused. Results from earlier runs are never deleted or overwritten. A failed run retains any partial output with an `INCOMPLETE.txt` marker; fix the reported issue and rerun into a new folder. Only a completed run removes the marker.
+
+### More CSV examples
+
+Create and refine nuggets without downstream analysis:
+
+```sh
+datanuggets analyze "study.csv" --columns measurement_a measurement_b --refine --analysis none
+```
+
+Use arcsinh followed by standardization, then weighted hierarchical clustering and PCA:
+
+```sh
+datanuggets analyze "study.csv" --columns measurement_a measurement_b --transform arcsinh standardize --cofactor 5 --analysis hclust pca --clusters 3 --out outputs/study-hierarchy-01
+```
+
+For a large hierarchy, remember that its square distance matrix alone uses about 800 MB for 10,000 nuggets. Start with a modest target and check [limitations](limitations.md) before scaling up.
+
+## FCS pipeline
 
 `datanuggets-flow` gates FCS files, lets you choose candidate populations, and clusters their events. It creates nuggets for each file, then fits one weighted Ward tree to the pooled nuggets. Cluster numbers therefore refer to the same fitted clustering across files; they are not independently validated cell-type labels. [methodology.md](methodology.md#the-datanuggets-flow-pipeline) explains the method and its design choices.
 
@@ -8,7 +118,7 @@ The command needs the `flow` extra, which adds flowio, matplotlib, pandas and sc
 
 Inspect the gates and confirm your compensation and preprocessing before interpreting results. The command does not apply compensation. With many input files, also check the **total** nugget count: 10,000 pooled nuggets require about 800 MB for the hierarchy's matrix alone.
 
-## Synopsis
+### Synopsis
 
 ```text
 usage: datanuggets-flow [-h] [--pops POPS] [--out OUT] [--k K]
@@ -19,7 +129,7 @@ usage: datanuggets-flow [-h] [--pops POPS] [--out OUT] [--k K]
                         paths [paths ...]
 ```
 
-## Inputs
+### Inputs
 
 Each path is an FCS file or a folder of them. A folder gives its files whose suffix is `.fcs` in any case, so `.FCS` counts too, sorted by name. Names that start with a dot are skipped, such as the `._` copies macOS writes on some drives. Subfolders aren't searched. A file named directly is read whatever its suffix.
 
@@ -27,7 +137,7 @@ Files and folders can be mixed. The files are numbered from 1 in the order of th
 
 flowio reads each file's events with `as_array(preprocess=True)`, as the file stores them. Channels are found by their `$PnN` names. Every file must have the `--fsc` and `--ssc` channels. The channels to cluster are taken from the first file, and every file must have them too.
 
-## Options
+### Options
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
@@ -46,7 +156,7 @@ flowio reads each file's events with `as_array(preprocess=True)`, as the file st
 
 On the files of the Zenodo record the default channels are the 32 unmixed `FJComp-...-A` channels. `SSC-B-A` starts with `SSC`, so it's left out. A channel name with a space needs quotes, as in `--channels "FJComp-BV510-A,FJComp-Spark Blue-A"`.
 
-### Per-file thresholds
+#### Per-file thresholds
 
 `--t11` and `--t21` take one number for every file, or a comma-separated list with one number per file in file order. Any other count stops the run. The peaks after the first use the reference finder's `t12` of 20 and `t22` of 0.5, and the finder's 100 by 100 grid and the 11 by 11 window of its focal maxima are fixed too. None of these has a flag.
 
@@ -58,16 +168,16 @@ datanuggets-flow path/to/fcs_folder --t11 22,20,18,18 --t21 0.25,0.5,0.5,0.5 --o
 
 `cfc.py` pairs these values with the samples in the order FlowKit returns them, by their `$FIL` keyword, which may not be the order of the workbook it reads ([methodology.md](methodology.md#against-cabreras-script)). Here they follow file order, so check the `File N` lines against the values you meant.
 
-### --disc
+#### --disc
 
 - `his`, the default, gates with `datanuggets.flow.mirrored_area`, a copy of `cfc.py`'s own `find_area`, whose distance disc sits on the mirrored cell. The populations and their numbers are the ones `cfc.py`'s figures show.
 - `peak` gates with `datanuggets.flow.find_area`, which centres the disc on the peak, as `lymphmacro_finder` does.
 
 On `202.fcs`, `his` gives populations of 225,770, 58,245 and 27,590 events and `peak` gives 214,085, 66,149 and 37,742. Which rule is right is open problem 10 in [limitations.md](limitations.md#open-problems). [methodology.md](methodology.md#the-disc---disc-his-and---disc-peak) explains the difference.
 
-## Choosing populations
+### Choosing populations
 
-### At the prompt
+#### At the prompt
 
 Without `--pops`, the run gates every file, prints each file's populations and asks. Each population line gives its event count, its share of the file's events, and its median on the `--fsc` and `--ssc` channels, FSC-A and SSC-A by default. `local_maxima.png` draws each file in its own panel: the density grid, every local maximum, and each kept peak labelled with its Pop number, so you choose from the peaks. `gates.png`, the populations' full gates, is drawn only after the choice. From a run on three files of the Zenodo record, after the first answer:
 
@@ -99,7 +209,7 @@ The prompt needs a terminal. When standard input is not one, such as a pipe, the
 
 Without `--no-show`, the gate figure opens before the first question and stays responsive while the prompt waits, so it can be zoomed and panned. Click the terminal before typing. On Windows the wait ends at the first key press.
 
-### With --pops
+#### With --pops
 
 `--pops` takes the same answers, for scripted runs. One entry applies to every file, and one entry per file, separated by `;`, applies file by file. Quote it, since `;` ends a command in the shell:
 
@@ -111,7 +221,7 @@ Enter has no meaning here. A file in which the finder found no population takes 
 
 An event in two kept populations counts once: the kept events are the union of the chosen populations.
 
-## What a run does
+### What a run does
 
 1. Checks that matplotlib and pandas import, checks `--k` and `--dn-num2`, finds the files, reads the thresholds, and checks the number of `--pops` entries. Creates a new output folder and an `INCOMPLETE.txt` marker; an existing output path stops the run without changing its contents.
 2. Gates each file: reads its events, runs the finder on `--fsc` and `--ssc` with the file's `--t11` and `--t21` and the `--disc` rule, prints the population lines and the number of local maxima and kept peaks, and draws the file's panel of `local_maxima.png`.
@@ -123,7 +233,7 @@ An event in two kept populations counts once: the kept events are the union of t
 
 `create_dn` runs with its fixed default seed. Two runs on the same three files with the same flags, on the development laptop, wrote identical CSV files.
 
-## Outputs
+### Outputs
 
 Figures and tables share one run folder: `outputs/flow-<timestamp>/` by default, or a new folder chosen with `--out`. Paths are relative to the current directory. Run from the repository root to keep results inside its ignored `outputs/` directory.
 
@@ -162,17 +272,17 @@ The columns:
 
 A file left out of the clustering has no `nuggets_N.csv` or `events_N.csv`, so the numbers can skip.
 
-### Output safety
+#### Output safety
 
 **Existing output paths are never reused.** The command refuses a file, directory, or symbolic link at the requested path, including an empty directory. This keeps a new run from deleting or overwriting earlier results. Let the default choose a fresh run folder, or give `--out` an unused name.
 
 If a run fails or is cancelled after creating its folder, partial figures and tables stay there with `INCOMPLETE.txt`. The error also prints their location. Rerun in a new folder; the command does not resume unfinished runs. The marker is removed only after every result file has been saved.
 
-## Spillover
+### Spillover
 
 Events are clustered as stored, uncompensated. When a file's `$SPILLOVER` or `$SPILL` keyword holds a matrix with any entry more than 0.001 from the identity, the run prints `warning: NAME has a compensation matrix, but its events are clustered as stored, uncompensated` and goes on. It prints each time the file is read, so twice for a file whose events are clustered. Spectral files are unmixed already. The four files of the Zenodo record tried here, `154`, `199`, `202` and `223`, carry no spillover keyword, so this warning hasn't been seen on real data.
 
-## Failure conditions
+### Failure conditions
 
 The checks run in the order of the steps above, so the first condition a run meets is the one it reports. These messages go to standard error and the exit status is 1:
 
@@ -200,7 +310,7 @@ The checks run in the order of the steps above, so the first condition a run mee
 
 A bad flag value, such as `--disc mirror` or a non-integer `--k`, gets argparse's usage message and exit status 2. Other errors can end in a Python traceback with exit status 1: missing flowio, an unreadable FCS file, or invalid scatter values. A failed run retains its incomplete marker and any partial outputs.
 
-## Examples
+### Examples
 
 Each output directory below must be unused. Replace `path/to/fcs_folder` and the channel names with your inputs.
 
