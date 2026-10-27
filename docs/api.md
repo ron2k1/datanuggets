@@ -2,7 +2,7 @@
 
 This manual documents the public Python API for **datanuggets 0.1.0a1**. For installation and a first analysis, start with the [installation guide](installation.md) and [quickstart](quickstart.md). This page gives function-level arguments, return values, examples, and compatibility notes.
 
-The 18 core functions are exported from `datanuggets`. Eight flow helpers live in `datanuggets.flow`, and nine plotting helpers live in `datanuggets.plot`.
+The 18 core functions are exported from `datanuggets`. Ten flow helpers live in `datanuggets.flow`, the `datanuggets-flow` pipeline's library in four of its submodules, and nine plotting helpers in `datanuggets.plot`.
 
 | Task | Functions |
 | --- | --- |
@@ -13,6 +13,7 @@ The 18 core functions are exported from `datanuggets`. Eight flow helpers live i
 | Run weighted PCA | [`wpca`](#wpca) |
 | Analyze nuggets | [`dn_wkmeans`](#dn_wkmeans), [`dn_whclust`](#dn_whclust), [`dn_wpca`](#dn_wpca), [`dn_cluster_predict`](#dn_cluster_predict) |
 | Work with flow populations | [Flow utilities](#flow-utilities) |
+| Gate and cluster FCS files from Python | [The flow pipeline library](#the-flow-pipeline-library) |
 | Draw and export figures | [Plotting](#plotting) |
 | Inspect returned objects | [Result objects](#result-objects) |
 
@@ -978,6 +979,40 @@ assert len(fp.peaks) == masks.shape[1]
 
 **See also:** [`local_maxima`](#local_maxima), [`refine_peaks`](#refine_peaks), [`peaks`](#peaks).
 
+### `gate_peaks`
+
+**Description**
+
+Return `lymphmacro_finder`'s masks and `finder_peaks`' view together, from one density grid.
+
+**Usage**
+
+```text
+gate_peaks(fsc_a, ssc_a, *, n_row=11, n_col=11,
+           t11=22, t21=0.25, t12=20, t22=0.5, area=find_area)
+```
+
+**Arguments**
+
+The same as [`lymphmacro_finder`](#lymphmacro_finder)'s.
+
+**Details**
+
+A file that is gated and drawn needs both results, and the two functions build the same grid, local maxima and peaks. `gate_peaks` builds them once. `datanuggets-flow` gates every file with it.
+
+**Value**
+
+A tuple `(masks, peaks)`: the array `lymphmacro_finder` returns with the same arguments, and the [`FinderPeaks`](#finderpeaks) `finder_peaks` returns with the same `n_row` and `n_col`.
+
+**Examples**
+
+```python
+masks, fp = flow.gate_peaks(fsc, ssc, area=flow.mirrored_area)
+assert masks.shape[1] == len(fp.peaks)
+```
+
+**See also:** [`lymphmacro_finder`](#lymphmacro_finder), [`finder_peaks`](#finder_peaks), [The flow pipeline library](#the-flow-pipeline-library).
+
 ### Grid and gate helpers
 
 Flow peak and cell coordinates are **1-based**. `DensityGrid.zz` has `(x bin, y bin)` columns, while `DensityGrid.z` has shape `(nc, nr)`. Use `grid.z.T` for the peak pipeline, as in the setup, so the coordinates match `zz`.
@@ -1246,6 +1281,74 @@ The result of `finder_peaks`, a named tuple exported from `datanuggets.flow`.
 | `peaks` | `(p, 2)` | 1-based `(row, col)` of the refined peaks, in the finder's population order. |
 | `fsc` | `(100,)` | Raw FSC-A value at each column. |
 | `ssc` | `(100,)` | Raw SSC-A value at each row. |
+
+## The flow pipeline library
+
+`datanuggets-flow` prints, asks and handles its output folders around four submodules of `datanuggets.flow`, which a script or another front end can call directly. They never print or ask: progress comes back as `StageEvent`s and refusals as `FlowError`s. Import them by their module; `datanuggets.flow` itself doesn't import them. They need the `flow` extra where they read or write: flowio to read FCS files, pandas for the tables, matplotlib for the figures and scikit-learn for the t-SNE, each imported only where it is used, except in `figures`.
+
+| Module | Public names |
+| --- | --- |
+| `datanuggets.flow.settings` | `GateSettings`, `ClusterSettings`, `cli_flag` |
+| `datanuggets.flow.pipeline` | `gate_stage` and `cluster_stage`; the steps they run, `read_fcs`, `gate_files`, `population_stats`, `population_table`, `parse_pops`, `parse_selection`, `pops_spec`, `pick_events`, `resolve_channels`, `selection_table`, `make_nuggets`, `cluster_nuggets`, `tsne_embedding`, `result_tables` and `write_tables`; the types `StageEvent`, `Sample`, `PopStats`, `Kept`, `Pool`, `Tables`, `RunResult`, `Reader` and `OnEvent`; `MIN_KEPT_EVENTS` (2) and `MIN_OCCUPIED_NUGGETS` (3) |
+| `datanuggets.flow.state` | `save_gates`, `load_gates`, `GateFolder`, `check_identity`, `file_sha256`, `check_new`, `begin`, `finish` and `write_run`; the record's constants `GATES_SCHEMA`, `RUN_SCHEMA`, `MARKER`, `MARKER_TEXT`, `GATE_FILES`, `NPZ_KEYS`, `FIXED`, `READER` and `PACKAGES` |
+| `datanuggets.flow.figures` | `local_maxima_figure`, `gates_figure`, `result_figures`, `png_figure` and `save_figures` |
+| `datanuggets.exceptions` | `FlowError` |
+
+### Flow settings
+
+`GateSettings` and `ClusterSettings` are frozen, keyword-only dataclasses whose fields are the command's flags, with the same defaults, taken from `datanuggets._defaults`:
+
+```text
+GateSettings(fsc="FSC-A", ssc="SSC-A", disc="his", t11=(22,), t21=(0.25,),
+             t12=20, t22=0.5, n_row=11, n_col=11)
+ClusterSettings(channels=None, exclude_channels=(), cofactor=6000.0, dn_num1=10000,
+                dn_num2=1000, seed=291102, n_jobs=-1, k=8,
+                tsne=True, tsne_perplexity=30.0, tsne_seed=0)
+```
+
+`t11` and `t21` hold one value for every file or one per file. `channels=None` takes the default channel rule, every `-A` channel of the first file but FSC and SSC, less `exclude_channels`. `check()` returns the settings when every value is usable and raises `FlowError` otherwise. `GateSettings.check(n_files)` also checks that `t11` and `t21` give one value or one per file, and `for_file(i)` gives [`gate_peaks`](#gate_peaks)' keyword arguments for file `i`, counting from 0. `to_dict()` gives the settings as JSON writes them, and `from_dict()` reads them back and refuses a key that isn't a setting. `cli_flag(name)` is the flag that sets `name`, such as `--dn-num2` for `dn_num2` and `--jobs` for `n_jobs`.
+
+### `FlowError` and `StageEvent`
+
+`FlowError(message, param=None)` is a `ValueError` for a bad setting or input. A message names its setting as `{param}`: `str(e)` writes the setting's name and `e.cli(cli_flag)` its flag, so one error reads `n_jobs is 0; ...` from Python and `--jobs is 0; ...` from the command. `e.param` is the setting's name, and `"from_gates"` for a gate folder `load_gates` refuses.
+
+`StageEvent(stage, file, n_files, message, data)` is what a stage passes to `on_event` as it goes. `stage` is `"gate"` for each file, `"select"`, `"nuggets"` for each kept file, or `"cluster"`. `file` is the file's number, from 1, or `None` for the whole run. `message` holds the lines the command prints, and `data` the same facts as values. With `on_event=None` nothing is reported.
+
+### Stages
+
+```text
+gate_stage(paths, out, settings, *, read=read_fcs, on_event=None, figure=None)
+load_gates(folder)
+cluster_stage(samples, chosen, out, settings, *, read=read_fcs, on_event=None, figure=None)
+```
+
+`gate_stage` gates the files at `paths` in order, with a `GateSettings`, into the existing folder `out`: it draws `local_maxima.png` and `gates.png`, saves `gates.npz` and then `gates.json`, and returns one `Sample` per file. `load_gates` checks a gate folder as `--from-gates` does, raising `FlowError` on the first problem, and returns a `GateFolder(path, settings, samples)`. `cluster_stage` clusters the populations `chosen` gives for each sample, numbered from 1 with `[]` leaving a file out, with a `ClusterSettings`, into the existing folder `out`. It reads each kept file again, writes the tables and the clustering's figures, and returns a `RunResult` with the channels, the tables, the pooled nuggets and their clusters, the t-SNE coordinates and the files written.
+
+`read` takes a path and returns the events and each channel's `$PnN` and `$PnS` names, as `read_fcs` does, so stored arrays can stand in for files. `figure` makes each figure. Its default, `matplotlib.figure.Figure`, leaves nothing in pyplot's registry, so a server can draw run after run; the command passes `plt.figure` to show them.
+
+The command adds the rest of a run folder: `begin(out)` makes the folder with its `INCOMPLETE.txt` and `finish(out)` removes the marker, `write_run` writes `run.json`, and a `--from-gates` run copies the gate figures into its folder.
+
+**Examples**
+
+```python
+from pathlib import Path
+
+from datanuggets.flow.pipeline import cluster_stage, gate_stage, parse_selection
+from datanuggets.flow.settings import ClusterSettings, GateSettings
+from datanuggets.flow.state import load_gates
+
+gates, run = Path("outputs/gates-001"), Path("outputs/run-001")
+gates.mkdir(parents=True)
+gate_stage(sorted(Path("path/to/fcs_folder").glob("*.fcs")), gates, GateSettings())
+
+folder = load_gates(gates)
+chosen = parse_selection("1,2", [len(s["stats"]) for s in folder.samples])
+run.mkdir()
+result = cluster_stage(folder.samples, chosen, run, ClusterSettings(k=12))
+print(result.tables.summary)
+```
+
+`parse_selection` reads a `--pops` string against each file's population count, so `"1,2"` keeps Pop 1 and Pop 2 of every file, and refuses a file that has fewer. [Staged runs](cli.md#staged-runs) describes the gate folder, and [reproducibility](reproducibility.md#flow-run-records) its records.
 
 ## Plotting
 

@@ -1,5 +1,22 @@
 # Release notes
 
+## Unreleased
+
+### Added
+
+- `datanuggets-flow` draws `local_maxima.png`, each file's density grid, local maxima and numbered peaks, and asks for the populations over it, before it draws `gates.png`.
+- `clusters_tsne.png`, a t-SNE of the clustered nuggets, colored as `clusters_pca.png`. Its `n_components`, `init`, `learning_rate` and `max_iter` are pinned, so a change of scikit-learn's defaults can't move them. The `flow` extra now installs scikit-learn.
+- `datanuggets-flow` runs in two stages as well as at once. `--gates-only` gates the files and saves the gates, figures and a `gates.json` record in a gate folder. `--from-gates` asks over that folder's figures and clusters without gating again, as often as needed, and writes `run.json`. For the same files, settings and populations, the two stages write the one-shot run's tables. [Staged runs](cli.md#staged-runs) describes both.
+- New `datanuggets-flow` flags: `--t12`, `--t22`, `--n-row` and `--n-col` for the finder, `--dn-num1`, `--seed` and `--jobs` for `create_dn`, `--exclude-channels` to leave channels such as a viability dye out of the default set, and `--no-tsne`, `--tsne-perplexity` and `--tsne-seed` for the t-SNE figure.
+- An asked run prints the `--pops` that repeats its choice.
+- The pipeline's library in `datanuggets.flow.settings`, `.pipeline`, `.state` and `.figures`, with `FlowError` in `datanuggets.exceptions`, so a script can gate and cluster without the command ([API](api.md#the-flow-pipeline-library)). `datanuggets.flow.gate_peaks` gives the finder's masks and peaks from one density grid.
+
+### Changed
+
+- `datanuggets-flow` checks every setting before it reads a file, and `--cofactor` refuses a negative, NaN or infinite value.
+- The finder's tunable defaults are in `datanuggets._defaults`, and the constants it keeps for parity with Cabrera's code are named in their modules ([methodology](methodology.md#the-finders-parameters)). Its results are unchanged.
+- The wheel's core-only smoke test also checks that scikit-learn isn't installed.
+
 ## 0.1.0a1 — first public alpha candidate
 
 This version is intended for research evaluation. Preparing these files does not publish the package; check the [PyPI project page](https://pypi.org/project/datanuggets/) for availability.

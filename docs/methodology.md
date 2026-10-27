@@ -175,6 +175,8 @@ cluster_means = wmean(centers[use], labels[use], weights[use])
 
 The nuggets of file `i` are the next `dns[i].n_nuggets` entries of `labels`, and `dns[i].assignments` gives each of its events a nugget. The pooled tree holds an n by n matrix over all the files' nuggets, so with 1,000 nuggets a file, ten files make the 10,000-row case that needs 800 MB.
 
+`cluster_stage` in `datanuggets.flow.pipeline` does the same from gated files, reading each one again for its kept events, and writes the tables and figures too. [api.md](api.md#the-flow-pipeline-library) has an example.
+
 ## Relation to the papers
 
 Beavers et al. (2025) define data nuggets (Algorithms 1 and 2, Section 3), weighted k-means for nuggets (Algorithm 3, Section 3.1), and apply them to a flow cytometry dataset of over one million observations (Section 4). That example made nuggets of the whole dataset with mean centers, R = 5,000, C = 0.01, Minit = 10,000, M = 2,000 and Euclidean distance, refined them with α = 0.25 and Nmin = 2, compared weighted PCA of the nuggets with PCA of the full data and of a random sample, and clustered the refined nuggets with weighted k-means, choosing the number of clusters by comparing WWCSS across a range of k.
