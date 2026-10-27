@@ -14,6 +14,7 @@ from datanuggets._random.r_draws import RDraws
 from datanuggets._random.replay import ReplayDraws
 from datanuggets.wcluster.wkmeans import wkmeans
 from rfixtures import assert_same_values, load_group
+from wkmeans_reference import QUIRKS, _counts, _wkmeans_py
 
 # The exported function wkmeans shadows its module as an attribute of datanuggets.wcluster
 wk = importlib.import_module("datanuggets.wcluster.wkmeans")
@@ -33,7 +34,7 @@ def _ids(cases):
 def run_reference(case, draws, **extra):
     a = case.args
     centers = case.array("centers_in") if case.has("centers_in") else None
-    return wk._wkmeans_py(
+    return _wkmeans_py(
         case.array("x"),
         a["k"],
         w=case.array("w"),
@@ -46,7 +47,7 @@ def run_reference(case, draws, **extra):
 
 
 def check_counts(case, counts):
-    for q in wk.QUIRKS:
+    for q in QUIRKS:
         assert counts[q] == case.manifest["counts"][q], q
 
 
@@ -77,7 +78,7 @@ def check(case, got, trace):
 
 
 def check_reference(case):
-    trace, counts = [], wk._counts()
+    trace, counts = [], _counts()
     draws = ReplayDraws(case.draws())
     got = run_reference(case, draws, trace=trace, counts=counts)
     draws.assert_exhausted()
@@ -86,7 +87,7 @@ def check_reference(case):
 
 
 def test_fixtures_cover_every_wkmeans_quirk():
-    for q in wk.QUIRKS:
+    for q in QUIRKS:
         assert sum(c.manifest["counts"][q] for c in CASES), q
     assert set(_ids(STOPPED)) == {"ucenters_empty", "tb_na", "nan_stop"}
     assert SMALL and LARGE
@@ -105,7 +106,7 @@ def test_reference_matches_r_on_the_large_fixtures(case):
 
 @pytest.mark.parametrize("case", STOPPED, ids=_ids(STOPPED))
 def test_reference_stops_where_r_stops(case):
-    counts = wk._counts()
+    counts = _counts()
     draws = ReplayDraws(case.draws())
     with pytest.raises(ValueError, match=re.escape(case.manifest["error"].strip())):
         run_reference(case, draws, counts=counts)
@@ -133,33 +134,33 @@ def test_arguments_are_checked_as_r_checks_them(bad, exc, msg):
 
 def test_hang_guards_raise_at_their_boundary():
     x = np.array([[0.0], [0.0], [1.0], [1.0], [2.0], [2.0]])
-    wk._wkmeans_py(x, 3, seed=1)  # exactly k distinct pairs and n == 2k: runs
+    _wkmeans_py(x, 3, seed=1)  # exactly k distinct pairs and n == 2k: runs
     with pytest.raises(ValueError, match="2k"):
-        wk._wkmeans_py(x[:5], 3, seed=1)
+        _wkmeans_py(x[:5], 3, seed=1)
     two_values = np.array([[0.0], [0.0], [0.0], [1.0], [1.0], [1.0]])
     with pytest.raises(ValueError, match="distinct"):
-        wk._wkmeans_py(two_values, 3, seed=1)
+        _wkmeans_py(two_values, 3, seed=1)
     # A zero weight makes a third (row, weight) pair. Its distances are all 0, so which.min
     # gives it label 1, and a start whose label 1 is neither row's nearest reaches k = 3. Init
     # ends there, with the zero-weight row alone in label 1, whose WWCSS is then NaN: R stops.
     with pytest.raises(ValueError, match=_MISSING):
-        wk._wkmeans_py(two_values, 3, w=np.array([1.0, 1, 0, 1, 1, 1]), seed=1)
+        _wkmeans_py(two_values, 3, w=np.array([1.0, 1, 0, 1, 1, 1]), seed=1)
 
 
 def test_init_gives_up_where_r_draws_forever(monkeypatch):
     monkeypatch.setattr(wk, "MAX_STARTS", 50)  # zero weights: every center is NaN, every start
     with pytest.raises(ValueError, match="keep drawing"):
-        wk._wkmeans_py(np.arange(12.0).reshape(6, 2), 2, w=np.zeros(6), seed=1)
+        _wkmeans_py(np.arange(12.0).reshape(6, 2), 2, w=np.zeros(6), seed=1)
 
 
 def test_one_row_follows_rs_diag():
     x = np.array([[1.0, 2.0]])
     c = np.zeros((1, 2))
-    assert wk._wkmeans_py(x, 1, w=np.array([1.5]), centers=c).labels.tolist() == [0]
+    assert _wkmeans_py(x, 1, w=np.array([1.5]), centers=c).labels.tolist() == [0]
     with pytest.raises(ValueError, match="non-conformable arguments"):
-        wk._wkmeans_py(x, 1, w=np.array([2.0]), centers=c)
+        _wkmeans_py(x, 1, w=np.array([2.0]), centers=c)
     with pytest.raises(ValueError, match=re.escape("invalid 'nrow' value (< 0)")):
-        wk._wkmeans_py(x, 1, w=np.array([-1.0]), centers=c)
+        _wkmeans_py(x, 1, w=np.array([-1.0]), centers=c)
 
 
 ARGS = load_group("wkmeans_args")[0]
@@ -170,7 +171,7 @@ def _row_id(r):
     return "-".join(f"{key}={r[key]}" for key in ("n", "k", "num_init", "max_iter", "centers"))
 
 
-@pytest.mark.parametrize("fn", [wk._wkmeans_py, wkmeans], ids=["reference", "wkmeans"])
+@pytest.mark.parametrize("fn", [_wkmeans_py, wkmeans], ids=["reference", "wkmeans"])
 @pytest.mark.parametrize("row", ROWS, ids=[_row_id(r) for r in ROWS])
 def test_arguments_stop_where_r_stops(row, fn):
     # R's runs on the first n rows of the grid, with each argument as R prints it, since JSON
@@ -286,7 +287,7 @@ def run_both(x, k, w, seed, counts):
             return None, str(e)
 
     ref_trace = []
-    ref, ref_err = go(wk._wkmeans_py, counts=counts, trace=ref_trace)
+    ref, ref_err = go(_wkmeans_py, counts=counts, trace=ref_trace)
     for n_jobs in (1, 3):
         trace = []
         got, got_err = go(wk._wkmeans, n_jobs=n_jobs, trace=trace)
@@ -326,20 +327,20 @@ def few_starts(monkeypatch):
 @pytest.mark.parametrize("family", FAMILIES)
 def test_kernel_matches_reference_on_tie_heavy_data(family):
     for seed in range(25):
-        run_both(*fuzz_inputs(seed, family), seed, wk._counts())
+        run_both(*fuzz_inputs(seed, family), seed, _counts())
 
 
 @pytest.mark.usefixtures("few_starts")
 def test_fuzz_reaches_every_quirk():
-    total = wk._counts()
+    total = _counts()
     runs = [(fuzz_inputs(s, f), s) for f in ("negative", "signed") for s in range(10)]
     runs += [(grid_inputs(s, k), s) for s, k in GAP_SEEDS]
     for inputs, seed in runs:
-        c = wk._counts()
+        c = _counts()
         run_both(*inputs, seed, c)
         for q in total:
             total[q] += c[q]
-    assert all(total[q] > 0 for q in wk.QUIRKS), total
+    assert all(total[q] > 0 for q in QUIRKS), total
 
 
 @pytest.mark.slow
@@ -347,7 +348,7 @@ def test_fuzz_reaches_every_quirk():
 @pytest.mark.parametrize("family", FAMILIES)
 def test_kernel_matches_reference_on_a_large_fuzz(family):
     for seed in range(25, 625):
-        run_both(*fuzz_inputs(seed, family), seed, wk._counts())
+        run_both(*fuzz_inputs(seed, family), seed, _counts())
 
 
 def test_int_seed_is_reproducible():

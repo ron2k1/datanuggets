@@ -43,7 +43,8 @@ src/datanuggets/
     wstatsjit.py       the sums, means and nearest centers the iterative kernels share, compiled
     whclust.py         whclust (Whclust), and the plain-Python reference its kernel is held to
     whclustjit.py      Whclust's merges compiled, each wss computed once
-    wkmeans.py         wkmeans (Wkmeans): its random starts, and the plain-Python reference
+    wkmeans.py         wkmeans (Wkmeans) and its random starts, which the plain-Python reference
+                       in tests/wcluster/wkmeans_reference.py shares
     wkmeansjit.py      Wkmeans_single compiled, each trial move over two clusters' rows
     dn.py              dn_wkmeans, dn_whclust, dn_wpca and dn_cluster_predict (the DN wrappers)
     cutree.py          cut_tree (stats::cutree), and R's merge numbering from the port's
@@ -138,7 +139,7 @@ So R's arithmetic and the draw sources never import a workflow, and new code in 
 | Folder | Covers |
 |---|---|
 | `tests/nuggets/` | `nuggets/`, one file per module: `test_create.py`, `test_centers.py`, `test_refine.py`, `test_means.py` and `test_complexity.py` |
-| `tests/wcluster/` | `wcluster/`: the statistics in `test_wstats.py`, `cluster_predict` in `test_predict.py`, `wpca` in `test_wpca.py` and its row-weight total in `test_wpca_sums.py`, the iterative functions in `test_whclust.py` and `test_wkmeans.py` and the kernels they share in `test_wstatsjit.py`, the DN wrappers in `test_dn.py`, and `cut_tree` in `test_cutree.py` |
+| `tests/wcluster/` | `wcluster/`: the statistics in `test_wstats.py`, `cluster_predict` in `test_predict.py`, `wpca` in `test_wpca.py` and its row-weight total in `test_wpca_sums.py`, the iterative functions in `test_whclust.py` and `test_wkmeans.py`, which holds the compiled `wkmeans` to the plain-Python reference in `wkmeans_reference.py`, and the kernels they share in `test_wstatsjit.py`, the DN wrappers in `test_dn.py`, and `cut_tree` in `test_cutree.py` |
 | `tests/flow/` | `flow/`. `test_flow_grid.py`, `test_flow_peaks.py`, `test_flow_area.py` and `test_flow_gate.py` test the finder's steps against fixtures recorded from Prof. Cabrera's own Python. `test_flow_import.py` runs the finder with matplotlib blocked and checks that `import datanuggets` doesn't load `flow`. `test_flow_pick.py` unit-tests `datanuggets-flow`'s threshold and population parsing, the union of picks, the file listing, the prompt and the checks that stop a run before any file is read, and runs the command end to end on the events of `202.npz` and `202_fluor.npz`, one file asked or given `--pops` and three files with their own thresholds, checking its output files, their columns and their tables' digests |
 | `tests/plot/` | `plot/`, on matplotlib's Agg backend, one file per module: `test_plot_tree.py`, `test_plot_points.py`, `test_plot_pca.py`, `test_plot_flow.py` and `test_plot_style.py`, and `test_plot_import.py` for the matplotlib check. Its `conftest.py` closes every figure and turns matplotlib's `UserWarning`s into failures |
 | `tests/compat/` | `_compat/`: R's means and `splitIndices` in `test_rcompat.py`, the long double statistics, `unique()`, `%*%`, `weighted.mean` and `eigen()` in `test_rstats.py`, Rfast in `test_rfast.py`, the compiled long double kernels in `test_ldjit.py`, and the numba decorator rule and cache in `test_compiled.py` |
