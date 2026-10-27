@@ -48,7 +48,7 @@ progress = ["tqdm>=4.66"]
 plot = ["matplotlib>=3.9"]
 cli = ["pandas>=2.2", "matplotlib>=3.9"]
 # datanuggets-flow: FCS files in, the populations you pick out of the gates clustered
-flow = ["flowio>=1.4,<1.5", "matplotlib>=3.9", "pandas>=2.2"]
+flow = ["flowio>=1.4,<1.5", "matplotlib>=3.9", "pandas>=2.2", "scikit-learn>=1.5"]
 
 [project.scripts]
 datanuggets = "datanuggets.cli:main"
@@ -62,6 +62,7 @@ dev = [
     "pandas>=2.2",
     "tqdm>=4.66",
     "matplotlib>=3.9",
+    "scikit-learn>=1.5",  # datanuggets-flow's t-SNE, so the flow tests run
     # the flow benchmark: FlowKit's own FCS reader, and the metadata workbook Cabrera's script
     # reads. FlowKit itself needs pandas<3, so it only runs in uv run --no-project --with flowkit
     "flowio>=1.4,<1.5",

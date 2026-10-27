@@ -93,7 +93,7 @@ Choose the optional features you need:
 | `frame` | `DataNuggets.to_frame()` | pandas |
 | `progress` | Progress bars during creation and refinement | tqdm |
 | `plot` | `datanuggets.plot` | matplotlib |
-| `flow` | The `datanuggets-flow` command | flowio, matplotlib, pandas |
+| `flow` | The `datanuggets-flow` command | flowio, matplotlib, pandas, scikit-learn |
 
 Combine extras inside the brackets. Once the alpha is published, add the flow command without changing your package version:
 

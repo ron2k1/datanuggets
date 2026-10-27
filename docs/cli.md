@@ -112,7 +112,9 @@ For a large hierarchy, remember that its square distance matrix alone uses about
 
 `datanuggets-flow` gates FCS files, lets you choose candidate populations, and clusters their events. It creates nuggets for each file, then fits one weighted Ward tree to the pooled nuggets. Cluster numbers therefore refer to the same fitted clustering across files; they are not independently validated cell-type labels. [methodology.md](methodology.md#the-datanuggets-flow-pipeline) explains the method and its design choices.
 
-The command needs the `flow` extra, which adds flowio, matplotlib and pandas ([installation.md](installation.md#extras)). In a clone, `uv sync` installs them and `uv run datanuggets-flow` runs it. The [quickstart](quickstart.md#a-first-datanuggets-flow-run) walks through a first run.
+A run does everything at once, or in two stages: `--gates-only` gates the files and saves the gates, and `--from-gates` chooses populations from them and clusters, as [Staged runs](#staged-runs) describes.
+
+The command needs the `flow` extra, which adds flowio, matplotlib, pandas and scikit-learn ([installation.md](installation.md#extras)). In a clone, `uv sync` installs them and `uv run datanuggets-flow` runs it. The [quickstart](quickstart.md#a-first-datanuggets-flow-run) walks through a first run.
 
 > **Experimental workflow.** Each run creates a fresh folder under `outputs/` by default. Existing output paths are refused, and unfinished runs retain an `INCOMPLETE.txt` marker. Choose at least two distinct fluorescence channels and enough retained cells to make at least three occupied nuggets.
 
@@ -121,12 +123,23 @@ Inspect the gates and confirm your compensation and preprocessing before interpr
 ### Synopsis
 
 ```text
-usage: datanuggets-flow [-h] [--pops POPS] [--out OUT] [--k K]
-                        [--cofactor COFACTOR] [--dn-num2 DN_NUM2]
-                        [--channels CHANNELS] [--fsc FSC] [--ssc SSC]
-                        [--disc {his,peak}] [--t11 T11] [--t21 T21]
-                        [--no-show]
-                        paths [paths ...]
+datanuggets-flow PATH [PATH ...] [options]                one run: gate, choose, cluster
+datanuggets-flow PATH [PATH ...] --gates-only [options]   gate and save the gates, then stop
+datanuggets-flow --from-gates GATES [options]             choose from GATES' figures, then cluster
+```
+
+```text
+usage: datanuggets-flow [-h] [--gates-only | --from-gates GATES] [--pops POPS]
+                        [--out OUT] [--k K] [--cofactor COFACTOR]
+                        [--dn-num1 DN_NUM1] [--dn-num2 DN_NUM2] [--seed SEED]
+                        [--jobs JOBS] [--channels CHANNELS |
+                        --exclude-channels EXCLUDE_CHANNELS] [--fsc FSC]
+                        [--ssc SSC] [--disc {his,peak}] [--t11 T11]
+                        [--t21 T21] [--t12 T12] [--t22 T22] [--n-row N_ROW]
+                        [--n-col N_COL] [--no-tsne]
+                        [--tsne-perplexity TSNE_PERPLEXITY]
+                        [--tsne-seed TSNE_SEED] [--no-show]
+                        [paths ...]
 ```
 
 ### Inputs
@@ -137,28 +150,44 @@ Files and folders can be mixed. The files are numbered from 1 in the order of th
 
 flowio reads each file's events with `as_array(preprocess=True)`, as the file stores them. Channels are found by their `$PnN` names. Every file must have the `--fsc` and `--ssc` channels. The channels to cluster are taken from the first file, and every file must have them too.
 
+A `--from-gates` run takes no paths. It reads the files its gate folder records, at the paths they were gated from.
+
 ### Options
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
-| `--pops POPS` | ask at the prompt | Populations to keep, in the prompt's grammar: one entry for every file, or one per file separated by `;` |
-| `--out OUT` | `outputs/flow-<timestamp>` | New output folder, relative to the current directory. Existing paths are refused, including empty folders |
-| `--k K` | `8` | Clusters cut from the tree, 1 or more. Lowered to the number of nuggets when there are fewer |
-| `--cofactor COFACTOR` | `6000` | Fluorescence is clustered as `arcsinh(x / cofactor)`. `0` keeps it linear |
-| `--dn-num2 DN_NUM2` | `1000` | Nuggets per file, 2 to 9999. Lowered to a file's kept events when there are fewer. Clustering requires at least 3 occupied nuggets across all retained files |
-| `--channels CHANNELS` | every `-A` channel but FSC and SSC | Comma-separated `$PnN` names. Select at least two for the current plotting step. The default takes names in the first file ending in `-A` that do not start with `FSC` or `SSC` |
+| `--gates-only` | off | Gate the files, draw `local_maxima.png` and `gates.png`, save the gates in `--out` and stop, without asking |
+| `--from-gates GATES` | none | Choose populations over the figures of `GATES`, a `--gates-only` folder, and cluster its files, which must not have changed |
+| `--out OUT` | `outputs/flow-<timestamp>`, or `outputs/flow-gates-<timestamp>` with `--gates-only` | New output folder, relative to the current directory. Existing paths are refused, including empty folders |
 | `--fsc FSC` | `FSC-A` | The channel gated as FSC |
 | `--ssc SSC` | `SSC-A` | The channel gated as SSC |
 | `--disc {his,peak}` | `his` | The area rule the gates use, described below |
 | `--t11 T11` | `22` | The first peak's distance threshold, one value or one per file |
 | `--t21 T21` | `0.25` | The first peak's density threshold, one value or one per file |
+| `--t12 T12` | `20` | Every other peak's distance threshold, in every file |
+| `--t22 T22` | `0.5` | Every other peak's density threshold, in every file |
+| `--n-row N_ROW`, `--n-col N_COL` | `11`, `11` | Rows and columns of the window the finder's local maxima are found in, 1 to 100 each |
+| `--pops POPS` | ask at the prompt | Populations to keep, in the prompt's grammar: one entry for every file, or one per file separated by `;` |
+| `--channels CHANNELS` | every `-A` channel but FSC and SSC | Comma-separated `$PnN` names. Select at least two for the current plotting step. The default takes names in the first file ending in `-A` that do not start with `FSC` or `SSC` |
+| `--exclude-channels EXCLUDE_CHANNELS` | none | Comma-separated `$PnN` names to leave out of the default channels, such as a viability dye. Each must be a channel of the first file. Can't be combined with `--channels` |
+| `--cofactor COFACTOR` | `6000` | Fluorescence is clustered as `arcsinh(x / cofactor)`. `0` keeps it linear. A negative, NaN or infinite value is refused |
+| `--dn-num1 DN_NUM1` | `10000` | `create_dn`'s `dn_num1`, the nuggets its first pass makes from a file's kept events, 3 or more |
+| `--dn-num2 DN_NUM2` | `1000` | Nuggets per file, 2 to `--dn-num1` − 1, so 9999 by default. Lowered to a file's kept events when there are fewer. Clustering requires at least 3 occupied nuggets across all retained files |
+| `--seed SEED` | `291102` | `create_dn`'s seed, a whole number from 0 |
+| `--jobs JOBS` | `-1` | Cores `create_dn` uses, `-1` for every one. The nuggets are the same for any value |
+| `--k K` | `8` | Clusters cut from the tree, 1 or more. Lowered to the number of nuggets when there are fewer |
+| `--no-tsne` | off | Leave out the t-SNE and `clusters_tsne.png`, so scikit-learn isn't needed |
+| `--tsne-perplexity TSNE_PERPLEXITY` | `30` | The t-SNE's perplexity, a positive number, lowered to (nuggets − 1) / 3 when that's smaller |
+| `--tsne-seed TSNE_SEED` | `0` | The t-SNE's seed, a whole number from 0 |
 | `--no-show` | off | Save the figures without opening them, on matplotlib's Agg backend |
+
+A flag left out takes the default above, which `--help` prints too. `--fsc` to `--n-col` set the gate stage, so `--from-gates` refuses them. `--pops` to `--tsne-seed` set the clustering stage, so `--gates-only` refuses them. `--tsne-perplexity` and `--tsne-seed` are refused with `--no-tsne`, which would ignore them.
 
 On the files of the Zenodo record the default channels are the 32 unmixed `FJComp-...-A` channels. `SSC-B-A` starts with `SSC`, so it's left out. A channel name with a space needs quotes, as in `--channels "FJComp-BV510-A,FJComp-Spark Blue-A"`.
 
 #### Per-file thresholds
 
-`--t11` and `--t21` take one number for every file, or a comma-separated list with one number per file in file order. Any other count stops the run. The peaks after the first use the reference finder's `t12` of 20 and `t22` of 0.5, and the finder's 100 by 100 grid and the 11 by 11 window of its focal maxima are fixed too. None of these has a flag.
+`--t11` and `--t21` take one number for every file, or a comma-separated list with one number per file in file order. Any other count stops the run. The peaks after the first use `--t12` and `--t22`, the reference finder's 20 and 0.5 by default, in every file, and `--n-row` and `--n-col` set the window of its local maxima. The finder's 100 by 100 grid and its other cutoffs are fixed and have no flag; [methodology.md](methodology.md#the-finders-parameters) lists them.
 
 Cabrera's `cfc.py` sets the first peak's thresholds file by file. For a folder of four files:
 
@@ -179,10 +208,10 @@ On `202.fcs`, `his` gives populations of 225,770, 58,245 and 27,590 events and `
 
 #### At the prompt
 
-Without `--pops`, the run gates every file, prints each file's populations and asks. Each population line gives its event count, its share of the file's events, and its median on the `--fsc` and `--ssc` channels, FSC-A and SSC-A by default. `gates.png` draws each file in its own panel, with the same Pop numbers in its legend. From a run on three files of the Zenodo record, after the first answer:
+Without `--pops`, the run gates every file, prints each file's populations and asks. Each population line gives its event count, its share of the file's events, and its median on the `--fsc` and `--ssc` channels, FSC-A and SSC-A by default. `local_maxima.png` draws each file in its own panel: the density grid, every local maximum, and each kept peak labelled with its Pop number, so you choose from the peaks. `gates.png`, the populations' full gates, is drawn only after the choice. A `--from-gates` run asks with both figures already drawn by `--gates-only`, and shows both while it waits. From a run on three files of the Zenodo record, after the first answer:
 
 ```text
-Which populations hold the cells you want? Each file's Pop numbers are the ones in its own legend in the figure, and the same number can be a different circle in another file. Type numbers like 1 or 1,2 or 1-3, "all", or "none" to leave the file out; Enter repeats the previous file's choice, Ctrl+C stops. Click this terminal before typing.
+Which populations hold the cells you want? Each file's Pop numbers label the peaks in its own panel of the local maxima figure, and the same number can be a different peak in another file. Type numbers like 1 or 1,2 or 1-3, "all", or "none" to leave the file out; Enter repeats the previous file's choice, Ctrl+C stops. Click this terminal before typing.
 
 File 2, 202.fcs:
   Pop 1:   225,770 events (80.0%), median FSC-A 1,015,754, SSC-A   569,799
@@ -205,33 +234,78 @@ The brackets hold the previous file's answer. Each answer is one of:
 
 Case doesn't matter, and a number given twice counts once. An answer that names a population the file doesn't have, or that isn't numbers, ranges, `all` or `none`, prints the reason and asks again. So does Enter at the first file, which has no previous answer. A file in which the finder found no population is left out without a question. Ctrl+C or the end of input stops the run with `cancelled; nothing was clustered`.
 
-The prompt needs a terminal. When standard input is not one, such as a pipe, the run stops after gating with `no terminal to ask in; pass --pops, e.g. --pops "1,2"`. On Windows, input redirected from `NUL` counts as a terminal, so the run reaches the first question and stops with `cancelled; nothing was clustered` instead.
+After the last answer the run prints the `--pops` that gives the same choice without the prompt, such as `To repeat this choice: --pops "1,2;none;1"`, for a later run or a script.
+
+The prompt needs a terminal. When standard input is not one, such as a pipe, the run stops after gating with `no terminal to ask in; pass --pops, e.g. --pops "1,2"`. On Windows, input redirected from `NUL` counts as a terminal, so the run reaches the first question and stops with `cancelled; nothing was clustered` instead. Git Bash in its default mintty window gives a Windows Python no terminal either, so the run stops there too; use Windows Terminal, PowerShell or `winpty`, or pass `--pops`.
 
 Without `--no-show`, the gate figure opens before the first question and stays responsive while the prompt waits, so it can be zoomed and panned. Click the terminal before typing. On Windows the wait ends at the first key press.
 
 #### With --pops
 
-`--pops` takes the same answers, for scripted runs. One entry applies to every file, and one entry per file, separated by `;`, applies file by file. Quote it, since `;` ends a command in the shell:
+`--pops` takes the same answers, for scripted runs. One entry applies to every file, and one entry per file, separated by `;`, applies file by file. Quote it, since `;` ends a command in the shell, PowerShell included:
 
 ```sh
 datanuggets-flow a.fcs b.fcs --pops "1,2;1" --out outputs/selection-run
 ```
 
-Enter has no meaning here. A file in which the finder found no population takes `all` or `none`. An entry that doesn't parse or names a missing population stops the run, as the failure table below shows. `--pops ""` counts as no `--pops`, so the run asks.
+Enter has no meaning here. A file in which the finder found no population takes `all` or `none`. An entry that doesn't parse or names a missing population stops the run, as the failure table below shows. `--pops ""` counts as no `--pops` in every mode: a one-shot or `--from-gates` run asks, and `--gates-only` doesn't refuse it.
 
 An event in two kept populations counts once: the kept events are the union of the chosen populations.
 
 ### What a run does
 
-1. Checks that matplotlib and pandas import, checks `--k` and `--dn-num2`, finds the files, reads the thresholds, and checks the number of `--pops` entries. Creates a new output folder and an `INCOMPLETE.txt` marker; an existing output path stops the run without changing its contents.
-2. Gates each file: reads its events, runs the finder on `--fsc` and `--ssc` with the file's `--t11` and `--t21` and the `--disc` rule, prints the population lines and draws the file's panel of `gates.png`.
-3. Checks the clustering channels, requiring at least two distinct channels present in every file, then chooses each file's populations at the prompt or from `--pops`.
+1. Checks the flags against the run's mode, then every setting's value, an explicit `--channels` list included, then that matplotlib, pandas and, unless `--no-tsne`, scikit-learn import. Finds the files, reads the thresholds, and checks the number of `--pops` entries. Creates a new output folder and an `INCOMPLETE.txt` marker; an existing output path stops the run without changing its contents.
+2. Gates each file: reads its events, runs the finder on `--fsc` and `--ssc` with the file's `--t11` and `--t21` and the `--disc` rule, prints the population lines and the number of local maxima and kept peaks, and draws the file's panel of `local_maxima.png`.
+3. Checks the clustering channels, requiring at least two distinct channels present in every file, then chooses each file's populations at the prompt or from `--pops`, and draws `gates.png`.
 4. For each file, keeps the events in any chosen population. A file with fewer than 2 kept events is left out of the clustering but stays in `selection.csv`. The file is read again, so only one file's events are in memory at a time, and the kept events' clustered channels are transformed as `arcsinh(x / cofactor)`, or left as they are with `--cofactor 0`. Writes `selection.csv`.
-5. Makes data nuggets of each file's kept events separately with `create_dn`, `dn_num2` set to `--dn-num2` or to the number of kept events if that is smaller, every other argument at its default and `n_jobs=-1`, which uses every core. When a file has no more kept events than `--dn-num2`, `create_dn` warns `DN.num is greater than or equal to the number of rows. Returning original data`, and each event becomes its own nugget.
+5. Makes data nuggets of each file's kept events separately with `create_dn`, `dn_num2` set to `--dn-num2` or to the number of kept events if that is smaller, `dn_num1`, `seed` and `n_jobs` from `--dn-num1`, `--seed` and `--jobs`, and every other argument at its default. When a file has no more kept events than `--dn-num2`, `create_dn` warns `DN.num is greater than or equal to the number of rows. Returning original data`, and each event becomes its own nugget.
 6. Pools every file's nugget centers and weights in file order, drops nuggets with weight 0, checks that at least three occupied nuggets remain, builds one weighted Ward tree with `whclust` weighted by each nugget's event count, and cuts it at `--k` clusters with `cut_tree`.
 7. Writes the outputs below and prints each file's share of kept cells in each cluster. Removes `INCOMPLETE.txt` when all tables and figures are saved. Without `--no-show`, it then opens the figures and returns when they are closed.
 
-`create_dn` runs with its fixed default seed. Two runs on the same three files with the same flags, on the development laptop, wrote identical CSV files.
+`create_dn` runs with `--seed`, 291102 by default, and the t-SNE with `--tsne-seed`, 0 by default. `--jobs` doesn't change the nuggets. Two runs on the same three files with the same flags, on the development laptop, wrote identical CSV files.
+
+### Staged runs
+
+Gating and the population choice can be separate runs. `--gates-only` does steps 1 and 2, draws `gates.png`, saves the gates in a gate folder and stops, without asking. `--from-gates` asks over that folder's figures and does steps 3 to 7 without gating again, as often as needed:
+
+```sh
+datanuggets-flow path/to/fcs_folder --gates-only --out outputs/gates-001
+datanuggets-flow --from-gates outputs/gates-001 --out outputs/run-001
+datanuggets-flow --from-gates outputs/gates-001 --pops "1,2" --k 12 --out outputs/run-002
+```
+
+For the same files, settings and populations, the two stages write the one-shot run's tables. `--gates-only` ends by naming its folder and the command that continues from it:
+
+```text
+Gates are in /path/to/outputs/gates-001
+Choose populations and cluster with: datanuggets-flow --from-gates "/path/to/outputs/gates-001"
+```
+
+A gate folder holds:
+
+| File | Contents |
+| --- | --- |
+| `local_maxima.png`, `gates.png` | The one-shot run's two gate figures |
+| `gates.npz` | Each file's masks, one bit per event and population, and the finder's density grid, local maxima, peaks and grid positions |
+| `gates.json` | The record of the gating, written last. [Flow run records](reproducibility.md#flow-run-records) lists its keys |
+
+`--from-gates` checks everything before it asks: the gate folder and its record, each FCS file at its recorded path with the size and SHA-256 it was gated with, that `--out` doesn't exist, and the channels to cluster. It then shows both figures, or prints their paths with `--no-show`, and asks. A folder gated under other package versions isn't refused, since the masks are the gates, but the run first prints a line naming each package whose version differs, such as `note: GATES was gated with numpy 2.3.4 (now 2.4.0); its masks are used as saved`, because the packages that cluster can move the tables. The run folder is made only after the answer, so stopping at the prompt writes nothing. Both figures are copied into the run folder byte for byte, the gate folder's masks choose the events, and `run.json` records the run. The gate folder is only read.
+
+The masks choose events by their row in the file, so they fit only the bytes they were found in. A file that moved or changed after gating is refused; gate it again with `--gates-only`. A gate folder records file paths, hashes and event counts, so keep it with the FCS data and out of Git, as the default under the ignored `outputs/` does.
+
+Each mode refuses the flags it can't use before any file is read or folder made: FCS paths or a gate flag with `--from-gates`, whose gates are the folder's, and `--pops` or a clustering flag with `--gates-only`, which stops before them. Giving both modes gets argparse's usage message and exit status 2. After the setting checks, `--from-gates` also stops on these, before `--out` is checked:
+
+| Message | Cause |
+| --- | --- |
+| `GATES isn't a folder` | `--from-gates` names no folder |
+| `GATES's gate stage did not finish; run --gates-only again into a new folder` | The folder still has its `INCOMPLETE.txt` |
+| `GATES isn't a gate folder: it has no gates.json` | One of the four files is missing; the message names it |
+| `GATES/gates.json isn't a datanuggets-flow-gates/1 record` | A record from another version or program. One that isn't UTF-8 JSON is refused the same way |
+| `GATES/gates.json isn't a complete datanuggets-flow-gates/1 record: file 1's entry has no sha256` | A record edited by hand that lacks something `--from-gates` reads: its settings, its files, or a key of a file's entry |
+| `GATES/gates.json: foo isn't a gate setting` | A recorded setting this version doesn't have |
+| `GATES/gates.npz has no masks_1` | The arrays don't match the record. So does a mask whose shape doesn't fit the file's events and populations |
+| `PATH, gated as file 1, is missing` | An FCS file moved or deleted after gating |
+| `PATH isn't the file that was gated: it has 1,024 bytes, where the gated file had 2,048` | An FCS file changed after gating. A file of the same size with other bytes gets `its SHA-256 differs from the gated file's` |
 
 ### Outputs
 
@@ -239,7 +313,8 @@ Figures and tables share one run folder: `outputs/flow-<timestamp>/` by default,
 
 | File | Contents |
 | --- | --- |
-| `gates.png` | One panel per file, two to a row, titled `File N: name`: every event in gray and each population in color. 110 dpi |
+| `local_maxima.png` | One panel per file, two to a row, titled `File N: name`: the finder's 100 × 100 density grid, every local maximum as an open circle and each kept peak as a cross labelled with the Pop number it seeds. Written before the prompt; populations are chosen from it. 110 dpi |
+| `gates.png` | One panel per file, laid out as `local_maxima.png`: every event in gray and each population in color. Written after the populations are chosen. 110 dpi |
 | `selection.csv` | One row per file: what was kept |
 | `nuggets_N.csv` | One row per nugget of file N |
 | `events_N.csv` | One row per kept event of file N |
@@ -247,7 +322,11 @@ Figures and tables share one run folder: `outputs/flow-<timestamp>/` by default,
 | `cluster_centers.csv` | One row per cluster: its center |
 | `dendrogram.png` | The Ward tree of the pooled nuggets, leaves at 0, titled with the nugget count. 150 dpi |
 | `clusters_pca.png` | The nuggets' weighted PCA scores, colored by cluster and sized by weight. 150 dpi |
+| `clusters_tsne.png` | A t-SNE of the nugget centers in the transformed units, colored by cluster as in `clusters_pca.png`, with marker area proportional to the square root of each nugget's weight. [The t-SNE figure](methodology.md#the-t-sne-figure) gives the arguments scikit-learn's `TSNE` is called with. Left out with `--no-tsne`. 150 dpi |
 | `cluster_centers.png` | `cluster_centers.csv` as a heat map, one column per cluster and one row per channel, in the transformed units. 150 dpi |
+| `run.json` | Only in a `--from-gates` run: the record of the run. [Flow run records](reproducibility.md#flow-run-records) lists its keys |
+
+A `--from-gates` run's `local_maxima.png` and `gates.png` are byte-for-byte copies of its gate folder's, so its folder holds the one-shot run's files plus `run.json`.
 
 The headers from the three-file run, with the 32 channel columns between the first and the last cut:
 
@@ -278,7 +357,7 @@ If a run fails or is cancelled after creating its folder, partial figures and ta
 
 ### Spillover
 
-Events are clustered as stored, uncompensated. When a file's `$SPILLOVER` or `$SPILL` keyword holds a matrix with any entry more than 0.001 from the identity, the run prints `warning: NAME has a compensation matrix, but its events are clustered as stored, uncompensated` and goes on. It prints each time the file is read, so twice for a file whose events are clustered. Spectral files are unmixed already. The four files of the Zenodo record tried here, `154`, `199`, `202` and `223`, carry no spillover keyword, so this warning hasn't been seen on real data.
+Events are clustered as stored, uncompensated. When a file's `$SPILLOVER` or `$SPILL` keyword holds a matrix with any entry more than 0.001 from the identity, the run prints `warning: NAME has a compensation matrix, but its events are clustered as stored, uncompensated` and goes on. It prints each time the file is read, so twice for a file whose events are clustered. A gate folder doesn't record the matrix, so `--from-gates` warns again when it reads the file. Spectral files are unmixed already. The four files of the Zenodo record tried here, `154`, `199`, `202` and `223`, carry no spillover keyword, so this warning hasn't been seen on real data.
 
 ### Failure conditions
 
@@ -286,27 +365,43 @@ The checks run in the order of the steps above, so the first condition a run mee
 
 | Message | Cause |
 | --- | --- |
+| `give FCS files or folders, or --from-gates GATES` | No paths and no `--from-gates` |
+| `--from-gates reads the FCS files its gate folder records; give no FCS paths` | Paths given with `--from-gates` |
+| `--t12 sets the gate stage, and --from-gates reuses the gates in GATES; run --gates-only again to change it` | A gate flag given with `--from-gates` |
+| `--k sets the clustering stage, which --gates-only stops before` | `--pops` or a clustering flag given with `--gates-only` |
+| `--tsne-seed has no effect with --no-tsne` | `--tsne-perplexity` or `--tsne-seed` given with `--no-tsne` |
+| `--t12 is 0.0; it takes a positive distance in grid cells` | `--t12` or a `--t11` value that is 0 or below, or NaN. `--t11` is checked once the files are counted |
+| `--t22 is nan; it takes a fraction of the peak's density, 0 or more` | `--t22` or a `--t21` value below 0, or NaN |
+| `--n-row is 0; it takes 1 to 100 grid cells` | `--n-row` or `--n-col` outside the 100 by 100 grid |
+| `--k is K; it takes 1 or more clusters` | `--k` below 1 |
+| `--dn-num1 is N; it takes 3 or more nuggets` | `--dn-num1` below 3 |
+| `--dn-num2 is N; it takes 2 to 9999 nuggets per file` | `--dn-num2` below 2, or not below `--dn-num1`, whose value less one ends the range. `create_dn` needs it below `dn_num1` |
+| `--cofactor is -1.0; it takes 0 (linear) or a positive number` | A negative, NaN or infinite `--cofactor` |
+| `--seed is -1; it takes a whole number from 0` | A negative `--seed` or `--tsne-seed` |
+| `--jobs is 0; it takes -1 (every core) or 1 or more` | `--jobs` of 0 or below -1 |
+| `choose at least two distinct fluorescence channels for clustering and PCA` | `--channels` with fewer than two distinct names |
+| `--channels repeats a channel; list each channel only once` | Duplicate entries in a list with at least two distinct channels |
+| `--tsne-perplexity is 0.0; it takes a positive number` | A `--tsne-perplexity` of 0 or below, or NaN |
+| `datanuggets-flow needs the flow extra: pip install "datanuggets[flow]"` | matplotlib isn't installed, pandas unless `--gates-only`, or scikit-learn unless `--gates-only` or `--no-tsne` |
 | `PATH: no such file or folder` | A path that doesn't exist |
 | `no .fcs files in PATHS` | The paths hold no FCS file, such as `tests/fixtures/flow`, whose fixtures are `.npz` arrays |
-| `--k is K; it takes 1 or more clusters` | `--k` below 1 |
-| `--dn-num2 is N; it takes 2 to 9999 nuggets per file` | `--dn-num2` outside 2 to 9999. `create_dn` needs it below its `dn_num1` of 10,000 |
 | `--t11 takes numbers like 22 or 22,20,18,18, got 'a'` | A threshold that isn't a number. `--t21` gives the same message |
 | `--t11 gives 2 values for 3 files; give one, or one per file` | A threshold list of the wrong length |
 | `--pops gives 2 choices for 3 files; give one for all of them or one per file, separated by ;` | A `--pops` list of the wrong length |
 | `output path already exists: PATH; choose a new --out folder` | The selected output path already exists |
-| `choose at least two distinct fluorescence channels for clustering and PCA` | Fewer than two distinct clustering channels |
-| `--channels repeats a channel; list each channel only once` | Duplicate entries in a list with at least two distinct channels |
 | `223.fcs has no channel FOO; its channels: FSC-A, FSC-H, ...` | A file without the `--fsc` or `--ssc` channel |
+| `choose at least two distinct fluorescence channels for clustering and PCA` | Fewer than two default channels left in the first file |
+| `--exclude-channels names FOO, which 202.fcs doesn't have; its channels: FSC-A, FSC-H, ...` | An `--exclude-channels` name the first file doesn't have |
 | `--pops: there is no Pop 9; this file has Pop 1 to Pop 7` | A `--pops` entry naming a population the file doesn't have |
 | `--pops: 'x' isn't a population number or a range like 1-3` | A `--pops` entry that doesn't parse |
 | `no terminal to ask in; pass --pops, e.g. --pops "1,2"` | No `--pops`, and standard input isn't a terminal |
 | `cancelled; nothing was clustered` | Ctrl+C or the end of input at the prompt |
 | `223.fcs has no channel FOO; its channels: FSC-A, FSC-H, ...` | A file without one of the channels to cluster |
 | `no file has cells kept, so there is nothing to cluster` | Every file was left out or kept fewer than 2 events |
+| `223.fcs isn't the file that was gated: it has 1,000 events, where the gated file had 2,000` | A file changed between gating and the read that takes its kept events. A change of channels gets the same start |
 | `the kept cells make fewer than 3 occupied nuggets, too few for weighted Ward clustering; keep more cells or increase --dn-num2` | Fewer than 3 nuggets with weight above 0 |
-| `datanuggets-flow needs the flow extra: pip install "datanuggets[flow]"` | matplotlib or pandas isn't installed |
 
-A bad flag value, such as `--disc mirror` or a non-integer `--k`, gets argparse's usage message and exit status 2. Other errors can end in a Python traceback with exit status 1: missing flowio, an unreadable FCS file, or invalid scatter values. A failed run retains its incomplete marker and any partial outputs.
+A bad flag value, such as `--disc mirror` or a non-integer `--k`, gets argparse's usage message and exit status 2, and so do `--channels` with `--exclude-channels` and `--gates-only` with `--from-gates`. Other errors can end in a Python traceback with exit status 1: missing flowio, an unreadable FCS file, or invalid scatter values. A failed run retains its incomplete marker and any partial outputs.
 
 ### Examples
 
@@ -322,3 +417,12 @@ datanuggets-flow a.fcs --pops 1 --channels "FJComp-BV510-A,FJComp-Spark Blue-A,F
 ```
 
 The last command uses three untransformed channels from Pop 1, reduces the retained events to up to 200 nuggets in total, and groups those nuggets into three clusters.
+
+```sh
+datanuggets-flow path/to/fcs_folder --pops "1,2" --exclude-channels Viability-A --out outputs/run-007
+datanuggets-flow path/to/fcs_folder --pops "1,2" --no-tsne --dn-num2 500 --jobs 2 --out outputs/run-008
+datanuggets-flow path/to/fcs_folder --gates-only --t12 18 --n-row 9 --n-col 9 --out outputs/gates-002
+datanuggets-flow --from-gates outputs/gates-002 --pops all --seed 7 --tsne-seed 7 --out outputs/run-009
+```
+
+The first clusters the default channels without a viability dye named `Viability-A`. The second skips the t-SNE and makes up to 500 nuggets per file on two cores. The last two gate with a smaller window and a smaller distance threshold for the later peaks, then cluster every population with other seeds.

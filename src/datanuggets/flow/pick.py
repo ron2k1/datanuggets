@@ -8,97 +8,64 @@ all the files' nuggets together, so a cluster is the same cells in every file.
     datanuggets-flow FOLDER --pops 1,2        keeps Pop 1 and Pop 2 of every file
     datanuggets-flow a.fcs b.fcs --pops "1,2;1"   Pop 1 and 2 of a.fcs, Pop 1 of b.fcs
     datanuggets-flow FOLDER --t11 22,20,18,18 --t21 0.25,0.5,0.5,0.5   cfc.py's thresholds
+    datanuggets-flow FOLDER --gates-only --out GATES   gates and draws the files, then stops
+    datanuggets-flow --from-gates GATES       asks over GATES' figures, then clusters
 
-A folder's files go in name order, so per-file thresholds and --pops follow that order.
+A folder's files go in name order, so per-file thresholds and --pops follow that order. The two
+stages give the one-shot run's tables: --from-gates clusters with the masks GATES holds, reading
+each file only once its size and SHA-256 are the ones it was gated with.
 
 Needs the flow extra: pip install "datanuggets[flow]". Events are read as stored, so a file
-with a real compensation matrix gets a warning; spectral (Aurora) files are unmixed already."""
+with a real compensation matrix gets a warning; spectral (Aurora) files are unmixed already.
+
+The steps are datanuggets.flow.pipeline's; this module reads the arguments, asks, and prints the
+steps' events and errors."""
 
 from __future__ import annotations
 
 import argparse
+import shutil
 import sys
+import warnings
+from contextlib import contextmanager
+from dataclasses import fields
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 
-from datanuggets._defaults import DN_NUM1
+from datanuggets._defaults import FLOW_GATE_DPI, FLOW_GATES_NAME, FLOW_OUT_DIR, FLOW_RUN_NAME
+from datanuggets.exceptions import DataNuggetWarning, FlowError
+from datanuggets.flow import pipeline, state
 
-if TYPE_CHECKING:
-    import pandas as pd
-
-    from datanuggets.result import DataNuggets, WhclustResult
-
-SPILL_TOL = 1e-3  # how far from the identity a file's spillover matrix may be before a warning
+# parse_pops and pick_events are pipeline's, and still importable from here
+from datanuggets.flow.pipeline import parse_pops, pick_events  # noqa: F401
+from datanuggets.flow.settings import ClusterSettings, GateSettings, cli_flag
 
 
-def per_file(text: str, n: int, name: str) -> list[float]:
-    """One number for every file, or one per file separated by commas, as n numbers."""
+def per_file(text: str | None, name: str) -> tuple[float, ...] | None:
+    """--t11 or --t21 as GateSettings takes it: one number for every file, or one per file
+    separated by commas, or None when it is left out. GateSettings.check counts them against the
+    files, so the rule is kept in one place."""
+    if text is None:
+        return None
     try:
-        v = [float(t) for t in str(text).split(",")]
+        return tuple(float(t) for t in str(text).split(","))
     except ValueError as e:
         raise SystemExit(f"{name} takes numbers like 22 or 22,20,18,18, got {text!r}") from e
-    if len(v) not in (1, n):
-        raise SystemExit(f"{name} gives {len(v)} values for {n} files; give one, or one per file")
-    return v * n if len(v) == 1 else v
-
-
-def parse_pops(text: str, n: int) -> list[int]:
-    """'1', '1,2', '1 2', '1-3' or 'all' as the sorted population numbers, 1 to n. 'none' gives
-    no populations, which leaves the file out."""
-    t = text.strip().lower()
-    if t == "all":
-        return list(range(1, n + 1))
-    if t == "none":
-        return []
-    pops = set()
-    for part in t.replace(",", " ").split():
-        lo, dash, hi = part.partition("-")
-        if not lo.isdigit() or (dash and not hi.isdigit()):
-            raise ValueError(f"{part!r} isn't a population number or a range like 1-3")
-        a, b = int(lo), int(hi) if dash else int(lo)
-        pops.update(range(min(a, b), max(a, b) + 1))
-    if not pops:
-        raise ValueError("no population given; type numbers like 1,2, or all, or none")
-    bad = [p for p in sorted(pops) if not 1 <= p <= n]
-    if bad:
-        raise ValueError(f"there is no Pop {bad[0]}; this file has Pop 1 to Pop {n}")
-    return sorted(pops)
-
-
-def pick_events(masks: np.ndarray, pops: list[int]) -> np.ndarray:
-    """The events in any of the populations pops (numbered from 1), as one bool per event. An
-    event in two of them counts once."""
-    masks = np.asarray(masks, dtype=bool)
-    if not pops:
-        return np.zeros(len(masks), dtype=bool)
-    return masks[:, [p - 1 for p in pops]].any(axis=1)
 
 
 def read_fcs(path) -> tuple[np.ndarray, list[str], list[str]]:
-    """A file's events, one column per channel, with each channel's $PnN name and $PnS label
-    ('' when it has none). Warns when the file's spillover matrix isn't the identity."""
-    try:
-        import flowio
-    except ImportError as e:  # an optional dependency
-        raise ImportError('reading FCS files needs flowio: pip install "datanuggets[flow]"') from e
-    fd = flowio.FlowData(str(path))
-    c = fd.channel_count
-    pnn = [fd.text[f"p{k}n"] for k in range(1, c + 1)]
-    pns = [fd.text.get(f"p{k}s", "").strip() for k in range(1, c + 1)]
-    spill = fd.text.get("spillover") or fd.text.get("spill")
-    if spill:
-        v = spill.split(",")
-        m = int(v[0])
-        s = np.asarray(v[1 + m :], dtype=float).reshape(m, m)
-        if np.abs(s - np.eye(m)).max() > SPILL_TOL:
-            print(
-                f"warning: {Path(path).name} has a compensation matrix, but its events are "
-                "clustered as stored, uncompensated"
-            )
-    return np.asarray(fd.as_array(preprocess=True), dtype=float), pnn, pns
+    """pipeline.read_fcs, its spillover warning printed as a line of the run's output. Every step
+    reads through this name, so a test can stand in for the FCS reader."""
+    with warnings.catch_warnings(record=True, action="always", category=DataNuggetWarning) as w:
+        found = pipeline.read_fcs(path)
+    for caught in w:
+        if issubclass(caught.category, DataNuggetWarning):
+            print(f"warning: {caught.message}")
+        else:  # flowio's own, shown as they would have been
+            warnings.warn_explicit(caught.message, caught.category, caught.filename, caught.lineno)
+    return found
 
 
 def _fcs_paths(items) -> list[Path]:
@@ -120,12 +87,28 @@ def _fcs_paths(items) -> list[Path]:
 
 
 def _parser() -> argparse.ArgumentParser:
+    """The flags. One that sets a GateSettings or ClusterSettings field, under the field's name,
+    defaults to None, so a run without it takes the settings' default, which its help shows."""
+    gate, cluster = GateSettings(), ClusterSettings()
     p = argparse.ArgumentParser(
         prog="datanuggets-flow",
         description="Gate FCS files on FSC-A vs SSC-A, keep the populations you pick, and cluster "
         "their cells with data nuggets and weighted Ward clustering.",
     )
-    p.add_argument("paths", nargs="+", help="FCS files, or folders of them")
+    p.add_argument("paths", nargs="*", help="FCS files, or folders of them; none with --from-gates")
+    stage = p.add_mutually_exclusive_group()
+    stage.add_argument(
+        "--gates-only",
+        action="store_true",
+        help="gate the files, draw local_maxima.png and gates.png, save the gates in --out, and "
+        "stop, without asking",
+    )
+    stage.add_argument(
+        "--from-gates",
+        metavar="GATES",
+        help="choose populations over the figures of GATES, a --gates-only folder, and cluster "
+        "its files, which must not have changed",
+    )
     p.add_argument(
         "--pops",
         help='populations to keep, e.g. "1,2" for every file or "1,2;1;1" '
@@ -133,40 +116,88 @@ def _parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--out",
-        help="new output folder (default: outputs/flow-<timestamp>); existing paths are refused",
+        help="new output folder (default: outputs/flow-<timestamp>, or "
+        "outputs/flow-gates-<timestamp> with --gates-only); existing paths are refused",
     )
-    p.add_argument("--k", type=int, default=8, help="clusters cut from the tree")
+    p.add_argument("--k", type=int, help=f"clusters cut from the tree (default: {cluster.k})")
     p.add_argument(
         "--cofactor",
         type=float,
-        default=6000,
-        help="fluorescence is clustered as arcsinh(x / cofactor); 0 keeps it linear",
+        help="fluorescence is clustered as arcsinh(x / cofactor); 0 keeps it linear "
+        f"(default: {cluster.cofactor:g})",
     )
-    p.add_argument("--dn-num2", type=int, default=1000, help="nuggets per file")
     p.add_argument(
+        "--dn-num1",
+        type=int,
+        help="create_dn's dn_num1, the nuggets its first pass makes from a file's kept cells "
+        f"before they are reduced to --dn-num2 (default: {cluster.dn_num1})",
+    )
+    p.add_argument("--dn-num2", type=int, help=f"nuggets per file (default: {cluster.dn_num2})")
+    p.add_argument("--seed", type=int, help=f"create_dn's seed (default: {cluster.seed})")
+    p.add_argument(
+        "--jobs",
+        type=int,
+        dest="n_jobs",
+        metavar="JOBS",
+        help="cores create_dn uses, -1 for every one; the results are the same for any "
+        f"(default: {cluster.n_jobs})",
+    )
+    channels = p.add_mutually_exclusive_group()
+    channels.add_argument(
         "--channels",
         help="comma-separated channels to cluster (default: every -A channel but FSC and SSC)",
     )
-    p.add_argument("--fsc", default="FSC-A")
-    p.add_argument("--ssc", default="SSC-A")
+    channels.add_argument(
+        "--exclude-channels", help="comma-separated channels to leave out of the default ones"
+    )
+    p.add_argument("--fsc", help=f"the channel gated as FSC (default: {gate.fsc})")
+    p.add_argument("--ssc", help=f"the channel gated as SSC (default: {gate.ssc})")
     p.add_argument(
         "--disc",
         choices=("his", "peak"),
-        default="his",
         help="his: cfc.py's gates, so the populations match cfc.py's figures; peak: "
-        "datanuggets.flow.find_area, the disc centred on the peak",
+        f"datanuggets.flow.find_area, the disc centred on the peak (default: {gate.disc})",
     )
     p.add_argument(
         "--t11",
-        default="22",
         help="the first peak's distance threshold, one for all files or one per file, e.g. "
-        "22,20,18,18 as in cfc.py",
+        f"22,20,18,18 as in cfc.py (default: {gate.t11[0]})",
     )
     p.add_argument(
         "--t21",
-        default="0.25",
-        help="the first peak's density threshold, the same way, e.g. 0.25,0.5,0.5,0.5",
+        help="the first peak's density threshold, the same way, e.g. 0.25,0.5,0.5,0.5 "
+        f"(default: {gate.t21[0]})",
     )
+    p.add_argument(
+        "--t12",
+        type=float,
+        help=f"every other peak's distance threshold, in every file (default: {gate.t12})",
+    )
+    p.add_argument(
+        "--t22",
+        type=float,
+        help=f"every other peak's density threshold, in every file (default: {gate.t22})",
+    )
+    p.add_argument(
+        "--n-row",
+        type=int,
+        help=f"rows of the window the finder's local maxima are found in (default: {gate.n_row})",
+    )
+    p.add_argument("--n-col", type=int, help=f"columns of that window (default: {gate.n_col})")
+    p.add_argument(
+        "--no-tsne",
+        dest="tsne",
+        action="store_false",
+        default=None,
+        help="leave out the t-SNE of the nuggets, clusters_tsne.png, and the need for scikit-learn",
+    )
+    p.add_argument(
+        "--tsne-perplexity",
+        type=float,
+        help="the t-SNE's perplexity, lowered to (nuggets - 1) / 3 when that's smaller "
+        f"(default: {cluster.tsne_perplexity:g})",
+    )
+    p.add_argument("--tsne-seed", type=int, help=f"the t-SNE's seed (default: {cluster.tsne_seed})")
     p.add_argument("--no-show", action="store_true", help="save the figures without opening them")
     return p
 
@@ -200,9 +231,9 @@ def _ask(samples, plt, show):
         plt.show(block=False)
         plt.pause(0.5)
     print(
-        "\nWhich populations hold the cells you want? Each file's Pop numbers are the ones in "
-        "its own legend in the figure, and the same number can be a different circle in "
-        'another file. Type numbers like 1 or 1,2 or 1-3, "all", or "none" to leave the file '
+        "\nWhich populations hold the cells you want? Each file's Pop numbers label the peaks "
+        "in its own panel of the local maxima figure, and the same number can be a different "
+        'peak in another file. Type numbers like 1 or 1,2 or 1-3, "all", or "none" to leave the file '
         "out; Enter repeats the previous file's choice, Ctrl+C stops. Click this terminal "
         "before typing."
     )
@@ -230,12 +261,17 @@ def _ask(samples, plt, show):
     return chosen
 
 
-def _pyplot(no_show: bool):
+def _pyplot(no_show: bool, *, tables: bool, tsne: bool):
     """matplotlib's pyplot, once the flow extra is known to be there, drawing off screen with
-    --no-show. pandas is checked here too, for the tables the steps write."""
+    --no-show. pandas is checked here too when the run makes tables, and scikit-learn when the
+    t-SNE is drawn, so a missing one stops the run before any file is read."""
     try:
         import matplotlib
-        import pandas  # noqa: F401
+
+        if tables:
+            import pandas  # noqa: F401
+        if tsne:
+            import sklearn  # noqa: F401
     except ImportError as e:
         raise SystemExit(
             'datanuggets-flow needs the flow extra: pip install "datanuggets[flow]"'
@@ -247,270 +283,259 @@ def _pyplot(no_show: bool):
     return plt
 
 
-def _check_args(args) -> tuple[list[Path], list[float], list[float], Path, list[str] | None]:
-    """Validate arguments without writing files; return inputs, thresholds, output and choices."""
-    if args.k < 1:
-        raise SystemExit(f"--k is {args.k}; it takes 1 or more clusters")
-    if not 2 <= args.dn_num2 < DN_NUM1:  # create_dn's dn_num1, which dn_num2 stays under
+def _given(args, cls) -> list[str]:
+    """The settings of cls whose flags were given."""
+    return [f.name for f in fields(cls) if getattr(args, f.name, None) is not None]
+
+
+def _mode_rules(args) -> None:
+    """Refuses a flag the mode can't use, before any setting is checked or file read: FCS paths
+    or a gate setting with --from-gates, which reuses its folder's files and gates, and a
+    clustering setting or --pops with --gates-only, which stops before them."""
+    if args.from_gates is None and not args.paths:
+        raise SystemExit("give FCS files or folders, or --from-gates GATES")
+    if args.from_gates is not None and args.paths:
         raise SystemExit(
-            f"--dn-num2 is {args.dn_num2}; it takes 2 to {DN_NUM1 - 1} nuggets per file"
+            "--from-gates reads the FCS files its gate folder records; give no FCS paths"
         )
-    paths = _fcs_paths(args.paths)
-    t11 = per_file(args.t11, len(paths), "--t11")
-    t21 = per_file(args.t21, len(paths), "--t21")
-    out = (
-        Path(args.out)
-        if args.out
-        else Path("outputs") / datetime.now(UTC).strftime("flow-%Y%m%d-%H%M%S-%fZ")
+    gate = _given(args, GateSettings) if args.from_gates is not None else []
+    if gate:
+        raise SystemExit(
+            f"{cli_flag(gate[0])} sets the gate stage, and --from-gates reuses the gates in "
+            f"{args.from_gates}; run --gates-only again to change it"
+        )
+    cluster = _given(args, ClusterSettings) + ["pops"] * (args.pops is not None)
+    if args.gates_only and cluster:
+        raise SystemExit(
+            f"{cli_flag(cluster[0])} sets the clustering stage, which --gates-only stops before"
+        )
+
+
+def _flags(cls, args, **values):
+    """cls's settings from the flags named for them, values standing in for flags that are read
+    another way first. A flag left out, or a value of None, keeps cls's default."""
+    given = {f.name: getattr(args, f.name, None) for f in fields(cls)} | values
+    return cls(**{name: v for name, v in given.items() if v is not None})
+
+
+def _settings(args) -> ClusterSettings:
+    """The settings the flags give, checked before any file is read, so a bad value stops the run
+    first; the clustering's are returned. --t11 and --t21 wait for the files to be counted."""
+    for name in ("tsne_perplexity", "tsne_seed"):
+        if args.tsne is False and getattr(args, name) is not None:
+            raise SystemExit(f"{cli_flag(name)} has no effect with --no-tsne")
+    _flags(GateSettings, args, t11=None, t21=None).check()
+    cluster = _flags(
+        ClusterSettings,
+        args,
+        channels=_channel_names(args.channels),
+        exclude_channels=_channel_names(args.exclude_channels),
     )
-    spec = args.pops.split(";") if args.pops else None
-    if spec is not None and len(spec) not in (1, len(paths)):
-        raise SystemExit(
-            f"--pops gives {len(spec)} choices for {len(paths)} files; give one for "
-            "all of them or one per file, separated by ;"
-        )
-    return paths, t11, t21, out, spec
+    return cluster.check()
 
 
-def _gate_files(args, paths, t11, t21, out, plt) -> list[dict]:
-    """Each file gated with Cabrera's lymphmacro_finder and its populations counted, all of them
-    drawn on one figure, gates.png."""
-    from datanuggets import plot
-    from datanuggets.flow import find_area, lymphmacro_finder, mirrored_area
+def _out(args, name: str) -> Path:
+    """--out, or a folder under FLOW_OUT_DIR named for the UTC time by the pattern name, so each
+    run has its own."""
+    return Path(args.out) if args.out else Path(FLOW_OUT_DIR) / datetime.now(UTC).strftime(name)
 
-    area = mirrored_area if args.disc == "his" else find_area
-    cols = min(len(paths), 2)
-    rows = -(-len(paths) // cols)
-    fig, axs = plt.subplots(rows, cols, figsize=(5.5 * cols, 4.8 * rows), squeeze=False)
-    samples = []
-    for i, path in enumerate(paths):
-        events, pnn, pns = read_fcs(path)
-        for c in (args.fsc, args.ssc):
-            if c not in pnn:
-                raise SystemExit(f"{path.name} has no channel {c}; its channels: {', '.join(pnn)}")
-        fsc, ssc = events[:, pnn.index(args.fsc)], events[:, pnn.index(args.ssc)]
-        masks = lymphmacro_finder(fsc, ssc, t11=t11[i], t21=t21[i], area=area)
-        table = [
-            f"  Pop {j + 1}: {m.sum():>9,} events ({100 * m.mean():4.1f}%), median {args.fsc} "
-            f"{np.median(fsc[m]) if m.any() else 0:>9,.0f}, {args.ssc} "
-            f"{np.median(ssc[m]) if m.any() else 0:>9,.0f}"
-            for j, m in enumerate(masks.T)
-        ]
-        print(f"\nFile {i + 1}, {path.name}: {len(fsc):,} events")
-        print("\n".join(table))
-        plot.gates(fsc, ssc, masks, title=f"File {i + 1}: {path.name}", ax=axs.flat[i])
-        samples.append({"path": path, "masks": masks, "pnn": pnn, "pns": pns, "table": table})
-    for ax in axs.flat[len(paths) :]:
-        ax.set_visible(False)
-    fig.tight_layout()
-    fig.savefig(out / "gates.png", dpi=110)
-    print(f"\nThe populations are drawn in {out / 'gates.png'}")
+
+def _check_args(args) -> tuple[list[Path], GateSettings, Path]:
+    """Validate arguments without writing files; return inputs, the gate settings and output.
+    The gate settings are built once, here, with --t11 and --t21 as given and checked against the
+    files; one left out gives the settings' one value for every file. --pops is counted against
+    the files too, by the rule parse_selection reads it with."""
+    paths = _fcs_paths(args.paths)
+    t11, t21 = per_file(args.t11, "--t11"), per_file(args.t21, "--t21")
+    gate = _flags(GateSettings, args, t11=t11, t21=t21).check(len(paths))
+    out = _out(args, FLOW_GATES_NAME if args.gates_only else FLOW_RUN_NAME)
+    if args.pops is not None:
+        pipeline.selection_choices(args.pops, len(paths))
+    return paths, gate, out
+
+
+def _print_event(event: pipeline.StageEvent) -> None:
+    """A step's lines, as the run prints them."""
+    print(event.message)
+
+
+def _read(path):
+    """read_fcs, looked up when called, so a test's stand-in for it is the reader the steps use."""
+    return read_fcs(path)
+
+
+# the line saying where each gate figure is, in the order they are drawn, the same in every mode
+DRAWN = {
+    "local_maxima.png": "\nThe local maxima and each Pop's peak are drawn in",
+    "gates.png": "The populations are drawn in",
+}
+
+
+def _print_drawn(folder: Path, *names: str) -> None:
+    """Where the gate figures names are in folder, a line each."""
+    for name in names:
+        print(f"{DRAWN[name]} {folder / name}")
+
+
+def _gate_files(paths, settings, out, plt) -> list[dict]:
+    """The one-shot run's gate step: each file gated by pipeline.gate_files, its populations
+    printed as it goes, then the density grid, local maxima and the peak each Pop grows from
+    drawn on one figure, local_maxima.png, the one the populations are chosen from. gates.png
+    waits for the choice."""
+    from datanuggets.flow.figures import local_maxima_figure, save_figures
+
+    samples = pipeline.gate_files(paths, settings, read=_read, on_event=_print_event)
+    figs = {"local_maxima.png": local_maxima_figure(samples, figure=plt.figure)}
+    save_figures(figs, out, FLOW_GATE_DPI)
+    _print_drawn(out, "local_maxima.png")
     return samples
 
 
+def _draw_gates(samples, plt, out) -> None:
+    """gates.png, once the populations are chosen: each file's events in gray and each of its
+    populations in color, one panel per file."""
+    from datanuggets.flow.figures import gates_figure, save_figures
+
+    save_figures({"gates.png": gates_figure(samples, figure=plt.figure)}, out, FLOW_GATE_DPI)
+    _print_drawn(out, "gates.png")
+
+
 def _choose_pops(samples, spec, plt, show) -> list[list[int]]:
-    """The populations to keep in each file: --pops, or asked file by file."""
-    if spec is None:
-        return _ask(samples, plt, show)
+    """The populations to keep in each file: --pops, or asked file by file, the answers then
+    printed as the --pops that repeats them without the prompt."""
+    if spec is not None:
+        return pipeline.parse_selection(spec, [s["masks"].shape[1] for s in samples])
+    chosen = _ask(samples, plt, show)
+    print(f'\nTo repeat this choice: --pops "{pipeline.pops_spec(chosen)}"')
+    return chosen
+
+
+def _channel_names(names: str | None) -> tuple[str, ...] | None:
+    """--channels or --exclude-channels as ClusterSettings takes it: its names, or None when it
+    is left out."""
+    return tuple(c.strip() for c in names.split(",")) if names else None
+
+
+def _choose_channels(samples, names, exclude=None) -> tuple[list[str], list[str]]:
+    """The fluorescence channels to cluster and their labels, by pipeline.resolve_channels, for
+    --channels and --exclude-channels given as names. The run checks them before asking for
+    populations, so a bad channel stops it first."""
+    settings = ClusterSettings(
+        channels=_channel_names(names), exclude_channels=_channel_names(exclude) or ()
+    )
     try:
-        return [
-            parse_pops(spec[0 if len(spec) == 1 else i], s["masks"].shape[1])
-            for i, s in enumerate(samples)
-        ]
-    except ValueError as e:
-        raise SystemExit(f"--pops: {e}") from e
-
-
-def _choose_channels(samples, names) -> tuple[list[str], list[str]]:
-    """The fluorescence channels to cluster, the same ones in every file, and their labels:
-    --channels, or every -A channel of the first file but FSC and SSC. A label is the channel's
-    $PnS with its $PnN, or the $PnN alone."""
-    pnn, pns = samples[0]["pnn"], samples[0]["pns"]
-    if names:
-        channels = [c.strip() for c in names.split(",")]
-    else:
-        channels = [c for c in pnn if c.endswith("-A") and not c.startswith(("FSC", "SSC"))]
-    if len(set(channels)) < 2:
-        raise SystemExit(
-            "choose at least two distinct fluorescence channels for clustering and PCA"
-        )
-    if len(set(channels)) != len(channels):
-        raise SystemExit("--channels repeats a channel; list each channel only once")
-    for s in samples:
-        missing = [c for c in channels if c not in s["pnn"]]
-        if missing:
-            raise SystemExit(
-                f"{s['path'].name} has no channel {missing[0]}; its channels: {', '.join(s['pnn'])}"
-            )
-    return channels, [f"{pns[pnn.index(c)]} ({c})" if pns[pnn.index(c)] else c for c in channels]
-
-
-def _keep_events(samples, chosen, channels, cofactor, out) -> list[tuple]:
-    """Each file's kept events as (file number, file name, their rows in the file, their channels
-    as arcsinh(x / cofactor), or as stored with cofactor 0), and selection.csv. A file with fewer
-    than 2 kept events is left out."""
-    import pandas as pd
-
-    kept, picks = [], []
-    for i, (s, pops) in enumerate(zip(samples, chosen)):
-        keep = pick_events(s["masks"], pops)
-        picks.append(
-            {
-                "file_number": i + 1,
-                "file": s["path"].name,
-                "populations": ",".join(map(str, pops)) or "none",
-                "events": len(keep),
-                "kept": int(keep.sum()),
-                "percent": 100 * keep.mean(),
-            }
-        )
-        if keep.sum() < 2:
-            continue  # left out, or too few cells for data nuggets
-        events, pnn_i, _ = read_fcs(s["path"])  # read again, so only one file is in memory
-        x = events[np.ix_(np.flatnonzero(keep), [pnn_i.index(c) for c in channels])]
-        x = np.arcsinh(x / cofactor) if cofactor else x
-        kept.append((i + 1, s["path"].name, np.flatnonzero(keep), np.ascontiguousarray(x)))
-    pd.DataFrame(picks).to_csv(out / "selection.csv", index=False)
-    print("\n" + pd.DataFrame(picks).to_string(index=False))
-    if not kept:
-        raise SystemExit("no file has cells kept, so there is nothing to cluster")
-    return kept
-
-
-class _Pool(NamedTuple):
-    """Every kept file's nuggets, pooled in the files' order, and their clusters."""
-
-    dns: list[DataNuggets]  # one per kept file
-    centers: np.ndarray
-    weights: np.ndarray
-    use: np.ndarray  # the nuggets some cell joined; the others have no say in the clusters
-    tree: WhclustResult  # Whclust of the nuggets in use
-    cl: np.ndarray  # each nugget's cluster, numbered from 0, or -1 for one not in use
-    k: int
-
-
-def _cluster(kept, dn_num2, k) -> _Pool:
-    """Data nuggets of each file's kept cells, then Whclust of all the files' nuggets together,
-    cut into k clusters, or into as many as there are nuggets in use when that's fewer."""
-    from datanuggets import create_dn, cut_tree, whclust
-
-    dns = []
-    for num, name, _, x in kept:
-        dn = create_dn(x, dn_num2=min(dn_num2, len(x)), n_jobs=-1)
-        print(f"File {num}, {name}: {len(x):,} cells, {dn.n_nuggets:,} nuggets")
-        dns.append(dn)
-    centers = np.vstack([dn.centers for dn in dns])
-    weights = np.concatenate([dn.weights for dn in dns]).astype(float)
-    use = weights > 0  # a nugget no cell joined has no say in the clusters
-    if use.sum() < 3:
-        raise SystemExit(
-            "the kept cells make fewer than 3 occupied nuggets, too few for weighted Ward "
-            "clustering; keep more cells or increase --dn-num2"
-        )
-    k = min(k, int(use.sum()))
-    tree = whclust(centers[use], weights[use])
-    cl = np.full(len(centers), -1)
-    cl[use] = cut_tree(tree, k=k)
-    return _Pool(dns, centers, weights, use, tree, cl, k)
-
-
-def _write_tables(kept, pool, labels, out) -> pd.DataFrame:
-    """nuggets_N.csv and events_N.csv for each kept file, then cluster_summary.csv and
-    cluster_centers.csv, whose table it returns. N is the file's number, as the prompt and
-    selection.csv number it. Clusters are numbered from 1; event0 is the event's row in its file
-    and nugget0 the nugget's row in nuggets_N.csv, both numbered from 0."""
-    import pandas as pd
-
-    from datanuggets import wmean
-
-    summary, start = [], 0
-    for (num, name, rows_i, _), dn in zip(kept, pool.dns):
-        part = pool.cl[start : start + dn.n_nuggets]
-        start += dn.n_nuggets
-        nug = pd.DataFrame(dn.centers, columns=labels)
-        nug.insert(0, "nugget0", np.arange(dn.n_nuggets))
-        nug["weight"], nug["scale"], nug["cluster"] = dn.weights, dn.scales, part + 1
-        nug.to_csv(out / f"nuggets_{num}.csv", index=False)
-        ev = part[dn.assignments]
-        pd.DataFrame({"event0": rows_i, "nugget0": dn.assignments, "cluster": ev + 1}).to_csv(
-            out / f"events_{num}.csv", index=False
-        )
-        counts = np.bincount(ev, minlength=pool.k)
-        summary += [
-            {
-                "file_number": num,
-                "file": name,
-                "cluster": c + 1,
-                "cells": int(counts[c]),
-                "percent": 100 * counts[c] / len(ev),
-            }
-            for c in range(pool.k)
-        ]
-    summary = pd.DataFrame(summary)
-    summary.to_csv(out / "cluster_summary.csv", index=False)
-    print("\nPercent of each file's kept cells in each cluster:")
-    print("(columns are file numbers; selection.csv names the files)")
-    table = summary.pivot(index="cluster", columns="file_number", values="percent")
-    print(table.round(1).to_string())
-    use = pool.use
-    cc = pd.DataFrame(wmean(pool.centers[use], pool.cl[use], pool.weights[use]), columns=labels)
-    cc.insert(0, "cluster", np.arange(1, pool.k + 1))
-    cc.to_csv(out / "cluster_centers.csv", index=False)
-    return cc
-
-
-def _draw_figures(pool, cc, labels, cofactor, plt, out) -> None:
-    """dendrogram.png, clusters_pca.png and cluster_centers.png."""
-    from datanuggets import plot, wpca
-
-    use, k = pool.use, pool.k
-    fig, ax = plt.subplots(figsize=(8, 4))
-    plot.dendrogram(pool.tree, labels=False, hang=-1, ax=ax)
-    ax.set_title(f"Whclust of {use.sum():,} nuggets")
-    fig.savefig(out / "dendrogram.png", dpi=150)
-    fig, ax = plt.subplots(figsize=(6, 6))
-    pca = wpca(pool.centers[use], wrow=pool.weights[use])
-    plot.scores(pca, w=pool.weights[use], labels=pool.cl[use], ax=ax)
-    ax.set_title(f"Nuggets of the kept cells, {k} clusters")
-    fig.savefig(out / "clusters_pca.png", dpi=150)
-    fig, ax = plt.subplots(figsize=(8, 8))
-    im = ax.imshow(cc[labels].to_numpy().T, aspect="auto", cmap="viridis")
-    ax.set_xticks(range(k), [str(c) for c in range(1, k + 1)])
-    ax.set_yticks(range(len(labels)), labels, fontsize=7)
-    ax.set_xlabel("cluster")
-    fig.colorbar(im, ax=ax, label=f"arcsinh(x / {cofactor:g})" if cofactor else "x")
-    fig.tight_layout()
-    fig.savefig(out / "cluster_centers.png", dpi=150)
+        return pipeline.resolve_channels(samples, settings)
+    except FlowError as e:
+        raise SystemExit(e.cli(cli_flag)) from None
 
 
 def main(argv=None) -> None:
+    """datanuggets-flow. A FlowError, a bad setting's or a step's, stops it with its message, the
+    setting written as its flag."""
     args = _parser().parse_args(argv)
-    plt = _pyplot(args.no_show)
-    paths, t11, t21, out, spec = _check_args(args)
     try:
-        out.mkdir(parents=True, exist_ok=False)
-    except FileExistsError:
-        raise SystemExit(f"output path already exists: {out}; choose a new --out folder") from None
-    incomplete = out / "INCOMPLETE.txt"
-    incomplete.write_text(
-        "This run has not completed. Its tables and figures may be partial.\n"
-        "A successful run removes this marker; rerun in a new output folder.\n",
-        encoding="utf-8",
-    )
+        _run(args)
+    except FlowError as e:
+        raise SystemExit(e.cli(cli_flag)) from None
+
+
+@contextmanager
+def _marked(out: Path):
+    """The new folder out, marked incomplete until the steps in the with block finish. A step
+    that fails, or a Ctrl+C, leaves the marker and says where the partial outputs are."""
+    state.begin(out)
     try:
-        samples = _gate_files(args, paths, t11, t21, out, plt)
-        channels, labels = _choose_channels(samples, args.channels)
-        chosen = _choose_pops(samples, spec, plt, not args.no_show)
-        kept = _keep_events(samples, chosen, channels, args.cofactor, out)
-        pool = _cluster(kept, args.dn_num2, args.k)
-        cc = _write_tables(kept, pool, labels, out)
-        _draw_figures(pool, cc, labels, args.cofactor, plt, out)
-        incomplete.unlink()
+        yield
     except (Exception, SystemExit, KeyboardInterrupt):
         print(f"\nRun incomplete; partial outputs are in {out.resolve()}", file=sys.stderr)
         raise
-    print(f"\nOutputs are in {out.resolve()}")
+    state.finish(out)
+
+
+def _run(args) -> None:
+    """The run in its mode: every check, then the output folder, the steps, and the figures
+    shown. --gates-only stops once the gates are saved; --from-gates goes to _from_gates."""
+    # --pops "", as a script that expands an unset variable gives it, is no --pops in every mode:
+    # the run asks, and --gates-only doesn't count it as a clustering flag
+    args.pops = args.pops or None
+    _mode_rules(args)
+    cluster = _settings(args)
+    if args.from_gates is not None:
+        _from_gates(args, cluster)
+        return
+    stop = args.gates_only
+    plt = _pyplot(args.no_show, tables=not stop, tsne=cluster.tsne and not stop)
+    paths, gate, out = _check_args(args)
+    with _marked(out):
+        if stop:  # nothing is asked between the figures, so the library's stage writes the folder
+            pipeline.gate_stage(
+                paths, out, gate, read=_read, on_event=_print_event, figure=plt.figure
+            )
+            _print_drawn(out, *DRAWN)
+        else:
+            samples = _gate_files(paths, gate, out, plt)
+            _choose_channels(samples, args.channels, args.exclude_channels)
+            chosen = _choose_pops(samples, args.pops, plt, not args.no_show)
+            _draw_gates(samples, plt, out)
+            pipeline.cluster_stage(
+                samples, chosen, out, cluster, read=_read, on_event=_print_event, figure=plt.figure
+            )
+    if stop:
+        where = out.resolve()
+        print(f"\nGates are in {where}")
+        print(f'Choose populations and cluster with: datanuggets-flow --from-gates "{where}"')
+    else:
+        print(f"\nOutputs are in {out.resolve()}")
     if not args.no_show:
+        plt.show()
+
+
+def _note_versions(gates: state.GateFolder) -> None:
+    """A line naming each package whose version differs from the one gates was made with. The
+    run goes on, since the masks are the gates, but the packages that cluster can move the
+    tables."""
+    changed = state.changed_versions(gates.versions)
+    if changed:
+        listed = ", ".join(
+            f"{name} {was or 'not installed'} (now {now or 'not installed'})"
+            for name, (was, now) in changed.items()
+        )
+        message = f"note: {gates.path} was gated with {listed}; its masks are used as saved"
+        n = len(gates.samples)
+        _print_event(pipeline.StageEvent("gate", None, n, message, {"versions": changed}))
+
+
+def _from_gates(args, cluster: ClusterSettings) -> None:
+    """--from-gates: the gate folder and its files checked, --out refused if it is taken, and
+    the channels resolved, all before the populations are asked over the folder's figures, so a
+    run that can't go ahead stops before the question. The run folder is made only after it;
+    the gate figures are copied in as they are, and run.json records the gate folder and the
+    choice. The gate folder itself is only read."""
+    plt = _pyplot(args.no_show, tables=True, tsne=cluster.tsne)
+    # figures imports matplotlib, so only once _pyplot has found it
+    from datanuggets.flow.figures import png_figure
+
+    gates = state.load_gates(Path(args.from_gates))
+    _note_versions(gates)
+    samples = gates.samples
+    out = state.check_new(_out(args, FLOW_RUN_NAME))
+    _choose_channels(samples, args.channels, args.exclude_channels)
+    show = not args.no_show
+    figures = [gates.path / name for name in DRAWN]
+    _print_drawn(gates.path, *DRAWN)
+    if show:
+        for path in figures:
+            png_figure(path, FLOW_GATE_DPI, figure=plt.figure)
+    chosen = _choose_pops(samples, args.pops, plt, show)
+    with _marked(out):
+        for path in figures:
+            shutil.copyfile(path, out / path.name)
+        run = pipeline.cluster_stage(
+            samples, chosen, out, cluster, read=_read, on_event=_print_event, figure=plt.figure
+        )
+        state.write_run(out, gates.path, cluster, chosen, run.channels, run.labels)
+    print(f"\nOutputs are in {out.resolve()}")
+    if show:
         plt.show()
 
 

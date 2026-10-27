@@ -97,7 +97,7 @@ print(np.array_equal(a.assignments, b.assignments))  # False
 
 Other seeds build inputs. The original Covertype generator drew its 10,000 and 100,000 row subsets after `set.seed(20260929)`. The fixture generators used other seeds to make some test inputs, and `fixtures_rsample.R` recorded `set.seed` itself on 12 seeds, among them negative, fractional and near-overflow values. Every fixture stores its inputs, so the tests never draw them again.
 
-The flow gate finder draws nothing. The `datanuggets-flow` command calls `create_dn` with the default int seed; [cli.md](cli.md) covers its options.
+The flow gate finder draws nothing. The `datanuggets-flow` command calls `create_dn` with the int `--seed`, 291102 unless one is given, and seeds its t-SNE with `--tsne-seed`, 0 unless one is given; [cli.md](cli.md) covers its options and [Flow run records](#flow-run-records) what a staged run writes down.
 
 ## Datasets
 
@@ -378,3 +378,28 @@ uv run python benchmarks/flow/stress.py <folder>
 `--cap` defaults to 1800 seconds, 30 minutes, and `--out` to `tmp/flow`. It prints the event count, each run's seconds and populations, how ours given the reference `find_area` compares with the reference run, how many events the shipped finder moves, and the speedup. It appends a row to `stress.csv` in `--out` and deletes the events and masks it saved for the child. It exits with 1 if the reference run fails, or if ours given the reference `find_area` differs from it beyond the hull's edge. A run that hits `--cap` exits 0, since the cap is the measurement.
 
 On the mini, `stress.py` joined the 44 files into one sample of 10,183,290 events. Ours took 1.44 s and the reference finder 1190.0 s, about 20 minutes, so 827x. Ours given the reference `find_area` gave the reference masks exactly, every event, and the shipped finder gated 499,311 of them, 4.9%, differently. The speedup grows with the sample because the reference gate triangulates every kept event, 4,977,743 and 4,880,276 for the two populations here, where ours triangulates the 56 vertices of their hull, and tests each of the 10,000 grid cells once where the reference gate tests every event's bin. Committed on 2026-10-12.
+
+## Flow run records
+
+A one-shot `datanuggets-flow` run's folder holds its tables and figures but no record of its flags. A staged run records them. `--gates-only` writes `gates.json` into the gate folder, beside `gates.npz` and the two gate figures, and `--from-gates` writes `run.json` into its run folder. Both are UTF-8 JSON from `datanuggets.flow.state`, and both begin with `schema`, `created`, the UTC time the record was written, and `versions`, the versions of Python, datanuggets, numpy, scipy, numba, joblib, flowio, matplotlib, pandas and scikit-learn, `null` for one not installed.
+
+`gates.json`, schema `datanuggets-flow-gates/1`, is written last, so a gate folder without it is refused as unfinished. The rest of it:
+
+| Key | Contents |
+| --- | --- |
+| `settings` | The gate settings: `fsc`, `ssc`, `disc`, the `t11` and `t21` lists as given, one value for every file or one per file, `t12`, `t22`, `n_row` and `n_col` |
+| `fixed` | The finder's fixed constants, as [methodology.md](methodology.md#the-finders-parameters) lists them, with the first-peak rule in words |
+| `reader` | `{"library": "flowio", "preprocess": true, "compensation": "not applied"}` |
+| `files` | One entry per file, in file order: its `number`, `name`, absolute `path`, `size` in bytes, `sha256`, `n_events`, `pnn` and `pns` channel names, its `t11` and `t21`, its count of `local_maxima`, and for each population its number, events, percent, scatter medians and peak cell |
+
+`gates.npz` holds each file's masks, packed with `np.packbits` along the events, and the finder's density grid, local maxima, peaks and grid coordinates, as `masks_N`, `density_N`, `candidates_N`, `peaks_N`, `grid_fsc_N` and `grid_ssc_N` for file N. It is read with `allow_pickle=False`.
+
+`run.json`, schema `datanuggets-flow-run/1`, holds `gates`, the gate folder's absolute path, `settings`, the clustering settings from `channels` to `tsne_seed`, `pops`, the populations kept in `--pops`'s grammar, and the `channels` clustered with their `labels`.
+
+To repeat a staged run, run `--from-gates` on the same gate folder with the `pops` and settings `run.json` records, into a new folder:
+
+```sh
+datanuggets-flow --from-gates outputs/gates-001 --pops "1,2;none;1" --k 8 --out outputs/run-001b
+```
+
+The FCS files must still be the ones that were gated, where they were gated, as [Staged runs](cli.md#staged-runs) describes. With the package versions `versions` records, on the same machine, the run gives the first run's tables again, since `create_dn`'s only random step is seeded by the int `--seed`, and `--from-gates` names any package whose version differs. The t-SNE is seeded by `--tsne-seed`, and `_defaults.TSNE_ARGS` pins the arguments that shape `clusters_tsne.png` ([The t-SNE figure](methodology.md#the-t-sne-figure)), but a scikit-learn release that changes one of the arguments left at its default can still move the picture. The finder draws nothing, so a `--gates-only` run with the recorded `settings` on the same files finds the same masks.

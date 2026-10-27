@@ -1,80 +1,27 @@
 import csv
-import hashlib
-import io
+import dataclasses
 import sys
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from datanuggets.flow import pick
+from datanuggets.flow import pick, pipeline
 from datanuggets.flow.pick import _fcs_paths, main, parse_pops, per_file, pick_events
-from flowcases import FLOW
-
-LABELS = ["CD8 (FJComp-Alexa Fluor 700-A)", "CD3 (FJComp-BV510-A)", "CD4 (FJComp-Spark Blue-A)"]
-COLUMNS = {
-    "selection.csv": ["file_number", "file", "populations", "events", "kept", "percent"],
-    "nuggets_1.csv": ["nugget0", *LABELS, "weight", "scale", "cluster"],
-    "events_1.csv": ["event0", "nugget0", "cluster"],
-    "cluster_summary.csv": ["file_number", "file", "cluster", "cells", "percent"],
-    "cluster_centers.csv": ["cluster", *LABELS],
-}
-FIGURES = ("gates.png", "dendrogram.png", "clusters_pca.png", "cluster_centers.png")
-# _digest of each table, recorded from pick.py before its main() was cut into steps
-DIGESTS = {
-    "selection.csv": "23b2c99d62f2c8dd40ec9f70602aef5ac59c0d001dfe8225c6589a2f302c133e",
-    "nuggets_1.csv": "be16c779e8e5c25073b342d48263283546c1351fbf1699490627e1e0f4d8d101",
-    "events_1.csv": "0cbebf6054bf803a9a970ee44a811bba3f60bfc5742e6bb2fdbae70efbeea144",
-    "cluster_summary.csv": "22649c5a60c1f6d03a9c38374ae777825a76f03b4fc1f5be7a658fe57aa9b514",
-    "cluster_centers.csv": "ac066c8d5c4d64447cc4d72ca4ceb7372212cf095369616c02eae28680ddb242",
-}
-DIGITS = 7  # significant digits of a number that isn't whole, in _digest
+from datanuggets.flow.settings import ClusterSettings, GateSettings
+from flowcases import COLUMNS, DIGESTS, DIGESTS_3, FIGURES, digest, read_202
 
 
-def _read_202(path):
-    """202.fcs as read_fcs returns it, cut to FSC-A, SSC-A and three fluorescence channels."""
-    with np.load(FLOW / "202.npz") as g, np.load(FLOW / "202_fluor.npz") as f:
-        events = np.column_stack((g["fsc"], g["ssc"], f["fluor"])).astype(float)
-        return events, ["FSC-A", "SSC-A", *f["pnn"].tolist()], ["", "", *f["pns"].tolist()]
-
-
-def _cell(text: str) -> str:
-    try:
-        int(text)
-        return text
-    except ValueError:
-        pass
-    try:
-        return format(float(text), f".{DIGITS}g")
-    except ValueError:
-        return text
-
-
-def _digest(path) -> str:
-    """SHA-256 of a CSV with \\n line ends and each number that isn't whole to DIGITS significant
-    digits. pandas ends a line with os.linesep, and np.arcsinh's last bit differs between
-    platforms, which moves a nugget's scale by up to about 1e-12 of itself."""
-    with open(path, newline="") as f:
-        rows = [[_cell(c) for c in row] for row in csv.reader(f)]
-    text = io.StringIO()
-    csv.writer(text, lineterminator="\n").writerows(rows)
-    return hashlib.sha256(text.getvalue().encode()).hexdigest()
-
-
-@pytest.fixture
-def close_figures():
-    yield
-    import matplotlib.pyplot as plt
-
-    plt.close("all")
+class _Stop(Exception):
+    """Raised by a spy that has seen what it was waiting for, to end the run there."""
 
 
 @pytest.mark.parametrize("asked", [False, True], ids=["pops", "asked"])
 def test_main_clusters_real_events_end_to_end(tmp_path, monkeypatch, close_figures, asked):
     folder, out = tmp_path / "in", tmp_path / "out"
     folder.mkdir()
-    (folder / "202.fcs").write_bytes(b"")  # for _fcs_paths to find; _read_202 reads it
-    monkeypatch.setattr(pick, "read_fcs", _read_202)
+    (folder / "202.fcs").write_bytes(b"")  # for _fcs_paths to find; read_202 reads it
+    monkeypatch.setattr(pick, "read_fcs", read_202)
     argv = [str(folder), "--no-show", "--out", str(out), "--dn-num2", "50", "--k", "3"]
     if asked:  # Pop 1 typed at the prompt instead
         monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
@@ -88,20 +35,28 @@ def test_main_clusters_real_events_end_to_end(tmp_path, monkeypatch, close_figur
             assert next(csv.reader(f)) == columns, name
     for name in FIGURES:
         assert (out / name).read_bytes().startswith(b"\x89PNG"), name
-    assert {name: _digest(out / name) for name in COLUMNS} == DIGESTS
+    assert {name: digest(out / name) for name in COLUMNS} == DIGESTS
 
 
-# _digest of each table of the three-file run, recorded from pick.py before its main() was cut
-# into steps
-DIGESTS_3 = {
-    "selection.csv": "0ef31e9c3c4252ed89080acc727502ac0f911580f0bbf297756fee03b164a627",
-    "nuggets_1.csv": "128642490cf7274ee9176527b3face34f0339d9f7b3b55a0d93f1afb29459e95",
-    "events_1.csv": "15dac77591ea8841683248b2e3d7647d84a6c9be66aaa11fb425e738ac833a5a",
-    "nuggets_3.csv": "ee0609722e78ca1fc6b21220ab8f95071a49c4482cde2316686f078301e75d49",
-    "events_3.csv": "ce82de3cef82518f7109ea757b7e74c780fb30707e54806fc17e86dccd4065d4",
-    "cluster_summary.csv": "ab1c6f6bd1d16b522fbe43373a1dacbc276c48596f65adb0579266bca1e257eb",
-    "cluster_centers.csv": "38f71313c81cee4ea83da8029c8626655948c7d78bb2f717f631c27404c90589",
-}
+def test_populations_are_chosen_from_the_local_maxima_before_gates_are_drawn(
+    tmp_path, monkeypatch, close_figures
+):
+    folder, out = tmp_path / "in", tmp_path / "out"
+    folder.mkdir()
+    (folder / "202.fcs").write_bytes(b"")
+    monkeypatch.setattr(pick, "read_fcs", read_202)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    seen = []
+
+    def answer(prompt, plt, show):
+        seen.append(sorted(p.name for p in out.iterdir()))
+        raise SystemExit("\ncancelled; nothing was clustered")
+
+    monkeypatch.setattr(pick, "_live_input", answer)
+    with pytest.raises(SystemExit, match="cancelled"):
+        main([str(folder), "--no-show", "--out", str(out)])
+    assert seen == [["INCOMPLETE.txt", "local_maxima.png"]]
+    assert not (out / "gates.png").exists()
 
 
 def test_main_numbers_each_file_and_clusters_its_own_nuggets(tmp_path, monkeypatch, close_figures):
@@ -112,7 +67,7 @@ def test_main_numbers_each_file_and_clusters_its_own_nuggets(tmp_path, monkeypat
     folder.mkdir()
     for name in ("a.fcs", "b.fcs", "c.fcs"):
         (folder / name).write_bytes(b"")
-    monkeypatch.setattr(pick, "read_fcs", _read_202)
+    monkeypatch.setattr(pick, "read_fcs", read_202)
     main(
         [
             str(folder),
@@ -147,7 +102,7 @@ def test_main_numbers_each_file_and_clusters_its_own_nuggets(tmp_path, monkeypat
         "cluster_centers.csv",
     ]
     assert sorted(p.name for p in out.iterdir()) == sorted([*tables, *FIGURES])
-    assert {name: _digest(out / name) for name in tables} == DIGESTS_3
+    assert {name: digest(out / name) for name in tables} == DIGESTS_3
 
 
 def _sample(name, n):
@@ -193,13 +148,13 @@ def test_live_input_without_a_window_reads_a_line(monkeypatch, capsys):
         pick._live_input("Keep which: ", None, False)
 
 
-def test_per_file_spreads_one_value_or_takes_one_per_file():
-    assert per_file("22", 3, "--t11") == [22.0, 22.0, 22.0]
-    assert per_file("22,20,18", 3, "--t11") == [22.0, 20.0, 18.0]
-    with pytest.raises(SystemExit, match="2 values for 3 files"):
-        per_file("22,20", 3, "--t11")
+def test_per_file_reads_one_value_or_one_per_file():
+    """Parsing only: GateSettings.check counts the values against the files."""
+    assert per_file("22", "--t11") == (22.0,)
+    assert per_file("22,20,18", "--t11") == (22.0, 20.0, 18.0)
+    assert per_file(None, "--t11") is None
     with pytest.raises(SystemExit, match="takes numbers"):
-        per_file("x", 3, "--t11")
+        per_file("x", "--t11")
 
 
 @pytest.mark.parametrize(
@@ -243,12 +198,32 @@ def test_fcs_paths_stops_on_an_empty_folder(tmp_path):
         _fcs_paths([tmp_path])
 
 
-def test_pops_must_give_one_choice_or_one_per_file(tmp_path):
+def test_pops_must_give_one_choice_or_one_per_file(tmp_path, monkeypatch):
+    """pipeline.selection_choices counts the --pops entries against the files before any is
+    read."""
     for name in ("a.fcs", "b.fcs", "c.fcs"):
         (tmp_path / name).write_bytes(b"")
-    with pytest.raises(SystemExit, match="2 choices for 3 files"):
+    monkeypatch.setattr(pick, "read_fcs", lambda path: pytest.fail("read before the count"))
+    with pytest.raises(SystemExit) as e:
         main([str(tmp_path), "--pops", "1;2", "--no-show", "--out", str(tmp_path / "out")])
+    assert e.value.code == (
+        "--pops gives 2 choices for 3 files; give one for all of them or one per file, "
+        "separated by ;"
+    )
     assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize(("flag", "value"), [("--t11", "22,20"), ("--t21", "0.25,0.5")])
+def test_thresholds_must_give_one_value_or_one_per_file(tmp_path, monkeypatch, flag, value):
+    """GateSettings.check counts --t11 and --t21 against the files before any is read."""
+    for name in ("a.fcs", "b.fcs", "c.fcs"):
+        (tmp_path / name).write_bytes(b"")
+    monkeypatch.setattr(pick, "read_fcs", lambda path: pytest.fail("read before the count"))
+    out = tmp_path / "out"
+    with pytest.raises(SystemExit) as e:
+        main([str(tmp_path), flag, value, "--pops", "1", "--no-show", "--out", str(out)])
+    assert e.value.code == f"{flag} gives 2 values for 3 files; give one, or one per file"
+    assert not out.exists()
 
 
 @pytest.mark.parametrize("existing", ["directory", "empty-directory", "file"])
@@ -321,17 +296,161 @@ def test_too_few_distinct_channels_stop_before_clustering(names):
         pick._choose_channels(samples, names)
 
 
-def test_two_occupied_nuggets_get_an_actionable_error():
-    with np.load(FLOW / "202_fluor.npz") as data:
-        x = data["fluor"][:2, :2].astype(float)
-    kept = [(1, "202.fcs", np.arange(len(x)), x)]
-    with pytest.raises(SystemExit, match="fewer than 3 occupied nuggets"):
-        pick._cluster(kept, dn_num2=2, k=2)
-
-
 @pytest.mark.parametrize(
     ("flag", "value", "match"), [("--k", "0", "--k is 0"), ("--dn-num2", "10000", "2 to 9999")]
 )
 def test_bad_k_or_dn_num2_stops_before_any_file_is_read(tmp_path, flag, value, match):
     with pytest.raises(SystemExit, match=match):
         main([str(tmp_path / "missing"), flag, value, "--no-show"])
+
+
+def test_parser_defaults_are_all_resolved_from_settings():
+    """A flag that sets a setting defaults to None, so a run without it takes the settings class's
+    default, the one place that value is kept."""
+    names = {f.name for cls in (GateSettings, ClusterSettings) for f in dataclasses.fields(cls)}
+    defaults = {a.dest: a.default for a in pick._parser()._actions if a.dest in names}
+    assert defaults == dict.fromkeys(names)
+
+
+def test_explicit_defaults_give_the_same_tables(tmp_path, monkeypatch, close_figures):
+    """Every gate and clustering flag spelled at the value it takes when left out: the tables
+    are the ones the run writes without them."""
+    source, out = tmp_path / "202.fcs", tmp_path / "out"
+    source.touch()
+    monkeypatch.setattr(pick, "read_fcs", read_202)
+    defaults = {
+        "--fsc": "FSC-A",
+        "--ssc": "SSC-A",
+        "--disc": "his",
+        "--t11": "22",
+        "--t21": "0.25",
+        "--t12": "20",
+        "--t22": "0.5",
+        "--n-row": "11",
+        "--n-col": "11",
+        "--channels": ",".join(read_202(source)[1][2:]),  # the default rule's, in file order
+        "--cofactor": "6000",
+        "--dn-num1": "10000",
+        "--seed": "291102",
+        "--tsne-perplexity": "30",
+        "--tsne-seed": "0",
+    }
+    argv = [str(source), "--no-show", "--out", str(out), "--jobs", "1", "--pops", "1"]
+    main([*argv, "--dn-num2", "50", "--k", "3", *(t for item in defaults.items() for t in item)])
+    assert {name: digest(out / name) for name in COLUMNS} == DIGESTS
+
+
+def test_new_flags_reach_the_finder_create_dn_and_tsne(tmp_path, monkeypatch, close_figures):
+    """The finder gets --t12, --t22, --n-row and --n-col, create_dn --dn-num1, --seed and --jobs,
+    with the channels --exclude-channels leaves, and the t-SNE --tsne-perplexity and --tsne-seed.
+    The run stops there, before the figures."""
+    source = tmp_path / "202.fcs"
+    source.touch()
+    monkeypatch.setattr(pick, "read_fcs", read_202)
+    finder, nuggets, seen = pipeline.gate_peaks, pipeline.create_dn, {}
+
+    def gate_peaks(fsc, ssc, **kwargs):
+        seen["finder"] = kwargs
+        return finder(fsc, ssc, **kwargs)
+
+    def create_dn(x, **kwargs):
+        seen["create_dn"] = kwargs
+        seen["channels"] = x.shape[1]
+        return nuggets(x, **kwargs)
+
+    def tsne_embedding(centers, settings):
+        seen["tsne"] = (settings.tsne_perplexity, settings.tsne_seed)
+        raise _Stop
+
+    monkeypatch.setattr(pipeline, "gate_peaks", gate_peaks)
+    monkeypatch.setattr(pipeline, "create_dn", create_dn)
+    monkeypatch.setattr(pipeline, "tsne_embedding", tsne_embedding)
+    flags = {
+        "--t12": "19",
+        "--t22": "0.4",
+        "--n-row": "9",
+        "--n-col": "13",
+        "--dn-num1": "5000",
+        "--dn-num2": "50",
+        "--seed": "7",
+        "--jobs": "1",
+        "--exclude-channels": "FJComp-BV510-A",
+        "--tsne-perplexity": "12.5",
+        "--tsne-seed": "3",
+    }
+    argv = [str(source), "--pops", "1", "--no-show", "--out", str(tmp_path / "out")]
+    with pytest.raises(_Stop):
+        main([*argv, *(t for item in flags.items() for t in item)])
+    finder_flags = {k: seen["finder"][k] for k in ("t12", "t22", "n_row", "n_col")}
+    assert finder_flags == {"t12": 19.0, "t22": 0.4, "n_row": 9, "n_col": 13}
+    assert seen["create_dn"] == {"dn_num1": 5000, "dn_num2": 50, "seed": 7, "n_jobs": 1}
+    assert seen["channels"] == 2
+    assert seen["tsne"] == (12.5, 3)
+
+
+@pytest.mark.parametrize(
+    ("flag", "value", "message"),
+    [
+        ("--dn-num1", "2", "--dn-num1 is 2; it takes 3 or more nuggets"),
+        ("--cofactor", "-1", "--cofactor is -1.0; it takes 0 (linear) or a positive number"),
+        ("--cofactor", "nan", "--cofactor is nan; it takes 0 (linear) or a positive number"),
+        ("--jobs", "0", "--jobs is 0; it takes -1 (every core) or 1 or more"),
+        ("--seed", "-1", "--seed is -1; it takes a whole number from 0"),
+        ("--n-row", "0", "--n-row is 0; it takes 1 to 100 grid cells"),
+        ("--t12", "0", "--t12 is 0.0; it takes a positive distance in grid cells"),
+        ("--t22", "nan", "--t22 is nan; it takes a fraction of the peak's density, 0 or more"),
+        ("--tsne-perplexity", "0", "--tsne-perplexity is 0.0; it takes a positive number"),
+        ("--tsne-seed", "-1", "--tsne-seed is -1; it takes a whole number from 0"),
+    ],
+)
+def test_bad_settings_stop_before_any_file_is_read(tmp_path, flag, value, message):
+    """The path doesn't exist, so a check made after the files are found would say that first."""
+    out = tmp_path / "out"
+    with pytest.raises(SystemExit) as e:
+        main([str(tmp_path / "missing"), flag, value, "--no-show", "--out", str(out)])
+    assert e.value.code == message
+    assert not out.exists()
+
+
+def test_exclude_channels_and_channels_are_exclusive(tmp_path, capsys):
+    with pytest.raises(SystemExit) as e:
+        main([str(tmp_path), "--channels", "CD3-A,CD4-A", "--exclude-channels", "Live-A"])
+    assert e.value.code == 2
+    assert "--exclude-channels: not allowed with argument --channels" in capsys.readouterr().err
+
+
+def test_no_tsne_keeps_the_tables_and_drops_its_figure(tmp_path, monkeypatch, close_figures):
+    """Without the t-SNE the tables are the same, clusters_tsne.png isn't drawn, and scikit-learn
+    is never needed."""
+    monkeypatch.setitem(sys.modules, "sklearn", None)
+    monkeypatch.setitem(sys.modules, "sklearn.manifold", None)
+    source, out = tmp_path / "202.fcs", tmp_path / "out"
+    source.touch()
+    monkeypatch.setattr(pick, "read_fcs", read_202)
+    argv = [str(source), "--no-tsne", "--pops", "1", "--no-show", "--out", str(out)]
+    main([*argv, "--dn-num2", "50", "--k", "3"])
+    figures = set(FIGURES) - {"clusters_tsne.png"}
+    assert sorted(p.name for p in out.iterdir()) == sorted([*COLUMNS, *figures])
+    assert {name: digest(out / name) for name in COLUMNS} == DIGESTS
+
+
+@pytest.mark.parametrize(("flag", "value"), [("--tsne-perplexity", "10"), ("--tsne-seed", "1")])
+def test_tsne_flags_are_refused_with_no_tsne(tmp_path, flag, value):
+    out = tmp_path / "out"
+    with pytest.raises(SystemExit) as e:
+        main([str(tmp_path / "missing"), "--no-tsne", flag, value, "--no-show", "--out", str(out)])
+    assert e.value.code == f"{flag} has no effect with --no-tsne"
+    assert not out.exists()
+
+
+def test_asked_run_prints_the_pops_that_repeat_it(monkeypatch, capsys):
+    """The answers, Enter's among them, end with the --pops that makes the same choice without
+    the prompt. A choice --pops gave has no such line."""
+    answers = iter(["1,2", "none", ""])
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(pick, "_live_input", lambda prompt, plt, show: next(answers))
+    samples = [_sample(name, 3) for name in ("a.fcs", "b.fcs", "c.fcs")]
+    assert pick._choose_pops(samples, None, None, False) == [[1, 2], [], []]
+    assert capsys.readouterr().out.endswith('\nTo repeat this choice: --pops "1,2;none;none"\n')
+    assert pick._choose_pops(samples, "1", None, False) == [[1]] * 3
+    assert capsys.readouterr().out == ""

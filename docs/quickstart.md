@@ -184,4 +184,13 @@ datanuggets-flow path/to/fcs_folder --pops "1,2" --no-show
 
 This gets its own output folder too. `--pops "1,2"` applies those population numbers to every file, so do not assume this selects equivalent biological populations without checking.
 
+To gate once and choose later, or choose more than once, run the two stages separately:
+
+```sh
+datanuggets-flow path/to/fcs_folder --gates-only --out outputs/gates-001
+datanuggets-flow --from-gates outputs/gates-001
+```
+
+The first command gates the files, saves both gate figures and the gates in `outputs/gates-001`, and stops without asking. The second asks over those figures and clusters without gating again, in its own new output folder. Leave the FCS files where they are in between: the second stage refuses a file that moved or changed. [Staged runs](cli.md#staged-runs) describes the gate folder.
+
 The [CLI reference](cli.md) lists flags, outputs, and errors. The [methodology](methodology.md) explains the implemented pipeline, and [reproducibility](reproducibility.md) records the public datasets used for validation.

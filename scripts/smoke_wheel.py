@@ -17,7 +17,7 @@ import datanuggets as dn
 def main():
     package = Path(dn.__file__).resolve()
     assert "site-packages" in package.parts, package
-    for extra in ("pandas", "matplotlib", "flowio", "tqdm"):
+    for extra in ("pandas", "matplotlib", "flowio", "sklearn", "tqdm"):
         assert importlib.util.find_spec(extra) is None, f"Expected core-only install: {extra}"
 
     fixture = Path(sys.argv[1]) / "tests/fixtures/create_dn/quakes_euclidean_mean"

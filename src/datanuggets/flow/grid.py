@@ -9,6 +9,7 @@ import numpy as np
 from datanuggets._validate import as_count, as_real, check_choice
 
 SCALES = ("raw", "l", "d")  # cfc.py's counts, log(1 + z), log(1 + log(1 + z))
+SQRT_SHIFT = 3  # cfc.py adds it to each channel, less the smaller minimum, before the square root
 
 
 @dataclass(frozen=True)
@@ -36,10 +37,10 @@ def channel(name: str, v) -> np.ndarray:
 
 
 def sqrt_coords(fsc_a, ssc_a) -> tuple[np.ndarray, np.ndarray]:
-    """cfc.py's transform: SSC-A and FSC-A shifted by the smaller channel's minimum, plus 3, square
-    rooted. x is SSC-A and y is FSC-A, as cfc.py has them."""
+    """cfc.py's transform: SSC-A and FSC-A shifted by the smaller channel's minimum, plus
+    SQRT_SHIFT, square rooted. x is SSC-A and y is FSC-A, as cfc.py has them."""
     min_val = min(np.min(ssc_a), np.min(fsc_a))
-    return np.sqrt((-min_val) + 3 + ssc_a), np.sqrt((-min_val) + 3 + fsc_a)
+    return np.sqrt((-min_val) + SQRT_SHIFT + ssc_a), np.sqrt((-min_val) + SQRT_SHIFT + fsc_a)
 
 
 def _bins(v: np.ndarray, n: int) -> np.ndarray:

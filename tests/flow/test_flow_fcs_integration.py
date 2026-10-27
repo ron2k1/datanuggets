@@ -6,12 +6,15 @@ names and labels. It exercises the parser without redistributing the original FC
 
 import subprocess
 import sys
+import warnings
 
 import flowio
 import numpy as np
 import pandas as pd
 import pytest
 
+from datanuggets.exceptions import DataNuggetWarning
+from datanuggets.flow import pipeline
 from datanuggets.flow.pick import read_fcs
 from flowcases import FLOW, load_case
 
@@ -36,6 +39,36 @@ def test_read_fcs_preserves_measured_events_and_channel_metadata(recorded_fcs):
     np.testing.assert_array_equal(events, expected)
     assert pnn == names
     assert pns == labels  # Missing $PnS fields become empty strings for FSC-A and SSC-A.
+
+
+def _spilled(path, off):
+    """A small FCS file whose spillover matrix is the identity plus off from SSC-A into CD3-A."""
+    with path.open("wb") as handle:
+        flowio.create_fcs(
+            handle,
+            np.arange(30, dtype=float),
+            ["FSC-A", "SSC-A", "CD3-A"],
+            metadata_dict={"SPILLOVER": f"2,SSC-A,CD3-A,1,{off},0,1"},
+        )
+    return path
+
+
+def test_spillover_warns_only_off_the_identity_and_the_cli_prints_it(tmp_path, capsys):
+    text = "c.fcs has a compensation matrix, but its events are clustered as stored, uncompensated"
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # a warning fails the read
+        for name, off in (("a.fcs", 0), ("b.fcs", 1e-4)):
+            pipeline.read_fcs(_spilled(tmp_path / name, off))
+    path = _spilled(tmp_path / "c.fcs", 0.01)
+    with pytest.warns(DataNuggetWarning) as caught:
+        events, pnn, pns = pipeline.read_fcs(path)
+    assert [str(w.message) for w in caught] == [text]
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        got = read_fcs(path)  # the CLI's prints it as a line of the run's output instead
+    assert capsys.readouterr().out == f"warning: {text}\n"
+    np.testing.assert_array_equal(got[0], events)
+    assert got[1:] == (pnn, pns) == (["FSC-A", "SSC-A", "CD3-A"], ["", "", ""])
 
 
 def test_cli_reads_fcs_and_writes_consistent_cell_clusters(recorded_fcs, tmp_path):
@@ -76,7 +109,14 @@ def test_cli_reads_fcs_and_writes_consistent_cell_clusters(recorded_fcs, tmp_pat
             "cluster_centers.csv",
         )
     }
-    figures = ("gates.png", "dendrogram.png", "clusters_pca.png", "cluster_centers.png")
+    figures = (
+        "gates.png",
+        "local_maxima.png",
+        "dendrogram.png",
+        "clusters_pca.png",
+        "clusters_tsne.png",
+        "cluster_centers.png",
+    )
     assert {p.name for p in out.iterdir()} == {*tables, *figures}
     for name in figures:
         image = (out / name).read_bytes()
@@ -115,3 +155,34 @@ def test_cli_reads_fcs_and_writes_consistent_cell_clusters(recorded_fcs, tmp_pat
         np.testing.assert_allclose(
             row[1:], np.average(members[channel_labels], axis=0, weights=members["weight"])
         )
+
+
+def _flow(cwd, *args):
+    """datanuggets-flow run as a command with --no-show, which must succeed."""
+    run = subprocess.run(
+        [sys.executable, "-m", "datanuggets.flow.pick", *map(str, args), "--no-show"],
+        cwd=cwd,
+        input="",
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=180,
+    )
+    assert run.returncode == 0, run.stdout + run.stderr
+
+
+def test_cli_staged_run_on_a_real_fcs_file_matches_the_one_shot(recorded_fcs, tmp_path):
+    """--gates-only, then --from-gates with the clustering flags: every table is the one-shot
+    run's, byte for byte, and the run folder holds the one-shot run's files and run.json."""
+    path = recorded_fcs[0]
+    one, gates, staged = tmp_path / "one", tmp_path / "gates", tmp_path / "staged"
+    cluster = ["--pops", "1", "--dn-num2", "50", "--k", "3"]
+    _flow(tmp_path, path, "--out", one, *cluster)
+    _flow(tmp_path, path, "--gates-only", "--out", gates)
+    _flow(tmp_path, "--from-gates", gates, "--out", staged, *cluster)
+    names = {p.name for p in one.iterdir()}
+    assert {p.name for p in staged.iterdir()} == names | {"run.json"}
+    tables = sorted(name for name in names if name.endswith(".csv"))
+    assert len(tables) == 5
+    for name in tables:
+        assert (staged / name).read_bytes() == (one / name).read_bytes(), name

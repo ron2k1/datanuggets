@@ -18,7 +18,7 @@ This package is a research alpha. Its numerical methods have substantial test co
 
 1. **Each run needs a new output folder.** The default creates `outputs/flow-<timestamp>/` relative to the current directory. An existing `--out` path is refused, even if empty. Failed or cancelled runs keep partial results with an `INCOMPLETE.txt` marker; inspect them only as incomplete work and retry in a new folder.
 2. **At least two distinct fluorescence channels are required.** The CLI checks this before asking for populations. Its PCA figure needs two components; a one-dimensional plotting workflow is not supported.
-3. **Clustering needs at least three occupied pooled nuggets.** Very small retained samples or `--dn-num2 2` on a single file can fall short. The CLI reports this before calling weighted Ward clustering.
+3. **Clustering needs at least three occupied pooled nuggets.** Very small retained samples or `--dn-num2 2` on a single file can fall short. The CLI reports this before calling weighted Ward clustering. Keep more cells, or raise `--dn-num2`, which must stay below `--dn-num1`.
 
 The [CLI guide](cli.md) explains the output policy and errors. Finishing a run does not validate its biological interpretation.
 
@@ -53,7 +53,9 @@ The [CLI guide](cli.md) explains the output policy and errors. Finishing a run d
 ### Flow cytometry
 
 - The flow finder's cutoffs are Prof. Cabrera's: a peak's row above 10 and below 90 and its column below 90, with no lower limit on the column, the 0.85 and 0.9 quantiles, and `t11` to `t22`. They haven't been tuned for other panels or instruments. On the 44 PBMC files of the Zenodo record that [reproducibility.md](reproducibility.md) lists, Prof. Cabrera's finder found 2 to 7 populations per file.
-- `datanuggets-flow` reads FCS files through flowio, from the `flow` extra. It clusters the events as stored, uncompensated, and warns when a file's spillover matrix isn't the identity. The functions `datanuggets.flow` exports take arrays and don't read FCS files. The quickstart example and the flow benchmark read them with flowio.
+- `datanuggets-flow` reads FCS files through flowio, from the `flow` extra. It clusters the events as stored, uncompensated, and warns when a file's spillover matrix isn't the identity. The functions `datanuggets.flow` exports take arrays and don't read FCS files. `datanuggets.flow.pipeline.read_fcs` reads one for the command, and the quickstart example and the flow benchmark read them with flowio.
+- The default channels are every channel of the first file whose name ends in `-A` and doesn't start with FSC or SSC. A viability dye recorded on such a channel is clustered with the markers unless `--exclude-channels` leaves it out or `--channels` lists the channels to use. Whether the default should leave such channels out is undecided.
+- A gate folder doesn't record a file's spillover matrix. `--from-gates` reads each file again and repeats the spillover warning, but neither stage compensates, and the folder doesn't show whether a file needed it. A file that moves or changes after gating has to be gated again ([Staged runs](cli.md#staged-runs)).
 - The flow manuscript's differential projection pursuit analysis isn't implemented. `datanuggets-flow` clusters the cells of the gates you pick, with data nuggets per file and weighted Ward clustering of all the files' nuggets together, cut at `--k` clusters. It doesn't run projection pursuit, a varimax rotation, SVM regions or weighted k-means with an elbow rule. [methodology.md](methodology.md) describes the pipeline as implemented, and [cli.md](cli.md) its options.
 
 ### Packaging
