@@ -1,6 +1,6 @@
 """R's default argument values (datanugget 1.5.0) and internal sizes, kept in one place."""
 
-SEED = 291102
+SEED = 291102  # WCluster's Wkmeans and DN.Wkmeans default to it too
 R_CHUNK = 5000
 R_MIN = 100
 R_MAX = 10_000

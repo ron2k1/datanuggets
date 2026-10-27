@@ -19,6 +19,7 @@ import numpy as np
 from joblib import Parallel, delayed
 
 from datanuggets._compat._compiled import frozen
+from datanuggets._defaults import SEED
 from datanuggets._random.replay import ReplayMismatch
 from datanuggets._random.seeds import as_draws
 from datanuggets._validate import as_matrix, as_weights, check_n_jobs
@@ -194,7 +195,7 @@ def _result(x, w, labels) -> WkmeansResult:
 
 
 def wkmeans(
-    x, k, *, w=None, centers=None, num_init=1, max_iter=10, seed=291102, n_jobs=1
+    x, k, *, w=None, centers=None, num_init=1, max_iter=10, seed=SEED, n_jobs=1
 ) -> WkmeansResult:
     """Weighted k-means, as WCluster's Wkmeans computes it.
 

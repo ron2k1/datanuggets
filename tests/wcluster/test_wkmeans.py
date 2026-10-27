@@ -3,6 +3,7 @@ the error R stops with, for the reference and the kernel, and the kernel against
 on tie-heavy data."""
 
 import importlib
+import inspect
 import logging
 import re
 
@@ -10,8 +11,10 @@ import numpy as np
 import pytest
 
 from datanuggets._compat._compiled import frozen
+from datanuggets._defaults import SEED
 from datanuggets._random.r_draws import RDraws
 from datanuggets._random.replay import ReplayDraws
+from datanuggets.wcluster.dn import dn_wkmeans
 from datanuggets.wcluster.wkmeans import wkmeans
 from rfixtures import assert_same_values, load_group
 from wkmeans_reference import QUIRKS, _counts, _wkmeans_py
@@ -354,6 +357,12 @@ def test_kernel_matches_reference_on_a_large_fuzz(family):
 def test_int_seed_is_reproducible():
     x = CASES[0].array("x")
     assert wkmeans(x, 3, seed=5) == wkmeans(x, 3, seed=5)
+
+
+@pytest.mark.parametrize("fn", [wkmeans, dn_wkmeans], ids=["wkmeans", "dn_wkmeans"])
+def test_default_seed_is_the_one_in_defaults(fn):
+    # is, not ==: a second 291102 typed into the signature passes == until SEED changes
+    assert inspect.signature(fn).parameters["seed"].default is SEED
 
 
 def test_rdraws_seed_matches_r():

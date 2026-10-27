@@ -107,7 +107,7 @@ Imports run from the workflows down to the R-compatibility layer and never back 
 | `_compat` | `_compat`, `_defaults` |
 | `_random` | `_random`, `exceptions` |
 | `_clustering` | `_compat`, `_random` |
-| `wcluster` | `wcluster`, `_compat`, `_random`, `_validate`, `result`, `exceptions` |
+| `wcluster` | `wcluster`, `_compat`, `_random`, `_defaults`, `_validate`, `result`, `exceptions` |
 | `nuggets` | `nuggets`, `_clustering`, `_compat`, `_random`, `_defaults`, `_validate`, `result`, `exceptions` |
 | `flow`, the finder: `__init__.py`, `grid`, `peaks`, `gate` | `flow`, `_validate` |
 | `plot` | `plot`, `wcluster`, `_compat` |
