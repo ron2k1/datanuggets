@@ -301,6 +301,7 @@ Each mode refuses the flags it can't use before any file is read or folder made:
 | `GATES's gate stage did not finish; run --gates-only again into a new folder` | The folder still has its `INCOMPLETE.txt` |
 | `GATES isn't a gate folder: it has no gates.json` | One of the four files is missing; the message names it |
 | `GATES/gates.json isn't a datanuggets-flow-gates/1 record` | A record from another version or program. One that isn't UTF-8 JSON is refused the same way |
+| `GATES/gates.json isn't a complete datanuggets-flow-gates/1 record: file 1's entry has no sha256` | A record edited by hand that lacks something `--from-gates` reads: its settings, its files, or a key of a file's entry |
 | `GATES/gates.json: foo isn't a gate setting` | A recorded setting this version doesn't have |
 | `GATES/gates.npz has no masks_1` | The arrays don't match the record. So does a mask whose shape doesn't fit the file's events and populations |
 | `PATH, gated as file 1, is missing` | An FCS file moved or deleted after gating |

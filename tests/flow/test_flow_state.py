@@ -59,6 +59,8 @@ def test_save_then_load_gates_round_trips(tmp_path):
     assert loaded.samples[0]["pns"][2] == MU
     text = (gates / "gates.json").read_text(encoding="utf-8")
     assert MU in text and "NaN" not in text
+    # the keys load_gates requires of an entry are the ones save_gates writes
+    assert [tuple(entry) for entry in json.loads(text)["files"]] == [state.ENTRY_KEYS] * 2
 
 
 def test_gates_json_is_written_last(tmp_path, monkeypatch):
@@ -137,6 +139,14 @@ REFUSED = {
     "schema": (
         _json(lambda r: r.update(schema="datanuggets-flow-gates/2")),
         "{json} isn't a datanuggets-flow-gates/1 record",
+    ),
+    "no files": (
+        _json(lambda r: r.pop("files")),
+        "{json} isn't a complete datanuggets-flow-gates/1 record: it has no files",
+    ),
+    "entry key": (
+        _json(lambda r: r["files"][0].pop("sha256")),
+        "{json} isn't a complete datanuggets-flow-gates/1 record: file 1's entry has no sha256",
     ),
     "setting": (_json(lambda r: r["settings"].update(t13=1)), "{json}: t13 isn't a gate setting"),
     "npz key": (_npz(lambda a: a.pop("peaks_2")), "{npz} has no peaks_2"),

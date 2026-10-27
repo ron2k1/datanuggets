@@ -35,6 +35,21 @@ MARKER_TEXT = (
 )
 GATE_FILES = ("local_maxima.png", "gates.png", "gates.npz", "gates.json")
 NPZ_KEYS = ("masks", "density", "candidates", "peaks", "grid_fsc", "grid_ssc")  # _N for file N
+# what each file's entry in gates.json holds
+ENTRY_KEYS = (
+    "number",
+    "name",
+    "path",
+    "size",
+    "sha256",
+    "n_events",
+    "pnn",
+    "pns",
+    "t11",
+    "t21",
+    "local_maxima",
+    "populations",
+)
 # the constants the finder keeps for parity with cfc.py, which no flag changes
 FIXED = {
     "MSIZE": gate.MSIZE,
@@ -164,11 +179,28 @@ def _refused(message: str) -> FlowError:
     return FlowError(message, "from_gates")
 
 
+def _gap(record: Mapping[str, object]) -> str | None:
+    """What a record of the gates schema lacks that load_gates reads, or None when it lacks
+    nothing. A record save_gates wrote is whole, so this finds a hand edit that dropped a key."""
+    settings, files = record.get("settings"), record.get("files")
+    if not isinstance(settings, dict):
+        return "it has no settings" if settings is None else "its settings aren't a JSON object"
+    if not isinstance(files, list) or not files:
+        return "it has no files" if not files else "its files aren't a JSON list"
+    for i, entry in enumerate(files, 1):
+        if not isinstance(entry, dict):
+            return f"file {i}'s entry isn't a JSON object"
+        missing = [key for key in ENTRY_KEYS if key not in entry]
+        if missing:
+            return f"file {i}'s entry has no {missing[0]}"
+    return None
+
+
 def load_gates(folder: Path) -> GateFolder:
     """The gate folder save_gates wrote, its files checked, cheapest first: it is a folder, its
-    gate stage finished, it has every file, gates.json is a record of this schema whose settings
-    this version has, gates.npz has each file's arrays, each file's masks fit its events and
-    populations, and every FCS file is where it was, with its size and SHA-256 as gated. A
+    gate stage finished, it has every file, gates.json is a complete record of this schema whose
+    settings this version has, gates.npz has each file's arrays, each file's masks fit its events
+    and populations, and every FCS file is where it was, with its size and SHA-256 as gated. A
     FlowError (from_gates) names the folder or file it refuses."""
     folder = Path(folder)
     if not folder.is_dir():
@@ -187,6 +219,9 @@ def load_gates(folder: Path) -> GateFolder:
         raise _refused(f"{path} isn't UTF-8 JSON: {e}") from None
     if not isinstance(record, dict) or record.get("schema") != GATES_SCHEMA:
         raise _refused(f"{path} isn't a {GATES_SCHEMA} record")
+    gap = _gap(record)
+    if gap:
+        raise _refused(f"{path} isn't a complete {GATES_SCHEMA} record: {gap}")
     try:
         settings = GateSettings.from_dict(record["settings"])
     except FlowError as e:
