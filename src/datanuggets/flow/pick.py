@@ -364,16 +364,30 @@ def _read(path):
     return read_fcs(path)
 
 
+# the line saying where each gate figure is, in the order they are drawn, the same in every mode
+DRAWN = {
+    "local_maxima.png": "\nThe local maxima and each Pop's peak are drawn in",
+    "gates.png": "The populations are drawn in",
+}
+
+
+def _print_drawn(folder: Path, *names: str) -> None:
+    """Where the gate figures names are in folder, a line each."""
+    for name in names:
+        print(f"{DRAWN[name]} {folder / name}")
+
+
 def _gate_files(paths, settings, out, plt) -> list[dict]:
-    """Each file gated by pipeline.gate_files, its populations printed as it goes, then the
-    density grid, local maxima and the peak each Pop grows from drawn on one figure,
-    local_maxima.png, the one the populations are chosen from. gates.png waits for the choice."""
+    """The one-shot run's gate step: each file gated by pipeline.gate_files, its populations
+    printed as it goes, then the density grid, local maxima and the peak each Pop grows from
+    drawn on one figure, local_maxima.png, the one the populations are chosen from. gates.png
+    waits for the choice."""
     from datanuggets.flow.figures import local_maxima_figure, save_figures
 
     samples = pipeline.gate_files(paths, settings, read=_read, on_event=_print_event)
     figs = {"local_maxima.png": local_maxima_figure(samples, figure=plt.figure)}
     save_figures(figs, out, FLOW_GATE_DPI)
-    print(f"\nThe local maxima and each Pop's peak are drawn in {out / 'local_maxima.png'}")
+    _print_drawn(out, "local_maxima.png")
     return samples
 
 
@@ -383,7 +397,7 @@ def _draw_gates(samples, plt, out) -> None:
     from datanuggets.flow.figures import gates_figure, save_figures
 
     save_figures({"gates.png": gates_figure(samples, figure=plt.figure)}, out, FLOW_GATE_DPI)
-    print(f"The populations are drawn in {out / 'gates.png'}")
+    _print_drawn(out, "gates.png")
 
 
 def _choose_pops(samples, spec, plt, show) -> list[list[int]]:
@@ -453,11 +467,13 @@ def _run(args) -> None:
     plt = _pyplot(args.no_show, tables=not stop, tsne=cluster.tsne and not stop)
     paths, gate, out = _check_args(args)
     with _marked(out):
-        samples = _gate_files(paths, gate, out, plt)
-        if stop:
-            _draw_gates(samples, plt, out)
-            state.save_gates(out, samples, gate)
+        if stop:  # nothing is asked between the figures, so the library's stage writes the folder
+            pipeline.gate_stage(
+                paths, out, gate, read=_read, on_event=_print_event, figure=plt.figure
+            )
+            _print_drawn(out, *DRAWN)
         else:
+            samples = _gate_files(paths, gate, out, plt)
             _choose_channels(samples, args.channels, args.exclude_channels)
             chosen = _choose_pops(samples, args.pops, plt, not args.no_show)
             _draw_gates(samples, plt, out)
@@ -488,9 +504,8 @@ def _from_gates(args, cluster: ClusterSettings) -> None:
     out = state.check_new(_out(args, FLOW_RUN_NAME))
     _choose_channels(samples, args.channels, args.exclude_channels)
     show = not args.no_show
-    figures = [gates.path / "local_maxima.png", gates.path / "gates.png"]
-    print(f"\nThe local maxima and each Pop's peak are drawn in {figures[0]}")
-    print(f"The populations are drawn in {figures[1]}")
+    figures = [gates.path / name for name in DRAWN]
+    _print_drawn(gates.path, *DRAWN)
     if show:
         for path in figures:
             png_figure(path, FLOW_GATE_DPI, figure=plt.figure)

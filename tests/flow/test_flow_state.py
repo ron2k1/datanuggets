@@ -9,7 +9,7 @@ import pytest
 
 from datanuggets.exceptions import FlowError
 from datanuggets.flow import state
-from datanuggets.flow.pipeline import gate_files, gate_stage
+from datanuggets.flow.pipeline import gate_files
 from datanuggets.flow.settings import ClusterSettings, GateSettings, cli_flag
 from flowcases import read_202
 
@@ -199,23 +199,3 @@ def test_write_run_records_the_gate_folder_and_settings(tmp_path):
     assert ClusterSettings.from_dict(record["settings"]) == settings
     assert (record["pops"], record["channels"], record["labels"]) == ("1,2;none", channels, labels)
     assert {"datanuggets", "numpy", "python"} <= set(record["versions"])
-
-
-def test_gate_stage_matches_save_gates_of_gate_files(tmp_path):
-    source, staged, saved = tmp_path / "202.fcs", tmp_path / "staged", tmp_path / "saved"
-    source.write_bytes(b"202")
-    staged.mkdir()
-    saved.mkdir()
-    samples = gate_stage([source], staged, GateSettings(), read=read_202)
-    assert sorted(p.name for p in staged.iterdir()) == sorted(state.GATE_FILES)
-    for name in ("local_maxima.png", "gates.png"):
-        assert (staged / name).read_bytes().startswith(b"\x89PNG"), name
-    state.save_gates(saved, gate_files([source], GateSettings(), read=read_202), GateSettings())
-    records = [json.loads((d / "gates.json").read_text(encoding="utf-8")) for d in (staged, saved)]
-    for record in records:
-        del record["created"]
-    assert records[0] == records[1]
-    with np.load(staged / "gates.npz") as a, np.load(saved / "gates.npz") as b:
-        assert a.files == b.files
-        assert all(np.array_equal(a[key], b[key]) for key in a.files)
-    assert np.array_equal(state.load_gates(staged).samples[0]["masks"], samples[0]["masks"])

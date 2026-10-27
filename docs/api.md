@@ -1326,7 +1326,7 @@ cluster_stage(samples, chosen, out, settings, *, read=read_fcs, on_event=None, f
 
 `read` takes a path and returns the events and each channel's `$PnN` and `$PnS` names, as `read_fcs` does, so stored arrays can stand in for files. `figure` makes each figure. Its default, `matplotlib.figure.Figure`, leaves nothing in pyplot's registry, so a server can draw run after run; the command passes `plt.figure` to show them.
 
-The command adds the rest of a run folder: `begin(out)` makes the folder with its `INCOMPLETE.txt` and `finish(out)` removes the marker, `write_run` writes `run.json`, and a `--from-gates` run copies the gate figures into its folder.
+The command adds the rest of a run folder: `begin(out)` makes the folder with its `INCOMPLETE.txt` and `finish(out)` removes the marker, `write_run` writes `run.json`, and a `--from-gates` run copies the gate figures into its folder. `--gates-only` runs `gate_stage` itself. The one-shot run calls `gate_files` instead, because it asks for the populations after drawing `local_maxima.png` and before drawing `gates.png`.
 
 **Examples**
 

@@ -102,11 +102,17 @@ def test_from_gates_asks_after_both_figures_and_before_the_run_folder(
 
 
 def test_gates_only_writes_no_tables_and_never_asks(tmp_path, monkeypatch, staged, capsys):
+    """It ends with the one-shot run's lines for the two gate figures, then where the gates are
+    and the command that goes on from them."""
     monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
     gates = _gates_only(tmp_path)
     assert sorted(p.name for p in gates.iterdir()) == sorted(state.GATE_FILES)
     lines = capsys.readouterr().out.splitlines()
-    assert lines[-2:] == [
+    assert lines[-6:] == [
+        "",
+        f"The local maxima and each Pop's peak are drawn in {gates / 'local_maxima.png'}",
+        f"The populations are drawn in {gates / 'gates.png'}",
+        "",
         f"Gates are in {gates.resolve()}",
         f'Choose populations and cluster with: datanuggets-flow --from-gates "{gates.resolve()}"',
     ]
