@@ -1,13 +1,14 @@
 # datanuggets documentation
 
-Start with the walkthrough, then use the function reference as you work. The reference follows the familiar R help-page structure: description, usage, arguments, details, return value, and examples. Its signatures and behavior describe the Python implementation.
+To analyze your own dataset from Terminal, start with installation and the CSV guide. For Python code, use the walkthrough and function reference. The reference follows the familiar R help-page structure: description, usage, arguments, details, return value, and examples. Its signatures and behavior describe the Python implementation.
 
 | Guide | What you will find |
 | --- | --- |
-| [Installation](installation.md) | Install the alpha or `main`, choose Python 3.14 or 3.15, and manage extras |
+| [Installation](installation.md) | Install a supplied wheel, the alpha, or `main`; MacBook setup without Git or uv |
+| [CSV CLI](cli.md#analyze-a-csv) | Select columns, transform data, create nuggets, and export weighted analyses |
 | [Getting started](quickstart.md) | Prepare data, create and refine nuggets, cluster, plot, and predict |
 | [Function reference](api.md) | Python functions, result types, examples, and the R-to-Python map |
-| [Flow CLI](cli.md) | FCS inputs, population selection, flags, and output files |
+| [Flow CLI](cli.md#fcs-pipeline) | The separate FCS pipeline: population selection, flags, and output files |
 | [Limitations](limitations.md) | Memory, statistical assumptions, missing features, and alpha status |
 | [R compatibility](compatibility.md) | Recorded comparisons and intentional differences from R |
 | [Methodology](methodology.md) | How the implemented analysis fits together |
