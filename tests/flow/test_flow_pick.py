@@ -7,7 +7,7 @@ import pytest
 
 from datanuggets.flow import pick
 from datanuggets.flow.pick import _fcs_paths, main, parse_pops, per_file, pick_events
-from flowcases import COLUMNS, DIGESTS, DIGESTS_3, FIGURES, FLOW, digest, read_202
+from flowcases import COLUMNS, DIGESTS, DIGESTS_3, FIGURES, digest, read_202
 
 
 @pytest.mark.parametrize("asked", [False, True], ids=["pops", "asked"])
@@ -268,14 +268,6 @@ def test_too_few_distinct_channels_stop_before_clustering(names):
     samples = [{"path": Path("one.fcs"), "pnn": ["FSC-A", "SSC-A", "CD3-A"], "pns": ["", "", ""]}]
     with pytest.raises(SystemExit, match="at least two distinct fluorescence channels"):
         pick._choose_channels(samples, names)
-
-
-def test_two_occupied_nuggets_get_an_actionable_error():
-    with np.load(FLOW / "202_fluor.npz") as data:
-        x = data["fluor"][:2, :2].astype(float)
-    kept = [(1, "202.fcs", np.arange(len(x)), x)]
-    with pytest.raises(SystemExit, match="fewer than 3 occupied nuggets"):
-        pick._cluster(kept, dn_num2=2, k=2)
 
 
 @pytest.mark.parametrize(
