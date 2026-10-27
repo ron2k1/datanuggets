@@ -99,6 +99,23 @@ def test_from_gates_asks_after_both_figures_and_before_the_run_folder(
     printed = capsys.readouterr().out
     assert f"drawn in {gates / 'local_maxima.png'}" in printed
     assert f"drawn in {gates / 'gates.png'}" in printed
+    assert "note:" not in printed  # gated under the versions installed now
+
+
+def test_from_gates_notes_other_package_versions_and_goes_on(tmp_path, monkeypatch, staged, capsys):
+    """A gate folder made under other package versions is used, not refused, since its masks are
+    the gates, but the run names the packages that differ, as they can move the clustering."""
+    gates, out = _gates_only(tmp_path), tmp_path / "out"
+    made = state._versions()
+    monkeypatch.setattr(state, "_versions", lambda: made | {"numpy": "0.0"})
+    capsys.readouterr()
+    argv = ["--from-gates", str(gates), "--pops", "1", "--no-show", "--out", str(out)]
+    main([*argv, "--dn-num2", "50", "--k", "3"])
+    assert capsys.readouterr().out.splitlines()[0] == (
+        f"note: {gates} was gated with numpy {made['numpy']} (now 0.0); its masks are used as saved"
+    )
+    assert (out / "run.json").is_file()
+    assert not (out / "INCOMPLETE.txt").exists()
 
 
 def test_gates_only_writes_no_tables_and_never_asks(tmp_path, monkeypatch, staged, capsys):

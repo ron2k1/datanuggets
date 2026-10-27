@@ -490,6 +490,21 @@ def _run(args) -> None:
         plt.show()
 
 
+def _note_versions(gates: state.GateFolder) -> None:
+    """A line naming each package whose version differs from the one gates was made with. The
+    run goes on, since the masks are the gates, but the packages that cluster can move the
+    tables."""
+    changed = state.changed_versions(gates.versions)
+    if changed:
+        listed = ", ".join(
+            f"{name} {was or 'not installed'} (now {now or 'not installed'})"
+            for name, (was, now) in changed.items()
+        )
+        message = f"note: {gates.path} was gated with {listed}; its masks are used as saved"
+        n = len(gates.samples)
+        _print_event(pipeline.StageEvent("gate", None, n, message, {"versions": changed}))
+
+
 def _from_gates(args, cluster: ClusterSettings) -> None:
     """--from-gates: the gate folder and its files checked, --out refused if it is taken, and
     the channels resolved, all before the populations are asked over the folder's figures, so a
@@ -500,6 +515,7 @@ def _from_gates(args, cluster: ClusterSettings) -> None:
 
     plt = _pyplot(args.no_show, tables=True, tsne=cluster.tsne)
     gates = state.load_gates(Path(args.from_gates))
+    _note_versions(gates)
     samples = gates.samples
     out = state.check_new(_out(args, FLOW_RUN_NAME))
     _choose_channels(samples, args.channels, args.exclude_channels)

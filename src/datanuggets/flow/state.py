@@ -82,12 +82,14 @@ PACKAGES = (
 
 
 class GateFolder(NamedTuple):
-    """A gate folder load_gates accepted: its path, the settings it was gated with, and its
-    files as samples, the masks and populations as gated."""
+    """A gate folder load_gates accepted: its path, the settings it was gated with, its files as
+    samples, the masks and populations as gated, and the package versions gates.json records,
+    which changed_versions compares with the ones installed now."""
 
     path: Path
     settings: GateSettings
     samples: list[Sample]
+    versions: Mapping[str, str | None]
 
 
 def check_new(out: Path) -> Path:
@@ -125,6 +127,18 @@ def _versions() -> dict[str, str | None]:
         except PackageNotFoundError:
             found[name] = None
     return found | {"python": platform.python_version()}
+
+
+def changed_versions(
+    recorded: Mapping[str, str | None],
+) -> dict[str, tuple[str | None, str | None]]:
+    """Each package whose version now differs from the one a record's versions hold, as
+    (recorded, now), in the record's order. Only the packages both name are compared, so a record
+    from a version that kept a different list isn't reported for that alone."""
+    now = _versions()
+    return {
+        name: (was, now[name]) for name, was in recorded.items() if name in now and was != now[name]
+    }
 
 
 def _record(schema: str) -> dict[str, object]:
@@ -229,7 +243,9 @@ def load_gates(folder: Path) -> GateFolder:
     samples = _samples(folder / "gates.npz", record["files"], settings)
     for entry in record["files"]:
         check_identity(entry)
-    return GateFolder(folder, settings, samples)
+    # never refused: the masks are the gates, whatever packages found them
+    versions = record.get("versions")
+    return GateFolder(folder, settings, samples, versions if isinstance(versions, dict) else {})
 
 
 def _samples(npz: Path, files: Sequence[Mapping], settings: GateSettings) -> list[Sample]:
