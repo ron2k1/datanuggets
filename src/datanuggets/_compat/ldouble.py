@@ -9,7 +9,9 @@ limits are ignored: long double's range covers every sum and product of finite d
 forms here.
 
 The compiled kernels in ldjit do the same arithmetic fast. This module is the reference their
-tests compare against.
+tests compare against, and it also runs in the package: arithmetic's r_sum and r_vec_mean, and so
+r_median, r_mad and r_weighted_mean, add through it, and r_cov falls back on it for data the
+compiled path turns down.
 """
 
 from __future__ import annotations

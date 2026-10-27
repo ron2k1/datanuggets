@@ -1,6 +1,6 @@
 # Compatibility with R
 
-`datanuggets` ports CRAN's `datanugget` 1.5.0 and `WCluster` 1.3.0. On the 544 cases recorded from R it matches R bit for bit, except for the eigen solver's output and the differences on this page. This page lists what is ported, how R's names and arguments map to Python's, and where the behavior differs from R's. The recorded cases and the R build they came from are in [reproducibility.md](reproducibility.md), and the per-function parity tables are in [validation/](https://github.com/ron2k1/datanuggets/blob/main/docs/validation/). What the port can't guarantee is in [limitations.md](limitations.md).
+`datanuggets` ports CRAN's `datanugget` 1.5.0 and `WCluster` 1.3.0. On the cases recorded from R that the tests compare with, it matches R bit for bit, except for the eigen solver's output and the differences on this page. Of the 46 `compat` cases, 39 aren't compared: they record what R does with labels, `corr` values, `nstart`, fractional nugget counts and predictions with no answer, as evidence for decisions still open. This page lists what is ported, how R's names and arguments map to Python's, and where the behavior differs from R's. The recorded cases and the R build they came from are in [reproducibility.md](reproducibility.md), and the per-function parity tables are in [validation/](https://github.com/ron2k1/datanuggets/blob/main/docs/validation/). What the port can't guarantee is in [limitations.md](limitations.md).
 
 ## Ported functions
 
@@ -206,5 +206,5 @@ The plots depart from R's drawings in six ways:
 2. Points are sized by area by default. R's `cex = log(w)` hides points of weight 1 and gives weights below 1 a negative size. It's still there as `size="log"`.
 3. There are no titles by default, and the dendrogram's y range is matplotlib's. R sizes its window from the width of the leaf labels.
 4. The PCA views flip each component's sign so its largest loading is positive.
-5. `dendrogram` raises `ValueError` on a tree with NaN or infinite heights, which `whclust` gives when a row's weight is 0 or infinite. R's `plot.hclust` warns and writes `-nan(ind)`, or coordinates far off the page, into the PDF, so there's no figure to match.
+5. `dendrogram` raises `ValueError` on a tree with NaN or infinite heights, which `whclust` gives when a row's weight is 0, or when large weights or data values make its sums overflow. `whclust` rejects infinite weights up front. R's `plot.hclust` warns and writes `-nan(ind)`, or coordinates far off the page, into the PDF, so there's no figure to match.
 6. Centers are stars of a fixed size, in their cluster's color with a white edge. R's examples draw them as discs or asterisks at `cex = 5`, which cover the points around them.

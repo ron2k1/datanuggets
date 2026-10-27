@@ -27,7 +27,7 @@ Data nuggets reduce the N rows to M groups, each described by a center, a weight
 
 Deletion removes points from dense regions first, since their nearest neighbours are closest. Points in the sparse tails survive as centers, often with weight 1. A nugget with fewer than 2 rows gets the smallest scale among the nuggets with 2 or more rows, divided by 100, as R does. The paper sets that scale to 0. An empty nugget keeps its second-stage center and weight 0.
 
-The second stage builds a `dn_num1` by `dn_num1` distance matrix, 800 MB of float64 at the default 10,000, whatever the row count. `arithmetic_complexity`, the port of R's `AC`, reports the arithmetic cost of a `create_dn` call on a log10 scale from the data's shape alone. The paper's appendix derives the cost of the algorithm.
+The second stage builds a square distance matrix over the pooled first-stage centers. There are usually `dn_num1` of them, which makes 800 MB of float64 at the default 10,000. Smaller inputs pool fewer, since no chunk gives more centers than it has rows. When `ceiling(n / r)` is above `dn_num1`, every chunk still gives one center, so the pool is the number of chunks. A pool of `dn_num2` or fewer centers passes through whole, with a warning and no matrix. `arithmetic_complexity`, the port of R's `AC`, reports the arithmetic cost of a `create_dn` call on a log10 scale from the data's shape alone. The paper's appendix derives the cost of the algorithm.
 
 ### Refining nuggets
 

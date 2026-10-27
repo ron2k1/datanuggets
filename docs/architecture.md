@@ -13,7 +13,7 @@ Where the code, tests, fixtures and tools of datanuggets live, which way the imp
 | `.github/workflows/` | `tests.yml`, `matrix.yml`, `package.yml` and `release.yml`, which [development.md](development.md#what-ci-runs) describes |
 | `docs/` | the pages for users and maintainers: installation, quickstart, the `datanuggets-flow` command, methodology, compatibility, reproducibility, development, limitations, releasing and this one |
 | `examples/` | runnable examples, starting with `first_analysis.py` |
-| `docs/validation/` | one parity table per public function, written by `scripts/parity_report.py` |
+| `docs/validation/` | parity tables for ten of the ported functions, written by `scripts/parity_report.py`. The table in [methodology.md](methodology.md#against-r) shows which, and how each function is checked |
 
 The package imports nothing from `tests/`, `scripts/` or `benchmarks/`. The wheel contains the Python package and its metadata. The source archive adds the tests and fixtures (except `tests/scripts/`), user guides, `examples/first_analysis.py`, README, license, `pyproject.toml` and `.gitignore`. Maintainer scripts, benchmarks, internal notes and R source files do not ship.
 
@@ -72,7 +72,8 @@ src/datanuggets/
     moments.py         every nugget's colMeans and cov in one compiled call, with its threading
     rfast.py           Rfast's Dist and dista, Armadillo's accumulation order, libstdc++'s sort
     rfastjit.py        Dist, dista and dista's nearest center compiled, in rfast's order
-    ldouble.py         x87 long double replayed with Python integers, the reference
+    ldouble.py         x87 long double replayed with Python integers: the reference for ldjit,
+                       and the runtime path of sum, mean and median, and of cov's fallback
     ldjit.py           the same long double arithmetic compiled with numba
     _compiled.py       the numba decorator every kernel goes through, and read-only input views
   _random/             sources of randomness
