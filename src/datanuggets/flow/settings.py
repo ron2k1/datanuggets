@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 import numbers
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, fields
 from typing import Self
 
@@ -58,6 +58,19 @@ def _whole(v, low, high=math.inf) -> bool:
 def _refused(name: str, value, takes: str) -> FlowError:
     """The error for a setting whose value is out of range, saying what it takes."""
     return FlowError(f"{{param}} is {value}; it takes {takes}", name)
+
+
+def check_channels(channels: Sequence[str]) -> None:
+    """Refuses channels to cluster that aren't two or more distinct ones, or that name one twice,
+    with a FlowError naming channels. The rule is kept here alone: ClusterSettings.check runs it
+    on a list given before any file is read, and pipeline.resolve_channels on the list it settles
+    on once a file's channels are known, which the default rule or an exclusion can leave short."""
+    if len(set(channels)) < 2:
+        raise FlowError(
+            "choose at least two distinct fluorescence channels for clustering and PCA", "channels"
+        )
+    if len(set(channels)) != len(channels):
+        raise FlowError("{param} repeats a channel; list each channel only once", "channels")
 
 
 class _Settings:
@@ -175,15 +188,7 @@ class ClusterSettings(_Settings):
         except ValueError:
             raise _refused("n_jobs", self.n_jobs, "-1 (every core) or 1 or more") from None
         if self.channels is not None:
-            if len(set(self.channels)) < 2:
-                raise FlowError(
-                    "choose at least two distinct fluorescence channels for clustering and PCA",
-                    "channels",
-                )
-            if len(set(self.channels)) != len(self.channels):
-                raise FlowError(
-                    "{param} repeats a channel; list each channel only once", "channels"
-                )
+            check_channels(self.channels)
             if self.exclude_channels:
                 raise FlowError("{param} can't be combined with channels", "exclude_channels")
         if not (_finite(self.tsne_perplexity) and self.tsne_perplexity > 0):

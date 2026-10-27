@@ -24,6 +24,7 @@ from datanuggets._defaults import (
 )
 from datanuggets.exceptions import DataNuggetWarning, FlowError
 from datanuggets.flow.gate import gate_peaks
+from datanuggets.flow.settings import check_channels
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -337,7 +338,8 @@ def resolve_channels(
 ) -> tuple[list[str], list[str]]:
     """The fluorescence channels to cluster, the same ones in every file, and their labels:
     settings.channels, or every -A channel of the first file but FSC and SSC, less
-    settings.exclude_channels. A label is the channel's $PnS with its $PnN, or the $PnN alone."""
+    settings.exclude_channels, refused by check_channels when they aren't two or more distinct
+    ones. A label is the channel's $PnS with its $PnN, or the $PnN alone."""
     first = samples[0]
     pnn, pns = first["pnn"], first["pns"]
     for c in settings.exclude_channels:
@@ -356,12 +358,7 @@ def resolve_channels(
             if c.endswith(FLOW_CHANNEL_SUFFIX) and not c.startswith(FLOW_SCATTER_PREFIXES)
         ]
     channels = [c for c in channels if c not in settings.exclude_channels]
-    if len(set(channels)) < 2:
-        raise FlowError(
-            "choose at least two distinct fluorescence channels for clustering and PCA", "channels"
-        )
-    if len(set(channels)) != len(channels):
-        raise FlowError("{param} repeats a channel; list each channel only once", "channels")
+    check_channels(channels)
     for s in samples:
         missing = [c for c in channels if c not in s["pnn"]]
         if missing:

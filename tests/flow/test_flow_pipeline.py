@@ -186,14 +186,12 @@ def test_resolve_channels_default_rule_and_errors():
     with pytest.raises(FlowError) as e:
         resolve_channels([a, b], ClusterSettings())
     assert str(e.value) == "b.fcs has no channel CD4-A; its channels: FSC-A, SSC-A, FSC-H, CD3-A"
+    # check_channels' rule is tested on given lists through ClusterSettings.check; the list the
+    # default rule gives is known only here
     one = {"path": Path("one.fcs"), "pnn": ["FSC-A", "SSC-A", "CD3-A"], "pns": [""] * 3}
-    for channels in (None, ("CD3-A",), ("CD3-A", "CD3-A")):
-        with pytest.raises(FlowError, match="at least two distinct fluorescence channels") as e:
-            resolve_channels([one], ClusterSettings(channels=channels))
-        assert e.value.param == "channels"
-    with pytest.raises(FlowError) as e:
-        resolve_channels([a], ClusterSettings(channels=("CD3-A", "CD4-A", "CD3-A")))
-    assert e.value.cli(cli_flag) == "--channels repeats a channel; list each channel only once"
+    with pytest.raises(FlowError, match="at least two distinct fluorescence channels") as e:
+        resolve_channels([one], ClusterSettings())
+    assert e.value.param == "channels"
 
 
 def test_resolve_channels_excludes_and_refuses_unknown_names():

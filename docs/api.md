@@ -1288,7 +1288,7 @@ The result of `finder_peaks`, a named tuple exported from `datanuggets.flow`.
 
 | Module | Public names |
 | --- | --- |
-| `datanuggets.flow.settings` | `GateSettings`, `ClusterSettings`, `cli_flag` |
+| `datanuggets.flow.settings` | `GateSettings`, `ClusterSettings`, `check_channels`, `cli_flag` |
 | `datanuggets.flow.pipeline` | `gate_stage` and `cluster_stage`; the steps they run, `read_fcs`, `gate_files`, `population_stats`, `population_table`, `parse_pops`, `selection_choices`, `parse_selection`, `pops_spec`, `pick_events`, `resolve_channels`, `selection_table`, `make_nuggets`, `cluster_nuggets`, `tsne_embedding`, `result_tables` and `write_tables`; the types `StageEvent`, `Sample`, `PopStats`, `Kept`, `Pool`, `Tables`, `RunResult`, `Reader` and `OnEvent`; `MIN_KEPT_EVENTS` (2) and `MIN_OCCUPIED_NUGGETS` (3) |
 | `datanuggets.flow.state` | `save_gates`, `load_gates`, `GateFolder`, `check_identity`, `file_sha256`, `check_new`, `begin`, `finish` and `write_run`; the record's constants `GATES_SCHEMA`, `RUN_SCHEMA`, `MARKER`, `MARKER_TEXT`, `GATE_FILES`, `NPZ_KEYS`, `FIXED`, `READER` and `PACKAGES` |
 | `datanuggets.flow.figures` | `local_maxima_figure`, `gates_figure`, `result_figures`, `png_figure` and `save_figures` |
@@ -1306,7 +1306,7 @@ ClusterSettings(channels=None, exclude_channels=(), cofactor=6000.0, dn_num1=100
                 tsne=True, tsne_perplexity=30.0, tsne_seed=0)
 ```
 
-`t11` and `t21` hold one value for every file or one per file. `channels=None` takes the default channel rule, every `-A` channel of the first file but FSC and SSC, less `exclude_channels`. `check()` returns the settings when every value is usable and raises `FlowError` otherwise. `GateSettings.check(n_files)` also checks that `t11` and `t21` give one value or one per file, and `for_file(i)` gives [`gate_peaks`](#gate_peaks)' keyword arguments for file `i`, counting from 0. `to_dict()` gives the settings as JSON writes them, and `from_dict()` reads them back and refuses a key that isn't a setting. `cli_flag(name)` is the flag that sets `name`, such as `--dn-num2` for `dn_num2` and `--jobs` for `n_jobs`.
+`t11` and `t21` hold one value for every file or one per file. `channels=None` takes the default channel rule, every `-A` channel of the first file but FSC and SSC, less `exclude_channels`. `check()` returns the settings when every value is usable and raises `FlowError` otherwise. `GateSettings.check(n_files)` also checks that `t11` and `t21` give one value or one per file, and `for_file(i)` gives [`gate_peaks`](#gate_peaks)' keyword arguments for file `i`, counting from 0. `to_dict()` gives the settings as JSON writes them, and `from_dict()` reads them back and refuses a key that isn't a setting. `check_channels(channels)` raises `FlowError` for a channel list that doesn't hold two or more distinct channels, or that repeats one: `ClusterSettings.check()` runs it on `channels`, and `resolve_channels` on the list it settles on. `cli_flag(name)` is the flag that sets `name`, such as `--dn-num2` for `dn_num2` and `--jobs` for `n_jobs`.
 
 ### `FlowError` and `StageEvent`
 
