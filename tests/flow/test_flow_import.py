@@ -17,7 +17,7 @@ ssc = np.concatenate([rng.normal(2e5, 2e4, 4000), rng.normal(5e5, 6e4, 2000)])
 print(lymphmacro_finder(fsc, ssc).shape)
 """
 # the flow library's modules, which a backend imports without the CLI
-LIBRARY = ("datanuggets.flow.settings",)
+LIBRARY = ("datanuggets.flow.settings", "datanuggets.flow.pipeline")
 EXTRAS = ("matplotlib", "pandas", "sklearn", "flowio")
 
 

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import warnings
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
@@ -25,13 +26,13 @@ from typing import TYPE_CHECKING, NamedTuple
 import numpy as np
 
 from datanuggets._defaults import DN_NUM1
+from datanuggets.exceptions import DataNuggetWarning
+from datanuggets.flow import pipeline
 
 if TYPE_CHECKING:
     import pandas as pd
 
     from datanuggets.result import DataNuggets, WhclustResult
-
-SPILL_TOL = 1e-3  # how far from the identity a file's spillover matrix may be before a warning
 
 
 def per_file(text: str, n: int, name: str) -> list[float]:
@@ -78,27 +79,16 @@ def pick_events(masks: np.ndarray, pops: list[int]) -> np.ndarray:
 
 
 def read_fcs(path) -> tuple[np.ndarray, list[str], list[str]]:
-    """A file's events, one column per channel, with each channel's $PnN name and $PnS label
-    ('' when it has none). Warns when the file's spillover matrix isn't the identity."""
-    try:
-        import flowio
-    except ImportError as e:  # an optional dependency
-        raise ImportError('reading FCS files needs flowio: pip install "datanuggets[flow]"') from e
-    fd = flowio.FlowData(str(path))
-    c = fd.channel_count
-    pnn = [fd.text[f"p{k}n"] for k in range(1, c + 1)]
-    pns = [fd.text.get(f"p{k}s", "").strip() for k in range(1, c + 1)]
-    spill = fd.text.get("spillover") or fd.text.get("spill")
-    if spill:
-        v = spill.split(",")
-        m = int(v[0])
-        s = np.asarray(v[1 + m :], dtype=float).reshape(m, m)
-        if np.abs(s - np.eye(m)).max() > SPILL_TOL:
-            print(
-                f"warning: {Path(path).name} has a compensation matrix, but its events are "
-                "clustered as stored, uncompensated"
-            )
-    return np.asarray(fd.as_array(preprocess=True), dtype=float), pnn, pns
+    """pipeline.read_fcs, its spillover warning printed as a line of the run's output. Every step
+    reads through this name, so a test can stand in for the FCS reader."""
+    with warnings.catch_warnings(record=True, action="always", category=DataNuggetWarning) as w:
+        found = pipeline.read_fcs(path)
+    for caught in w:
+        if issubclass(caught.category, DataNuggetWarning):
+            print(f"warning: {caught.message}")
+        else:  # flowio's own, shown as they would have been
+            warnings.warn_explicit(caught.message, caught.category, caught.filename, caught.lineno)
+    return found
 
 
 def _fcs_paths(items) -> list[Path]:
