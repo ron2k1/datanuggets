@@ -6,10 +6,13 @@ below. The dataset described below retains its separate CC BY 4.0 license.
 
 ## Publication hold: GNU sorting helpers
 
-`src/datanuggets/_compat/rfast.py` describes its `gnu_sort_first`, `gnu_sort_order`
-and supporting introsort, insertion-sort and heap-sort helpers as reproducing
-libstdc++ step for step. Their exact upstream revision and license provenance have
-not been established.
+`src/datanuggets/_compat/rfast.py` holds `gnu_sort_first` and the median-of-three
+partition and heap-sort helpers it calls. The test reference
+`tests/compat/rfast_reference.py` holds `gnu_sort_order` and its introsort and
+insertion-sort helpers, which call the same partition and heap-sort helpers. Both
+files describe these helpers as reproducing libstdc++ step for step. The wheel
+includes `rfast.py`, and the source distribution includes both files. Their exact
+upstream revision and license provenance have not been established.
 
 Current GCC [stl_algo.h](https://github.com/gcc-mirror/gcc/blob/master/libstdc%2B%2B-v3/include/bits/stl_algo.h)
 and [stl_heap.h](https://github.com/gcc-mirror/gcc/blob/master/libstdc%2B%2B-v3/include/bits/stl_heap.h)
