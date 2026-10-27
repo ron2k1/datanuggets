@@ -140,7 +140,7 @@ Every R result the tests compare with comes from R itself. A few were checked by
 | `wstats`, `wstats_constructed` | `fixtures_wstats.R` | 49, 17 | the five `WCluster` statistics on real data, and on built ties, heavy weights and overflowing rows |
 | `wpca` | `fixtures_wpca.R` | 29 | `Wpca`'s outputs and the locals it hands to `eigen()` |
 | `rsample` | `fixtures_rsample.R` | 27 | `set.seed` and `sample.int`, with and without `replace = TRUE`, with `.Random.seed` before and after |
-| `compat` | `fixtures_compat.R` | 46 | the evidence behind the R-compatibility decisions: labels, logical and vector data, predictions with no answer, `corr` values, `nstart` and fractional nugget counts |
+| `compat` | `fixtures_compat.R` | 46 | the evidence behind the R-compatibility decisions: labels, logical and vector data, predictions with no answer, `corr` values, `nstart`, fractional nugget counts, the one-column `"random"` case of `create.DN`, and the names and column types of `create.DN`'s and `refine.DN`'s results |
 | `whclust` | `fixtures_whclust.R` | 14 | `Whclust`'s `merge`, `height` and `order` or R's message where it stops, and how often each quirk fired in a copy of `Whclust` with counters |
 | `wkmeans` | `fixtures_wkmeans.R` | 15 | `Wkmeans`' every draw, each start's labels from `init`, each start's refined labels and WWCSS, the "Iteration" messages R prints, the outputs or R's message, and the quirk counts |
 | `wkmeans_args` | `fixtures_wkmeans.R` | 1 | 28 `Wkmeans` runs on arguments R stops on, with R's message, or its labels where it returns |

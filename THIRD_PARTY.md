@@ -9,10 +9,13 @@ below. The dataset described below retains its separate CC BY 4.0 license.
 `src/datanuggets/_compat/rfast.py` holds `gnu_sort_first` and the median-of-three
 partition and heap-sort helpers it calls. The test reference
 `tests/compat/rfast_reference.py` holds `gnu_sort_order` and its introsort and
-insertion-sort helpers, which call the same partition and heap-sort helpers. Both
-files describe these helpers as reproducing libstdc++ step for step. The wheel
-includes `rfast.py`, and the source distribution includes both files. Their exact
-upstream revision and license provenance have not been established.
+insertion-sort helpers, which call the same partition and heap-sort helpers.
+`rfast.py` names these helpers after libstdc++'s std::sort internals, such as
+`_unguarded_partition_pivot` and `_adjust_heap`, and cites libstdc++'s `_S_threshold`
+and `std::__partial_sort`. The test reference describes `gnu_sort_order`, which calls
+them, as replaying std::sort step for step. The wheel includes `rfast.py`, and the
+source distribution includes both files. Their exact upstream revision and license
+provenance have not been established.
 
 Current GCC [stl_algo.h](https://github.com/gcc-mirror/gcc/blob/master/libstdc%2B%2B-v3/include/bits/stl_algo.h)
 and [stl_heap.h](https://github.com/gcc-mirror/gcc/blob/master/libstdc%2B%2B-v3/include/bits/stl_heap.h)
