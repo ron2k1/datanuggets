@@ -167,7 +167,8 @@ def test_finder_peaks_gives_his_candidates_and_the_finders_peaks(name):
     fp = finder_peaks(c.fsc, c.ssc)
     assert np.array_equal(fp.candidates, c.candidates)
     assert np.array_equal(fp.peaks, c.peaks)
-    assert np.array_equal(fp.density, c.z.T)
+    # log1p can differ from the recording's in the last bit: see test_f_plot_equals_his_grid
+    np.testing.assert_array_max_ulp(fp.density, c.z.T, maxulp=1)
     assert fp.peaks.shape[0] == lymphmacro_finder(c.fsc, c.ssc).shape[1]
 
 

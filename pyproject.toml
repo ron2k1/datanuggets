@@ -60,6 +60,7 @@ dev = [
     "pandas>=2.2",
     "tqdm>=4.66",
     "matplotlib>=3.9",
+    "scikit-learn>=1.5",  # datanuggets-flow's t-SNE, so the flow tests run
     # the flow benchmark: FlowKit's own FCS reader, and the metadata workbook Cabrera's script
     # reads. FlowKit itself needs pandas<3, so it only runs in uv run --no-project --with flowkit
     "flowio>=1.4,<1.5",
