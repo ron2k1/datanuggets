@@ -511,9 +511,10 @@ def _from_gates(args, cluster: ClusterSettings) -> None:
     run that can't go ahead stops before the question. The run folder is made only after it;
     the gate figures are copied in as they are, and run.json records the gate folder and the
     choice. The gate folder itself is only read."""
+    plt = _pyplot(args.no_show, tables=True, tsne=cluster.tsne)
+    # figures imports matplotlib, so only once _pyplot has found it
     from datanuggets.flow.figures import png_figure
 
-    plt = _pyplot(args.no_show, tables=True, tsne=cluster.tsne)
     gates = state.load_gates(Path(args.from_gates))
     _note_versions(gates)
     samples = gates.samples

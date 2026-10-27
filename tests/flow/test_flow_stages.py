@@ -218,6 +218,23 @@ def test_an_empty_pops_is_no_clustering_flag_with_gates_only(tmp_path, staged):
     assert sorted(p.name for p in gates.iterdir()) == sorted(state.GATE_FILES)
 
 
+@pytest.mark.parametrize("mode", ["one-shot", "gates-only", "from-gates"])
+def test_every_mode_names_the_flow_extra_without_matplotlib(tmp_path, monkeypatch, mode):
+    """Without matplotlib each mode stops on the flow extra's message before it reads a file or
+    a gate folder, even after the figures module was imported, as other tests import it."""
+    for name in [m for m in sys.modules if m.startswith("matplotlib.")] + ["matplotlib"]:
+        monkeypatch.setitem(sys.modules, name, None)
+    monkeypatch.delitem(sys.modules, "datanuggets.flow.figures", raising=False)
+    argv = {
+        "one-shot": [str(tmp_path / "202.fcs")],
+        "gates-only": [str(tmp_path / "202.fcs"), "--gates-only"],
+        "from-gates": ["--from-gates", str(tmp_path / "gates")],
+    }[mode]
+    with pytest.raises(SystemExit) as e:
+        main([*argv, "--no-show"])
+    assert e.value.code == 'datanuggets-flow needs the flow extra: pip install "datanuggets[flow]"'
+
+
 def test_gates_only_and_from_gates_are_exclusive(tmp_path, capsys):
     with pytest.raises(SystemExit) as e:
         main([str(tmp_path), "--gates-only", "--from-gates", str(tmp_path / "gates")])
