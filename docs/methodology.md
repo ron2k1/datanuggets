@@ -97,7 +97,7 @@ The result has one row per event and one column per population, in peak order. A
 
 ### The disc: `--disc his` and `--disc peak`
 
-Whether the disc should sit on the peak or where Cabrera's code puts it is an open ruling ([limitations.md](limitations.md#open-problems), problem 9). The library and the command line take different sides of it for now:
+Whether the disc should sit on the peak or where Cabrera's code puts it is an open ruling, listed among the [open problems](limitations.md#open-problems). The library and the command line take different sides of it for now:
 
 - `lymphmacro_finder` uses the corrected `find_area`, with the disc on the peak, unless it's given `area=mirrored_area`.
 - `datanuggets-flow` defaults to `--disc his`, which gates with `datanuggets.flow.mirrored_area`, a copy of `cfc.py`'s `find_area`, so the populations and their numbers are the ones `cfc.py`'s figures show. `--disc peak` uses the corrected `find_area`.

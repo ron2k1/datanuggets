@@ -45,7 +45,7 @@ from datanuggets._random.r_draws import RDraws
 
 ### Not ported
 
-`datanugget`'s `optimal.DN` and its elbow and difference plots are not implemented yet ([open problem 7](limitations.md#open-problems)).
+`datanugget`'s `optimal.DN` and its elbow and difference plots are not implemented yet, and are listed among the [open problems](limitations.md#open-problems).
 
 `datanuggets.flow` doesn't come from R. It ports Prof. Cabrera's Python gate finder for flow cytometry, `lymphmacro_finder`, and is checked against the reference code piece by piece. Its departures from that code are in [methodology.md](methodology.md), and the `datanuggets-flow` command built on it is in [cli.md](cli.md).
 
@@ -74,7 +74,7 @@ Defaults match R except for `n_jobs` and the default weights of `wmean`, `wwcss`
 
 Nugget IDs and assignments are 0-based instead of R's 1-based values. `seed` accepts an integer, a NumPy `Generator` or an `RDraws`. An integer or a `Generator` draws from NumPy, so the same seed doesn't give the same nuggets as R. `RDraws(seed)` draws what R draws.
 
-Every function that reads the values in the data rejects NaN and infinite values. What R does with them isn't recorded for the `datanugget` functions. In `cluster.predict` one NaN row in `newx` empties R's whole result. Probes outside the fixtures show `wmean`, `wss`, `wwcss` and `distw` passing NaN through their arithmetic, and `Wpca` stops in `eigen()` once the matrix it hands over isn't finite, as the recorded weight cases show. [Open problem 4](limitations.md#open-problems) has the plan.
+Every function that reads the values in the data rejects NaN and infinite values. What R does with them isn't recorded for the `datanugget` functions. In `cluster.predict` one NaN row in `newx` empties R's whole result. Probes outside the fixtures show `wmean`, `wss`, `wwcss` and `distw` passing NaN through their arithmetic, and `Wpca` stops in `eigen()` once the matrix it hands over isn't finite, as the recorded weight cases show. Recording R's behavior with them is one of the [open problems](limitations.md#open-problems).
 
 A few differences are kept on purpose. `n_jobs=-1` means all cores. Warnings come as `DataNuggetWarning`, and those raised in worker processes are sent back and raised again in the caller's process. Progress messages go to the `datanuggets` logger in place of R's `message()`. The port draws from its own generator, so it doesn't advance the caller's global random state the way R's functions advance `.Random.seed`.
 
@@ -111,7 +111,7 @@ A few differences are kept on purpose. `n_jobs=-1` means all cores. Warnings com
 | `dist.metric` | `dist_metric` |
 | `make.pbs` | not ported |
 
-R's order puts `delete.percent` before `DN.num`. The port puts `dn_num` second and makes `delete_percent` and `dist_metric` keyword-only, so a call written in R's order, such as `create_dn_centers(rs, 0.1, 50)`, raises `TypeError` instead of taking 0.1 as the count. B5 in [open problem 1](limitations.md#open-problems) would adopt R's order. There is no progress bar. R returns the kept rows as a data frame with row names 1 to m and the kept rows' 1-based positions in its `"kept"` attribute. The port returns a `CentersResult`: `centers` holds the kept rows and `kept` their 0-based positions, R's minus one.
+R's order puts `delete.percent` before `DN.num`. The port puts `dn_num` second and makes `delete_percent` and `dist_metric` keyword-only, so a call written in R's order, such as `create_dn_centers(rs, 0.1, 50)`, raises `TypeError` instead of taking 0.1 as the count. A [planned change](limitations.md#planned-changes) will adopt R's order. There is no progress bar. R returns the kept rows as a data frame with row names 1 to m and the kept rows' 1-based positions in its `"kept"` attribute. The port returns a `CentersResult`: `centers` holds the kept rows and `kept` their 0-based positions, R's minus one.
 
 ### get_dn_means
 
