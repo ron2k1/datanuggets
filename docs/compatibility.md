@@ -53,7 +53,7 @@ from datanuggets._random.r_draws import RDraws
 
 ### Defaults and argument names
 
-Defaults match R except for `n_jobs` and the default weights of `wmean`, `wwcss` and `distw`, which are described below. `create_dn` and `refine_dn` default to `n_jobs=1`, while R's `create.DN` and `refine.DN` default to `no.cores = detectCores() - 1`. `create_dn` maps R's argument names as follows:
+Defaults match R except for `n_jobs` and the default weights of `wmean`, `wwcss` and `distw`, which are described below. `create_dn` and `refine_dn` default to `n_jobs=1`, while R's `create.DN` and `refine.DN` default to `no.cores = detectCores() - 1`. R runs serially for any `no.cores` of 1 or less. Its help pages give 0 for that, and their runnable examples pass it. In the port use `n_jobs=1`: `n_jobs` of 0 or below -1 raises `ValueError`, and `n_jobs=-1` means all cores, where R's -1 runs serially. `create_dn` maps R's argument names as follows:
 
 | R | Python |
 | --- | --- |
@@ -68,7 +68,7 @@ Defaults match R except for `n_jobs` and the default weights of `wmean`, `wwcss`
 | `no.cores` | `n_jobs` |
 | `make.pbs` | `progress` |
 
-`center_method` accepts `"mean"`, `"random"` or `"original"`. `dist_metric` accepts `"euclidean"` or `"manhattan"`.
+`center_method` accepts `"mean"`, `"random"` or `"original"`. `dist_metric` accepts `"euclidean"` or `"manhattan"`. `progress=True` draws a bar over the stage-1 chunks only. R's `make.pbs` also draws a second bar over the points stage 2 deletes.
 
 ### Shared behavior
 
@@ -76,7 +76,7 @@ Nugget IDs and assignments are 0-based instead of R's 1-based values. `seed` acc
 
 Every function that reads the values in the data rejects NaN and infinite values. What R does with them isn't recorded for the `datanugget` functions. In `cluster.predict` one NaN row in `newx` empties R's whole result. Probes outside the fixtures show `wmean`, `wss`, `wwcss` and `distw` passing NaN through their arithmetic, and `Wpca` stops in `eigen()` once the matrix it hands over isn't finite, as the recorded weight cases show. [Open problem 4](limitations.md#open-problems) has the plan.
 
-A few differences are kept on purpose. `n_jobs=-1` means all cores. Warnings come as `DataNuggetWarning`, and those raised in worker processes are sent back and raised again in the caller's process. Progress messages go to the `datanuggets` logger in place of R's `message()`. The port draws from its own generator, so it doesn't advance the caller's global random state the way R's functions advance `.Random.seed`. `create_dn`, `create_dn_centers` and `refine_dn` raise on a vector `x`, since R's behavior there isn't recorded.
+A few differences are kept on purpose. `n_jobs=-1` means all cores. Warnings come as `DataNuggetWarning`, and those raised in worker processes are sent back and raised again in the caller's process. Progress messages go to the `datanuggets` logger in place of R's `message()`. The port draws from its own generator, so it doesn't advance the caller's global random state the way R's functions advance `.Random.seed`.
 
 ### refine_dn
 
@@ -99,6 +99,20 @@ A few differences are kept on purpose. `n_jobs=-1` means all cores. Warnings com
 
 `refine_dn` reads only the assignments from `dn`. Like R, it recomputes every center, weight and scale from the rows. It also drops empty nuggets and gives single-row nuggets a scale of 0, where `create_dn` keeps empty nuggets and floors single-row scales. Both come from R. R re-seeds before every split, so each split starts from a fresh copy of the seed's stream and the result doesn't depend on `n_jobs`. With `n_jobs` other than 1 the splits of a round run in worker processes. Unlike R, `refine_dn` rejects an `nstart` or `max_splits` that isn't finite and a `shape_split` that isn't a bool.
 
+### create_dn_centers
+
+`create_dn_centers(rs, dn_num, *, delete_percent=0.1, dist_metric="euclidean")` maps R's arguments as follows:
+
+| R | Python |
+| --- | --- |
+| `RS` | `rs` |
+| `delete.percent` | `delete_percent` |
+| `DN.num` | `dn_num` |
+| `dist.metric` | `dist_metric` |
+| `make.pbs` | not ported |
+
+R's order puts `delete.percent` before `DN.num`. The port puts `dn_num` second and makes `delete_percent` and `dist_metric` keyword-only, so a call written in R's order, such as `create_dn_centers(rs, 0.1, 50)`, raises `TypeError` instead of taking 0.1 as the count. B5 in [open problem 1](limitations.md#open-problems) would adopt R's order. There is no progress bar. R returns the kept rows as a data frame with row names 1 to m and the kept rows' 1-based positions in its `"kept"` attribute. The port returns a `CentersResult`: `centers` holds the kept rows and `kept` their 0-based positions, R's minus one.
+
 ### get_dn_means
 
 `get_dn_means(x, dn)` takes R's `x` and `DN` and returns a NumPy array with one row per nugget, where R returns a data frame. An empty nugget gets a row of R's -NaN. With one column R transposes its result into a single row, but `get_dn_means` still returns one row per nugget. R ignores any rows of `x` past the ones `dn` assigns. It also skips a row whose nugget id isn't a whole number from 1 to the nugget count. `get_dn_means` raises `ValueError` in both cases.
@@ -120,7 +134,7 @@ In the `WCluster` functions `Wpca` becomes `wpca`, `cluster.predict` becomes `cl
 | `cluster.predict` argument order | `(x, w, cl, newx)`, and a swapped `w` and `cl` runs silently | `(x, cl, newx, *, w=None)` |
 | `cluster.predict` for a row where every distance is NaN (NaN centers, another new row that overflows, or centers of infinities once there are two new rows) | `integer(0)` when every row is like that, a list with empty entries when only some are | `ValueError` |
 | `cluster.predict` distances after R's identity multiply | `0 * Inf` from one overflowing row turns its whole column NaN, and a lone `Inf` stays | the same, computed without the multiply |
-| a vector `newx` in `cluster.predict`, a vector `x` in `getDN.means` | stops | `ValueError` |
+| a vector `newx` in `cluster.predict`, a vector `x` in `getDN.means`, `create.DN` or `refine.DN`, a vector `RS` in `create.DNcenters` | stops. The `datanugget` functions say `x must be of class "matrix", "data.frame", or "data.table"`, with `RS` in place of `x` for `create.DNcenters` | `ValueError`, or `TypeError` for a vector that isn't numeric |
 | integer `x` with integer weights | `wmean` and `cluster.predict`: an NA center on overflow with a warning. `Wpca`: the NA becomes 0 in its column sum, a wrong center with a warning. `wss`, `wwcss`, `distw`: no integer products | float64 arithmetic, no overflow |
 | NaN or infinite weights, text or bool weights | passed through or stopped late in `eigen` | `ValueError` or `TypeError` up front |
 | `Wpca` row weights summing to 1, a zero total, a negative row weight, zero variance under `corr`, row weights summing below 1 under `corr`, column weights with a zero sum or mixed signs | stop inside `eigen` ("infinite or missing values in 'x'"), some after a "NaNs produced" warning | `ValueError` naming the cause |
@@ -148,6 +162,21 @@ In the `WCluster` functions `Wpca` becomes `wpca`, `cluster.predict` becomes `cl
 | `DNcluster.predict` with a matrix `newx` | stops ("newdata should be either a data frame or a datanugget object.") | runs, as `cluster_predict` does |
 
 The `dn_` functions stop where R's do on a datanugget with one variable, where R's `[, 2:2]` drops the table to a vector: `dn_wkmeans` always, `dn_wpca` without `wcol`, and `dn_cluster_predict` with a `DataNuggets` as `newx`. `dn_whclust` runs, as R's does. The `one_variable` case records R's messages there, and what R returns where it runs. `dn_cluster_predict` reads a `DataNuggets` given as `newx` the way R reads a datanugget there. It takes as many columns of `newx`'s table as `dn` has variables, so a wider `newx` gives its first variables, and a narrower one passes its weights and scales as data. Both stop when the table runs out of columns.
+
+### Result components
+
+R returns named lists, a data frame or an `hclust`. The port returns the result classes in `datanuggets.result`, with these fields in place of R's components:
+
+| R | Python |
+| --- | --- |
+| `create.DN` and `refine.DN`: `"Data Nuggets"`, a data frame of `Data Nugget`, `Center1` to `Centerp`, `Weight` and `Scale`, and `"Data Nugget Assignments"` | `DataNuggets`: `centers`, `weights`, `scales` and `assignments`. `to_frame()` gives R's table, with 0-based ids |
+| `create.DNcenters`: the kept rows as a data frame, with their positions in the `"kept"` attribute | `CentersResult`: `centers` and `kept` |
+| `Wkmeans`: `"Cluster Assignments"`, `"Cluster Centers"` and `"WWCSS"`, the last a list of `WWCSS` and `TotalWWCSS` | `WkmeansResult`: `labels`, `centers`, `wwcss` and `total_wwcss` |
+| `DN.Wkmeans`: `Wkmeans`' list with the assignments renamed `"Cluster Assignments for data nuggets"`, plus `"Cluster Assignments for original dataset"` | `DnWkmeansResult`: `wkmeans`' fields, with the nuggets' clusters in `labels`, plus `row_labels` |
+| `wwcss(groupSum = TRUE)`: `WWCSS` and `TotalWWCSS` | `WwcssResult`: `per_cluster` and `total` |
+| `Whclust`: `merge`, `height` and `order`, plus `labels = NULL`, `method = "ward.D"`, `call` and `dist.method = "euclidean"` | `WhclustResult`: `merge`, `height` and `order` only. `to_linkage()`, `cut_tree` and `datanuggets.plot.dendrogram` do what R does with an `hclust` through `cutree` and `plot` |
+
+The arrays carry none of R's names. R names `Wkmeans`' assignments after the data's row names, `wwcss`' values per cluster 1 to k and the nugget table's rows 1 to m.
 
 ### cut_tree
 
