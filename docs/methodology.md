@@ -104,21 +104,35 @@ Whether the disc should sit on the peak or where Cabrera's code puts it is an op
 
 The choice changes which events the clustering sees. In the comparison run on the Mac mini (Apple M4, 16 GB) over the 44 files of the record, the corrected disc gates 1.4% to 38.7% of a file's events differently from the mirrored disc, 8.0% at the median.
 
+### The finder's parameters
+
+The finder's tunable values are in `datanuggets._defaults`, and each has a `datanuggets-flow` flag. The rest make it Cabrera's finder: they are constants named in the module that uses them, no flag changes them, and every gate folder records them in `gates.json` under `fixed`. The reference lines below are in `benchmarks/flow/cabrera_reference.py`, which holds his functions word for word, and `tests/flow/test_flow_settings.py` pins every value in both tables.
+
+| Constants | Default | Flag | What they set | Reference |
+| --- | --- | --- | --- | --- |
+| `FINDER_N_ROW`, `FINDER_N_COL` | 11, 11 | `--n-row`, `--n-col` | The window `local_maxima` takes each cell's maximum over | :139, :161 |
+| `FINDER_T11`, `FINDER_T21` | 22, 0.25 | `--t11`, `--t21` | The first peak's distance and density thresholds, one value or one per file | :139, :186 |
+| `FINDER_T12`, `FINDER_T22` | 20, 0.5 | `--t12`, `--t22` | Every other peak's thresholds | :140, :187 |
+
+| Constant | Module | Value | What it fixes | Reference |
+| --- | --- | --- | --- | --- |
+| `MSIZE` | `gate` | 100 | The grid's rows and columns | :147 |
+| `GRID_SCALE` | `gate` | `"l"` | Cells hold `log(1 + count)` | :149 |
+| `GRID_ALPHA` | `gate` | 0.1 | Cells below 0.1 times the largest go to 0. It's `f_plot`'s default, which the reference finder leaves implicit | :15, :60 |
+| `SQRT_SHIFT` | `grid` | 3 | Added to each channel, less the smaller minimum, before the square root | :143-145 |
+| `LOCAL_MAX_QUANTILE` | `peaks` | 0.85 | A local maximum must be above this quantile of the grid | :154 |
+| `LOCAL_MAX_EDGES` | `peaks` | `"reflect"` | How the window extends past the grid's edges, `generic_filter`'s default | :161 |
+| `SEARCH_THRESHOLD` | `peaks` | 2 | How far, in cells, `search_ind` looks for a denser cell | :73 |
+| `ROW_MIN`, `ROW_MAX`, `COL_MAX` | `peaks` | 10, 90, 90 | A peak's row must be above 10 and below 90, and its column below 90 | :175 |
+| `PEAK_QUANTILE` | `peaks` | 0.9 | A peak's density must be above this quantile of the grid | :179 |
+| `MIN_POINTS` | `gate` | 3 | An area needs more than 3 cells, and its gate more than 3 events | :208 |
+| The first-peak rule | `gate`, `peaks` | | The first peak by SSC row takes `t11` and `t21`, the others `t12` and `t22` | :186-187 |
+
+`find_area` and `mirrored_area` default to `t1=35` and `t2=0.85`, `AREA_T1` and `AREA_T2` in `peaks`, from :102. The finder always passes its own thresholds, so those defaults are never reached and `gates.json` doesn't record them. The other `datanuggets-flow` defaults, from the scatter channels to the t-SNE's seed, are in `_defaults` too, and [cli.md](cli.md#options) lists them with their flags.
+
 ### The `datanuggets-flow` pipeline
 
-`datanuggets-flow` (`src/datanuggets/flow/pick.py`) runs these steps:
-
-1. Read each FCS file with flowio, as stored and uncompensated. A file whose spillover matrix isn't the identity gets a warning. A folder's files go in name order.
-2. Gate each file on FSC-A against SSC-A, or the channels `--fsc` and `--ssc` name, with the finder above, with `--t11` and `--t21` given once or per file, and the area rule `--disc` names.
-3. Draw every file's density grid, local maxima and numbered peaks in one figure, `local_maxima.png`, and print each population's event count, share and median of the two scatter channels.
-4. Pick populations file by file from those peaks, at a prompt or with `--pops`, then draw every file's populations in `gates.png`. The kept events are the union of the picked populations, so an event in two of them counts once. A file left out, or with fewer than 2 kept events, isn't clustered.
-5. Take the fluorescence channels: `--channels`, or by default every channel of the first file whose name ends in `-A` and doesn't start with FSC or SSC. Transform them as `arcsinh(x / cofactor)`, with `--cofactor` 6000 by default. A cofactor of 0 leaves them linear.
-6. Make data nuggets of each file's kept events separately: `create_dn` with `dn_num2` set to `--dn-num2` (1000 by default) or the number of kept events if that is smaller, and every other argument at its default. There is no refine step.
-7. Pool every file's nugget centers and weights, drop nuggets with weight 0, and build one weighted Ward tree with `whclust`.
-8. Cut the tree at `--k` clusters, 8 by default, or at the number of nuggets with weight above 0 if that is smaller.
-9. Give each kept event its nugget's cluster, and write per-file nuggets and events, per-file cluster counts, each cluster's weighted mean in the transformed units, and figures of the tree, a weighted PCA of the nuggets and the cluster centers.
-
-[cli.md](cli.md) gives every flag, the prompt's grammar, the output files and the conditions on which the command stops.
+`datanuggets-flow` (`src/datanuggets/flow/pick.py`) reads each FCS file with flowio, as stored and uncompensated, gates it with the finder above, and asks which populations to keep, file by file. It makes nuggets of each file's kept events, transformed as `arcsinh(x / cofactor)`, with `create_dn`, pools them into one weighted Ward tree, and cuts it at `--k` clusters. The command does the printing and asking, around `gate_stage` and `cluster_stage` in `datanuggets.flow.pipeline`, and [cli.md](cli.md#what-a-run-does) lists the steps in order, with every flag, the prompt's grammar, the output files and the conditions on which the command stops.
 
 ### Design choices in the pipeline
 
@@ -131,11 +145,19 @@ These choices come from the code. Nothing in the repository measures how they af
 - The transform and the cluster count. arcsinh is close to linear for values well below the cofactor and close to logarithmic above it. No test or recorded result in the repository supports a particular cofactor or k.
 - Uncompensated events. They are clustered as the file stores them, and a file with a real spillover matrix gets only a warning. The code's reason is that spectral files are unmixed already.
 
-`create_dn` runs here with its default integer seed, which draws from NumPy. The shuffle is the only random step in the pipeline, so the same files and settings give the same nuggets in the same environment, but not the nuggets R would give.
+`create_dn` runs here with `--seed`, its own default integer seed 291102 unless one is given, which draws from NumPy. Its shuffle is the only random step before the clustering, so the same files and settings give the same nuggets in the same environment, but not the nuggets R would give. `--jobs` doesn't change them: `create_dn` shuffles the rows once before it splits them into chunks, and joins the chunks' centers in chunk order however many threads reduce them.
+
+### Staged runs
+
+A `--gates-only` run saves each file's populations as masks, one bit per event and population, in `gates.npz`, beside the grid, local maxima and peaks its figures were drawn from. A `--from-gates` run takes the kept events from those masks and doesn't run the finder again, so the populations it clusters are the ones the figures show. The masks pick events by their row in the file, so the run first checks each file's size and SHA-256 against the record, and its event count and channels when it reads the file again. For the same files, settings and populations, the two stages write the one-shot run's tables byte for byte. `tests/flow/test_flow_stages.py` checks that on one and three files of the fixtures, and `tests/flow/test_flow_fcs_integration.py` on an FCS file.
+
+### The t-SNE figure
+
+`clusters_tsne.png` places the nugget centers in two dimensions with scikit-learn's `TSNE`. It draws the clusters and plays no part in making them. `_defaults.TSNE_ARGS` pins the arguments that shape the picture, `n_components=2`, `init="pca"`, `learning_rate="auto"` and `max_iter=1000`, so a change of scikit-learn's defaults can't move it through them. The perplexity, 30 by default, and the seed, 0 by default, come from `--tsne-perplexity` and `--tsne-seed`. For n nuggets the perplexity is lowered to (n − 1) / 3 when that is smaller, since scikit-learn needs it below n. The other arguments are scikit-learn's defaults. With `--no-tsne` the figure is left out and scikit-learn isn't imported.
 
 ### The clustering step from Python
 
-The steps after gating can be run without the command line. With `files` a list holding each file's kept, transformed events as arrays of one row per event, this is what steps 6 to 8 do:
+The steps after gating can be run without the command line. With `files` a list holding each file's kept, transformed events as arrays of one row per event, this is what steps 5 and 6 of [a run](cli.md#what-a-run-does) do:
 
 ```python
 import numpy as np
@@ -233,6 +255,8 @@ The suite compares with three fixtures recorded from the reference code on files
 | `--disc his`, `datanuggets.flow.mirrored_area` | `tests/flow/test_flow_area.py` checks it gives the reference code's recorded cells on all three fixtures, and `test_flow_gate.py` that the finder takes it as `area=` |
 | `datanuggets-flow`'s argument and population parsing, the union of picks, the file listing, the prompt | unit tests in `tests/flow/test_flow_pick.py` |
 | `datanuggets-flow`'s transform, per-file nuggets, pooling, Ward and `k` | design choices. `test_flow_pick.py` runs the command end to end on 50,000 real events of `202.fcs` from the fixtures, not on an FCS file, and pins its tables' digests, which catches a change in the output but doesn't show the clusters are right. No result in the repository validates the clusters |
+| The finder's parameters, the flow settings' checks | `tests/flow/test_flow_settings.py` pins every constant in the tables above and every default, and checks each refusal |
+| Staged runs, `gates.json` and `run.json` | `tests/flow/test_flow_state.py` saves and loads gate folders and refuses each damaged one. `test_flow_stages.py` checks that the two stages give the one-shot run's table digests |
 | The paper's claims about structure preservation | not tested here |
 
 The clustering steps of `datanuggets-flow` call `create_dn`, `whclust`, `cut_tree` and `wmean`, which are the R-checked functions above. What isn't checked is the pipeline that composes them.

@@ -96,6 +96,8 @@ Before publication, use the [source install](https://github.com/ron2k1/datanugge
 
 Figures and tables go into a new `outputs/flow-<timestamp>/` folder for each run. Run from the repository root to keep them together there; `outputs/` is ignored by Git. You can choose another new folder with `--out`; existing paths are refused.
 
+A run can also be split in two. `--gates-only` gates the files and saves the gates in a folder, and `--from-gates` chooses populations from that folder and clusters, as often as needed, without gating again. The [staged runs](https://github.com/ron2k1/datanuggets/blob/main/docs/cli.md#staged-runs) section covers both.
+
 Inspect the gates, choose at least two fluorescence channels, and check your compensation and preprocessing: the tool does not apply compensation. See the [FCS guide](https://github.com/ron2k1/datanuggets/blob/main/docs/cli.md#fcs-pipeline) before using it on a study.
 
 ## Know the limits
