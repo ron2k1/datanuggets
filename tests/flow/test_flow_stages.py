@@ -1,15 +1,18 @@
 """datanuggets-flow in two stages: --gates-only gates the files into a gate folder and stops, and
---from-gates asks over that folder's figures and clusters. The two give the one-shot run's tables,
-the second checks everything before it asks and makes its folder only after, never writes into the
-gate folder, and each mode refuses the flags it can't use before anything is read or made. The FCS
-files are empty stand-ins, read as 202 by a patched read_fcs."""
+--from-gates asks over that folder's figures and clusters. The two give the one-shot run's tables.
+The second clusters the saved masks without gating again, checks everything before it asks, makes
+its folder only after, and never writes into the gate folder. Each mode refuses the flags it can't
+use before anything is read or made. The FCS files are empty stand-ins, read as 202 by a patched
+read_fcs."""
 
+import csv
 import json
 import sys
 
+import numpy as np
 import pytest
 
-from datanuggets.flow import pick, pipeline, state
+from datanuggets.flow import gate, pick, pipeline, state
 from datanuggets.flow.pick import main
 from flowcases import COLUMNS, DIGESTS, DIGESTS_3, FIGURES, digest, read_202
 
@@ -77,6 +80,42 @@ def test_staged_three_file_run_reproduces_the_three_file_tables(tmp_path, staged
     tables = sorted(DIGESTS_3)
     assert sorted(p.name for p in out.iterdir()) == sorted([*tables, *FIGURES, "run.json"])
     assert {name: digest(out / name) for name in tables} == DIGESTS_3
+
+
+# --from-gates on the gate folder's file, with what the tests of the stored masks don't need off
+CLUSTER = ["--pops", "1", "--no-show", "--dn-num2", "50", "--k", "3", "--no-tsne"]
+
+
+def test_from_gates_never_runs_the_finder(tmp_path, monkeypatch, staged):
+    """The masks in the gate folder are the gates, so the clustering stage never gates again: a
+    finder that changed since would otherwise cluster populations other than the ones chosen."""
+    gates, out = _gates_only(tmp_path), tmp_path / "out"
+    monkeypatch.setattr(gate, "f_plot", lambda *args, **kwargs: pytest.fail("gated again"))
+    monkeypatch.setattr(pipeline, "gate_peaks", lambda *args, **kwargs: pytest.fail("gated again"))
+    main(["--from-gates", str(gates), "--out", str(out), *CLUSTER])
+    assert (out / "run.json").is_file()
+
+
+def test_from_gates_keeps_the_events_its_saved_masks_choose(tmp_path, staged):
+    """The saved masks choose the events by row: with Pop 1 cut to its first 500 events in
+    gates.npz, those are the events kept and clustered, where gating again would keep them all."""
+    gates, out = _gates_only(tmp_path), tmp_path / "out"
+    (entry,) = json.loads((gates / "gates.json").read_text(encoding="utf-8"))["files"]
+    with np.load(gates / "gates.npz") as saved:
+        arrays = dict(saved)
+    masks = np.unpackbits(arrays["masks_1"], axis=0, count=entry["n_events"]).astype(bool)
+    rows = np.flatnonzero(masks[:, 0])[:500]
+    assert masks[:, 0].sum() > len(rows) == 500
+    masks[:, 0] = False
+    masks[rows, 0] = True
+    arrays["masks_1"] = np.packbits(masks, axis=0)
+    np.savez(gates / "gates.npz", **arrays)
+    main(["--from-gates", str(gates), "--out", str(out), *CLUSTER])
+    with open(out / "selection.csv", newline="") as f:
+        (selected,) = csv.DictReader(f)
+    assert (selected["events"], selected["kept"]) == (str(entry["n_events"]), "500")
+    with open(out / "events_1.csv", newline="") as f:
+        assert [int(row["event0"]) for row in csv.DictReader(f)] == rows.tolist()
 
 
 def test_from_gates_asks_after_both_figures_and_before_the_run_folder(

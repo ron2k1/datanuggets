@@ -75,6 +75,13 @@ def _gated_202():
     return gate_files([Path("202.fcs")], GateSettings(), read=read_202)
 
 
+def _read_202_by_height(path):
+    """202.fcs with its scatter channels named FSC-H and SSC-H: the same events, under names the
+    default settings don't gate on."""
+    events, pnn, pns = read_202(path)
+    return events, ["FSC-H", "SSC-H", *pnn[2:]], pns
+
+
 def test_cluster_nuggets_needs_three_occupied_nuggets():
     with np.load(FLOW / "202_fluor.npz") as data:
         x = data["fluor"][:2, :2].astype(float)
@@ -249,6 +256,30 @@ def test_gate_stage_checks_its_settings_and_files_before_any_read(
         assert (e.value.param, str(e.value)) == (param, message)
     assert seen == []
     assert list(tmp_path.iterdir()) == []
+
+
+def test_gate_files_gates_on_the_scatter_channels_it_is_given():
+    """--fsc and --ssc choose the channels the finder gates on and the table names: the same events
+    under other names give the same masks and the same lines, with those names in them."""
+    (want,) = _gated_202()
+    settings = GateSettings(fsc="FSC-H", ssc="SSC-H")
+    (got,) = gate_files([Path("202.fcs")], settings, read=_read_202_by_height)
+    assert np.array_equal(got["masks"], want["masks"])
+    named = [line.replace("FSC-A", "FSC-H").replace("SSC-A", "SSC-H") for line in want["table"]]
+    assert got["table"] == named
+    assert all("median FSC-H" in line and ", SSC-H " in line for line in got["table"])
+
+
+@pytest.mark.parametrize(
+    ("settings", "param", "channel"),
+    [(GateSettings(), "fsc", "FSC-A"), (GateSettings(fsc="FSC-H"), "ssc", "SSC-A")],
+)
+def test_gate_files_refuses_a_file_without_a_scatter_channel(settings, param, channel):
+    pnn = _read_202_by_height(None)[1]
+    with pytest.raises(FlowError) as e:
+        gate_files([Path("202.fcs")], settings, read=_read_202_by_height)
+    assert e.value.param == param
+    assert str(e.value) == f"202.fcs has no channel {channel}; its channels: {', '.join(pnn)}"
 
 
 @pytest.mark.parametrize(
