@@ -29,6 +29,7 @@ FINDER = {"n_row": 11, "n_col": 11, "t11": 22, "t21": 0.25, "t12": 20, "t22": 0.
 TAKES = {
     "lymphmacro_finder": tuple(FINDER),
     "finder_peaks": ("n_row", "n_col"),
+    "gate_peaks": tuple(FINDER),
     "local_maxima": ("n_row", "n_col"),
 }
 

@@ -5,7 +5,16 @@ import numpy as np
 import pytest
 from scipy.spatial import ConvexHull, Delaunay
 
-from datanuggets.flow import finder_peaks, hull_gate, lymphmacro_finder
+from datanuggets.flow import (
+    FinderPeaks,
+    f_plot,
+    find_area,
+    finder_peaks,
+    gate,
+    gate_peaks,
+    hull_gate,
+    lymphmacro_finder,
+)
 from datanuggets.flow import mirrored_area as flow_mirrored_area
 from datanuggets.flow.gate import _finder, bin_mask
 from flowcases import NAMES, FlowCase, assert_gate_close, load_case, mirrored_area
@@ -180,3 +189,23 @@ def test_finder_peaks_maps_the_grid_back_to_raw_units(name):
     assert fp.fsc.shape == (nc,) and fp.ssc.shape == (nr,)
     assert fp.fsc[0] == pytest.approx(c.fsc.min()) and fp.fsc[-1] == pytest.approx(c.fsc.max())
     assert fp.ssc[0] == pytest.approx(c.ssc.min()) and fp.ssc[-1] == pytest.approx(c.ssc.max())
+
+
+@pytest.mark.parametrize("area", [find_area, flow_mirrored_area], ids=["peak", "his"])
+@pytest.mark.parametrize("name", NAMES)
+def test_gate_peaks_gives_the_finders_masks_and_peaks_in_one_pass(monkeypatch, name, area):
+    c = load_case(name)
+    want_masks = lymphmacro_finder(c.fsc, c.ssc, t11=20, area=area)
+    want_peaks = finder_peaks(c.fsc, c.ssc)
+    grids = []
+
+    def counted(*args, **kwargs):
+        grids.append(kwargs)
+        return f_plot(*args, **kwargs)
+
+    monkeypatch.setattr(gate, "f_plot", counted)
+    masks, fp = gate_peaks(c.fsc, c.ssc, t11=20, area=area)
+    assert len(grids) == 1
+    assert np.array_equal(masks, want_masks)
+    for field in FinderPeaks._fields:
+        assert np.array_equal(getattr(fp, field), getattr(want_peaks, field)), field

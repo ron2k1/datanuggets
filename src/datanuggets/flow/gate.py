@@ -111,7 +111,38 @@ def lymphmacro_finder(
 
 
 def _finder(fsc_a, ssc_a, n_row, n_col, t11, t21, t12, t22, area) -> np.ndarray:
-    fsc_a, ssc_a, grid, x, _, peaks = _grid_peaks(fsc_a, ssc_a, n_row, n_col)
+    return _masks(_grid_peaks(fsc_a, ssc_a, n_row, n_col), t11, t21, t12, t22, area)
+
+
+def finder_peaks(fsc_a, ssc_a, *, n_row=FINDER_N_ROW, n_col=FINDER_N_COL) -> FinderPeaks:
+    """The density grid lymphmacro_finder gates on, its local maxima and the peaks it keeps, for
+    drawing with plot.peaks. n_row and n_col are the finder's focal window."""
+    return _view(_grid_peaks(fsc_a, ssc_a, n_row, n_col))
+
+
+def gate_peaks(
+    fsc_a,
+    ssc_a,
+    *,
+    n_row=FINDER_N_ROW,
+    n_col=FINDER_N_COL,
+    t11=FINDER_T11,
+    t21=FINDER_T21,
+    t12=FINDER_T12,
+    t22=FINDER_T22,
+    area=find_area,
+) -> tuple[np.ndarray, FinderPeaks]:
+    """lymphmacro_finder's masks and finder_peaks' view of the file, from one density grid. A file
+    that is gated and drawn needs both, and each finds the same grid, local maxima and peaks, so
+    this finds them once. It takes lymphmacro_finder's arguments."""
+    found = _grid_peaks(fsc_a, ssc_a, n_row, n_col)
+    return _masks(found, t11, t21, t12, t22, area), _view(found)
+
+
+def _masks(found, t11, t21, t12, t22, area) -> np.ndarray:
+    """One column per peak of _grid_peaks' result: the events of the area grown from it, with t11
+    and t21 for the first peak and t12 and t22 for the others."""
+    fsc_a, ssc_a, grid, x, _, peaks = found
     masks = np.zeros((len(fsc_a), len(peaks)), dtype=bool)
     for k, (i, j) in enumerate(peaks):
         t1, t2 = (t11, t21) if k == 0 else (t12, t22)
@@ -119,10 +150,9 @@ def _finder(fsc_a, ssc_a, n_row, n_col, t11, t21, t12, t22, area) -> np.ndarray:
     return masks
 
 
-def finder_peaks(fsc_a, ssc_a, *, n_row=FINDER_N_ROW, n_col=FINDER_N_COL) -> FinderPeaks:
-    """The density grid lymphmacro_finder gates on, its local maxima and the peaks it keeps, for
-    drawing with plot.peaks. n_row and n_col are the finder's focal window."""
-    fsc_a, ssc_a, grid, x, candidates, peaks = _grid_peaks(fsc_a, ssc_a, n_row, n_col)
+def _view(found) -> FinderPeaks:
+    """_grid_peaks' result as FinderPeaks, the grid's positions in raw channel units."""
+    fsc_a, ssc_a, grid, x, candidates, peaks = found
     shift = min(ssc_a.min(), fsc_a.min()) - SQRT_SHIFT  # sqrt_coords' shift, undone
     return FinderPeaks(x, candidates, peaks, grid.y**2 + shift, grid.x**2 + shift)
 
