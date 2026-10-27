@@ -2,9 +2,6 @@
 
 from importlib.metadata import version as _version
 
-# The old module paths stay bound as attributes of the package, as they were when this file
-# imported them directly, so `import datanuggets; datanuggets.create.create_dn` still works.
-from datanuggets import _draws, centers, complexity, create, means, refine  # noqa: F401
 from datanuggets.exceptions import DataNuggetWarning
 from datanuggets.nuggets import (
     arithmetic_complexity,

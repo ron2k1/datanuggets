@@ -4,10 +4,10 @@ from fractions import Fraction
 import numpy as np
 import pytest
 
-from datanuggets._compat import arithmetic
-from datanuggets._compat.arithmetic import _r_mean_py, r_mean
+from datanuggets._compat.arithmetic import r_mean
 from datanuggets._compat.indexing import split_indices
 from rfixtures import fixture_data, hex_bits, load_group, same_bits
+from rmean_reference import _r_mean_py
 
 
 def test_split_indices_matches_r():
@@ -58,15 +58,6 @@ def test_r_mean_matches_the_replay_on_every_fixture_matrix(key):
     x = DATA[key][0]
     for axis in (0, 1):
         assert same_bits(r_mean(x, axis), _r_mean_py(x, axis)), axis
-
-
-def test_r_mean_uses_the_compiled_path_for_finite_lines(monkeypatch):
-    def replay(v):
-        raise AssertionError("r_mean fell back to the Python replay")
-
-    monkeypatch.setattr(arithmetic, "_ldouble_mean", replay)
-    x = DATA[BIGGEST][0]
-    assert r_mean(x, 0).shape == (x.shape[1],)
 
 
 EDGE_LINES = [

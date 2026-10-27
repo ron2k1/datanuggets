@@ -5,8 +5,9 @@ import pytest
 from numba.core.registry import CPUDispatcher
 
 from datanuggets._clustering import kmnsjit
-from datanuggets._clustering.hartigan_wong import KMeansError, _kmns_py, kmeans, kmns
+from datanuggets._clustering.hartigan_wong import KMeansError, kmeans, kmns
 from datanuggets._random.replay import ReplayDraws
+from kmns_reference import _kmns_py
 from rfixtures import load_group, same_bits
 
 KMNS = load_group("kmns")

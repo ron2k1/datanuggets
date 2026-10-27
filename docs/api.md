@@ -30,15 +30,7 @@ The 18 core functions are exported from `datanuggets`. Eight flow helpers live i
 
 The entries below follow the familiar Description, Usage, Arguments, Details, Value, Examples, and See also structure. Python names use `snake_case`, and Python row labels and indices start at zero.
 
-| Python | R counterpart |
-| --- | --- |
-| `create_dn`, `create_dn_centers` | `create.DN`, `create.DNcenters` |
-| `refine_dn`, `get_dn_means`, `arithmetic_complexity` | `refine.DN`, `getDN.means`, `AC` |
-| `wmean`, `wss`, `wwcss`, `distw` | `wmean`, `wss`, `wwcss`, `distw` |
-| `wkmeans`, `whclust`, `wpca` | `Wkmeans`, `Whclust`, `Wpca` |
-| `cluster_predict` | `cluster.predict` |
-| `dn_wkmeans`, `dn_whclust`, `dn_wpca`, `dn_cluster_predict` | `DN.Wkmeans`, `DN.Whclust`, `DN.Wpca`, `DNcluster.predict` |
-| `cut_tree` | Python helper for cutting a hierarchy, serving the role of `stats::cutree` |
+The [ported-function table](compatibility.md#ported-functions) pairs each Python function with its R counterpart and the R package it comes from.
 
 **`optimal.DN` is not ported.** Flow helpers and Python plotting helpers are additional APIs, not direct translations of every R plotting method.
 

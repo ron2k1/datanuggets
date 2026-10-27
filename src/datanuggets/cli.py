@@ -411,7 +411,3 @@ def main(argv=None) -> None:
         raise SystemExit(f"datanuggets: {exc}") from None
     except KeyboardInterrupt:
         raise SystemExit("datanuggets: interrupted") from None
-
-
-if __name__ == "__main__":
-    main()

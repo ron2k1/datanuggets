@@ -27,7 +27,7 @@ Data nuggets reduce the N rows to M groups, each described by a center, a weight
 
 Deletion removes points from dense regions first, since their nearest neighbours are closest. Points in the sparse tails survive as centers, often with weight 1. A nugget with fewer than 2 rows gets the smallest scale among the nuggets with 2 or more rows, divided by 100, as R does. The paper sets that scale to 0. An empty nugget keeps its second-stage center and weight 0.
 
-The second stage builds a `dn_num1` by `dn_num1` distance matrix, 800 MB of float64 at the default 10,000, whatever the row count. `arithmetic_complexity`, the port of R's `AC`, reports the arithmetic cost of a `create_dn` call on a log10 scale from the data's shape alone. The paper's appendix derives the cost of the algorithm.
+The second stage builds a square distance matrix over the pooled first-stage centers. There are usually `dn_num1` of them, which makes 800 MB of float64 at the default 10,000. Smaller inputs pool fewer, since no chunk gives more centers than it has rows. When `ceiling(n / r)` is above `dn_num1`, every chunk still gives one center, so the pool is the number of chunks. A pool of `dn_num2` or fewer centers passes through whole, with a warning and no matrix. `arithmetic_complexity`, the port of R's `AC`, reports the arithmetic cost of a `create_dn` call on a log10 scale from the data's shape alone. The paper's appendix derives the cost of the algorithm.
 
 ### Refining nuggets
 
@@ -97,7 +97,7 @@ The result has one row per event and one column per population, in peak order. A
 
 ### The disc: `--disc his` and `--disc peak`
 
-Whether the disc should sit on the peak or where Cabrera's code puts it is an open ruling ([limitations.md](limitations.md#open-problems), problem 10). The library and the command line take different sides of it for now:
+Whether the disc should sit on the peak or where Cabrera's code puts it is an open ruling, listed among the [open problems](limitations.md#open-problems). The library and the command line take different sides of it for now:
 
 - `lymphmacro_finder` uses the corrected `find_area`, with the disc on the peak, unless it's given `area=mirrored_area`.
 - `datanuggets-flow` defaults to `--disc his`, which gates with `datanuggets.flow.mirrored_area`, a copy of `cfc.py`'s `find_area`, so the populations and their numbers are the ones `cfc.py`'s figures show. `--disc peak` uses the corrected `find_area`.
@@ -206,7 +206,7 @@ Tolerances appear only where LAPACK or the platform's `log10` is involved. `refi
 
 The tests feed R's recorded draws back through `ReplayDraws`, which raises if the port asks for a draw R didn't make, asks with different arguments, or leaves one unread. So the order of the random calls is checked as well as the numbers. `RDraws` reproduces R's `set.seed` and `sample.int` on 27 recorded cases, and `refine_dn` with `RDraws` returns R's nuggets on all 128 recorded cases.
 
-The compiled kernels are checked against plain-Python references kept in the package, on fuzzed inputs built for ties, overflow and subnormals. The references of `whclust` and `wkmeans` follow R's code statement by statement and count R's quirks, and a case named for a quirk was recorded only after a counting copy of R's function showed the case reaches it. On the first 10 columns of UCI Covertype at 10,000, 100,000 and 581,012 rows, run on the laptop (i7-13650HX, Windows 11) with one thread and R's random draws replayed, `create_dn` and `refine_dn` matched R's assignments, weights, centers, scales, progress messages and warnings exactly in every run ([reproducibility.md](reproducibility.md#covertype-create_dn-and-refine_dn-against-r)).
+The compiled kernels are checked against plain-Python references on fuzzed inputs built for ties, overflow and subnormals. They're kept under `tests/`, or in the package where the runtime also uses them. The references of `whclust` and `wkmeans` follow R's code statement by statement and count R's quirks, and a case named for a quirk was recorded only after a counting copy of R's function showed the case reaches it. On the first 10 columns of UCI Covertype at 10,000, 100,000 and 581,012 rows, run on the laptop (i7-13650HX, Windows 11) with one thread and R's random draws replayed, `create_dn` and `refine_dn` matched R's assignments, weights, centers, scales, progress messages and warnings exactly in every run ([reproducibility.md](reproducibility.md#covertype-create_dn-and-refine_dn-against-r)).
 
 These results hold for one reference environment. The port doesn't use the host's long double, so it gives the x86-64 results on arm64 macOS too, where the same tests pass. An R built with another BLAS, or R on arm64 macOS, can round differently, and on tied data that can move rows between nuggets ([limitations.md](limitations.md)).
 

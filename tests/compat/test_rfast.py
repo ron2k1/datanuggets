@@ -4,15 +4,8 @@ from numba.core.registry import CPUDispatcher
 
 from datanuggets._compat import rfastjit
 from datanuggets._compat._compiled import frozen
-from datanuggets._compat.rfast import (
-    _cross_distances_py,
-    arma_sum_last,
-    cross_distances,
-    dist_matrix,
-    gnu_sort_first,
-    gnu_sort_order,
-    nearest_index,
-)
+from datanuggets._compat.rfast import cross_distances, dist_matrix, gnu_sort_first, nearest_index
+from rfast_reference import _cross_distances_py, arma_sum_last, gnu_sort_order
 from rfixtures import load_group, same_bits
 
 DIST = load_group("rcompat_dist")

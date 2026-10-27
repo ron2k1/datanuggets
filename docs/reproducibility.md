@@ -140,7 +140,7 @@ Every R result the tests compare with comes from R itself. A few were checked by
 | `wstats`, `wstats_constructed` | `fixtures_wstats.R` | 49, 17 | the five `WCluster` statistics on real data, and on built ties, heavy weights and overflowing rows |
 | `wpca` | `fixtures_wpca.R` | 29 | `Wpca`'s outputs and the locals it hands to `eigen()` |
 | `rsample` | `fixtures_rsample.R` | 27 | `set.seed` and `sample.int`, with and without `replace = TRUE`, with `.Random.seed` before and after |
-| `compat` | `fixtures_compat.R` | 46 | the evidence behind the R-compatibility decisions: labels, logical and vector data, predictions with no answer, `corr` values, `nstart` and fractional nugget counts |
+| `compat` | `fixtures_compat.R` | 46 | the evidence behind the R-compatibility decisions: labels, logical and vector data, predictions with no answer, `corr` values, `nstart`, fractional nugget counts, the one-column `"random"` case of `create.DN`, and the names and column types of `create.DN`'s and `refine.DN`'s results |
 | `whclust` | `fixtures_whclust.R` | 14 | `Whclust`'s `merge`, `height` and `order` or R's message where it stops, and how often each quirk fired in a copy of `Whclust` with counters |
 | `wkmeans` | `fixtures_wkmeans.R` | 15 | `Wkmeans`' every draw, each start's labels from `init`, each start's refined labels and WWCSS, the "Iteration" messages R prints, the outputs or R's message, and the quirk counts |
 | `wkmeans_args` | `fixtures_wkmeans.R` | 1 | 28 `Wkmeans` runs on arguments R stops on, with R's message, or its labels where it returns |
@@ -319,7 +319,7 @@ uv run python benchmarks/flow/compare.py --metadata <folder>/study_metadata.xlsx
 
 It stops with a usage error if it gets both `target` and `--metadata` or `--dir`, or neither a `target` nor both of them, a `--repeat` below 1, or a number of thresholds that isn't one per file. `--t0` and `--t00` pair with the files in the order they run, so with `--metadata` they follow the workbook's rows. The reference script itself pairs its thresholds with the samples in FlowKit's `$FIL` order instead, which [methodology.md](methodology.md) explains.
 
-On Windows, `.\benchmarks\flow\compare.ps1` takes the same arguments, `--metadata` and an unquoted `22,20,18,18` included. It runs `compare.py` in the repo's `.venv`, writes to `tmp\flow`, refuses `--out`, and opens the picture the run wrote. `-Mini` runs it on the Mac mini over SSH and copies the pictures and CSV files back to `tmp\flow\mini`; it depends on the maintainer's SSH setup for that machine.
+On Windows, `.\benchmarks\flow\compare.ps1` takes the same arguments, `--metadata` and an unquoted `22,20,18,18` included. It runs `compare.py` in the repo's `.venv`, writes to `tmp\flow`, refuses `--out`, and opens the picture the run wrote.
 
 ```powershell
 .\benchmarks\flow\compare.ps1 --metadata <folder>/study_metadata.xlsx --dir <folder> --t0 22,20,18,18 --t00 0.25,0.5,0.5,0.5

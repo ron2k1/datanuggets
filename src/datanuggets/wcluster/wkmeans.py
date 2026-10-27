@@ -1,11 +1,12 @@
 """WCluster's Wkmeans: weighted k-means with R's random starts, Lloyd steps and single-point
 moves, bit for bit.
 
-wkmeans draws each start's labels here and refines them in the compiled wkmeansjit.
-_wkmeans_py is R's Wkmeans, Wkmeans_single and init statement for statement on the Python
-primitives, the reference the tests hold the compiled path to. R's quirks are kept: the table
-of cluster sizes is refreshed only when a move is taken and is read by position, the Lloyd step
-renumbers the labels left, and a move can empty a label or fill an empty one.
+wkmeans draws each start's labels here and refines them in the compiled wkmeansjit. The tests
+hold the compiled path to _wkmeans_py in tests/wcluster/wkmeans_reference.py, R's Wkmeans and
+Wkmeans_single statement for statement on the Python primitives, with this module's init. R's
+quirks are kept: the table of cluster sizes is refreshed only when a move is taken and is read
+by position, the Lloyd step renumbers the labels left, and a move can empty a label or fill an
+empty one.
 """
 
 from __future__ import annotations
@@ -18,12 +19,12 @@ import numpy as np
 from joblib import Parallel, delayed
 
 from datanuggets._compat._compiled import frozen
+from datanuggets._defaults import SEED
 from datanuggets._random.replay import ReplayMismatch
 from datanuggets._random.seeds import as_draws
 from datanuggets._validate import as_matrix, as_weights, check_n_jobs
 from datanuggets.result import WkmeansResult
 from datanuggets.wcluster import wkmeansjit, wstatsjit
-from datanuggets.wcluster.predict import _wdist_mat
 from datanuggets.wcluster.wstats import wmean, wwcss
 
 log = logging.getLogger("datanuggets")
@@ -41,7 +42,8 @@ _USER_EMPTY = (
     "For the initialization, no data assigned to one(or multiple) of the clusters based on the "
     "weighted\n         distance to the initial cluster centers chosen by users."
 )
-# Where Wkmeans_single stops: R's message, and why. The reference and the kernel share these.
+# Where Wkmeans_single stops: R's message, and why. The kernel and the reference in
+# tests/wcluster/wkmeans_reference.py share these.
 _NAN_STOP = (_MISSING, "a WWCSS is NaN, which a cluster whose weights sum to zero gives")
 _TB_STOP = (_MISSING, "R's stale table of cluster sizes is shorter than the label")
 _DEAD_SOME_STOP = (_LIST, "a row's distances to every center are NaN")
@@ -53,7 +55,6 @@ _STATUS = {
     wkmeansjit.DEAD_ALL: _DEAD_ALL_STOP,
 }
 MAX_STARTS = 10_000  # init draws this many starts before saying R would never stop
-QUIRKS = ("redraw", "revert", "fixed", "stale_decides", "recreate", "gap", "tb_na", "nan_test")
 
 
 def _r_stop(message: str, why: str) -> ValueError:
@@ -78,7 +79,7 @@ def _prepare(x, k, w, centers, num_init, max_iter):
     start finishes, in the order R reaches them, then the inputs on which R would draw starts
     forever. Returns float64 x and w, int k and num_init, centers as a (k, p) float64 array or
     None, and max_iter, an int unless it's the NaN or infinity R's 1:K stops on once the first
-    start's init is done, which _single_py and refine raise."""
+    start's init is done, which refine and the test reference's _single_py raise."""
     _numeric("k", k)
     x = as_matrix(x, logical=True, vector=True)
     n, p = x.shape
@@ -175,100 +176,12 @@ def _init(n, k, centers, draws, assign, wmean_of, counts=None) -> np.ndarray:
     )
 
 
-def _which_min_rows(z: np.ndarray) -> np.ndarray:
-    """apply(z, 1, which.min), 1-based, 0 for a row of NaN."""
-    out = np.zeros(z.shape[0], np.int64)
-    for i, r in enumerate(z):
-        live = np.flatnonzero(~np.isnan(r))
-        if live.size:
-            out[i] = live[np.argmin(r[live])] + 1
-    return out
-
-
-def _table(y: np.ndarray) -> np.ndarray:
-    """table(y): the count of each label present, in label order. R reads it by position."""
-    return np.unique(y, return_counts=True)[1]
-
-
 def _test(a: float, b: float, counts=None) -> None:
     """R's if (a > b) or if (a <= b), which stops on NaN."""
     if math.isnan(a) or math.isnan(b):
         if counts is not None:
             counts["nan_test"] += 1
         raise _r_stop(*_NAN_STOP)
-
-
-def _lloyd_labels(yy: np.ndarray) -> np.ndarray:
-    """R's stop when apply(z, 1, which.min) leaves a row without a label: wwcss gets a list,
-    or integer(0) when no row has one."""
-    if (yy == 0).all():
-        raise _r_stop(*_DEAD_ALL_STOP)
-    if (yy == 0).any():
-        raise _r_stop(*_DEAD_SOME_STOP)
-    return yy
-
-
-def _single_py(x, w, y, K, counts=None):
-    """WCluster's Wkmeans_single from init's labels y, statement for statement. Returns R's
-    (uu0, yy) and the passes R made, one "Iteration l" message each. counts gains revert, fixed
-    (a Lloyd step that changed nothing before step 20, the kernel's shortcut), stale_decides,
-    recreate, tb_na, nan_test and gap."""
-    n = x.shape[0]
-    k = int(y.max())
-    tb = _table(y)
-    yy = y.copy()
-    yy0 = yy
-    uu0 = math.nan
-    passes = 0
-    _r_seq("max_iter", K)
-    for _ in range(K):
-        passes += 1
-        uu0 = uu00 = wwcss(x, yy, w)
-        for ll in range(20):
-            yy0 = yy
-            yy = _lloyd_labels(_which_min_rows(_wdist_mat(x, wmean(x, yy0, w), w)))
-            uu0 = wwcss(x, yy, w)
-            _test(uu0, uu00, counts)
-            if uu0 > uu00:
-                if counts is not None:
-                    counts["revert"] += 1
-                yy = yy0
-            else:
-                if counts is not None and ll < 19 and np.array_equal(yy, yy0):
-                    counts["fixed"] += 1
-                uu00 = uu0
-        uu0 = uu00 = wwcss(x, yy, w)
-        for i in range(n):
-            for j in range(1, k + 1):
-                a = int(yy[i])
-                if a == j:  # R's FALSE & NA is FALSE, so tb isn't read
-                    continue
-                if a > tb.size:
-                    if counts is not None:
-                        counts["tb_na"] += 1
-                    raise _r_stop(*_TB_STOP)
-                if counts is not None and (tb[a - 1] > 1) != (np.count_nonzero(yy == a) > 1):
-                    counts["stale_decides"] += 1
-                if tb[a - 1] > 1:
-                    y2 = yy.copy()
-                    y2[i] = j
-                    uu1 = wwcss(x, y2, w)
-                    _test(uu1, uu0, counts)
-                    if uu1 <= uu0:
-                        if counts is not None and not (yy == j).any():
-                            counts["recreate"] += 1
-                        uu0 = uu1
-                        yy = y2
-                        tb = _table(yy)
-        if np.array_equal(yy0, yy):
-            break
-    if counts is not None and np.unique(yy).size < yy.max():
-        counts["gap"] += 1
-    return uu0, yy, passes
-
-
-def _counts() -> dict:
-    return dict.fromkeys(QUIRKS, 0)
 
 
 def _result(x, w, labels) -> WkmeansResult:
@@ -281,37 +194,8 @@ def _result(x, w, labels) -> WkmeansResult:
     )
 
 
-def _wkmeans_py(
-    x, k, *, w=None, centers=None, num_init=1, max_iter=10, seed=291102, counts=None, trace=None
-):
-    """WCluster's Wkmeans on the Python primitives, the test reference. trace, a list, gets
-    (start labels, wwcss, labels, passes) for each start that finishes."""
-    x, w, k, centers, num_init, max_iter = _prepare(x, k, w, centers, num_init, max_iter)
-    draws = as_draws(seed)
-
-    def assign(c):
-        return _which_min_rows(_wdist_mat(x, c, w))
-
-    def wmean_of(y):
-        return wmean(x, y, w)
-
-    best = None
-    for _ in range(num_init):
-        start = _init(x.shape[0], k, centers, draws, assign, wmean_of, counts)
-        u, labels, passes = _single_py(x, w, start, max_iter, counts)
-        if trace is not None:
-            trace.append((start, u, labels, passes))
-        if best is None:
-            best = (u, labels)
-        else:
-            _test(best[0], u)
-            if best[0] > u:
-                best = (u, labels)
-    return _result(x, w, best[1])
-
-
 def wkmeans(
-    x, k, *, w=None, centers=None, num_init=1, max_iter=10, seed=291102, n_jobs=1
+    x, k, *, w=None, centers=None, num_init=1, max_iter=10, seed=SEED, n_jobs=1
 ) -> WkmeansResult:
     """Weighted k-means, as WCluster's Wkmeans computes it.
 
