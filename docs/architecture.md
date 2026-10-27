@@ -1,6 +1,6 @@
 # Architecture
 
-Where the code, tests, fixtures and tools of datanuggets live, which way the imports run, and where new work goes. The last section maps module paths used before the package reorganization.
+Where the code, tests, fixtures and tools of datanuggets live, which way the imports run, and where new work goes.
 
 ## Repository
 
@@ -176,39 +176,3 @@ A test file holds the R parity cases and the unit cases for the module it covers
 `datanuggets/__init__.py` doesn't import `_draws`, so a bare `import datanuggets` doesn't make it an attribute of the package. Scripts outside the repo import it by name, as in `from datanuggets._draws import DrawRecord, ReplayDraws`.
 
 The other moved private modules (`_rcompat`, `_rstats`, `_ldjit`, `_ldouble`, `_rfast`, `_compiled`, `_hartigan_wong`) don't forward. Nothing outside the repo imports them, and none defines a class that gets pickled.
-
-## Old paths in older documents
-
-Older references may use paths from before the package reorganization. These tables map them to the current modules.
-
-| Old file | Now |
-|---|---|
-| `src/datanuggets/create.py`, `refine.py`, `centers.py`, `means.py`, `complexity.py` | `src/datanuggets/nuggets/`, same file names |
-| `src/datanuggets/_hartigan_wong.py` | `src/datanuggets/_clustering/hartigan_wong.py` |
-| `src/datanuggets/_compiled.py` | `src/datanuggets/_compat/_compiled.py` |
-| `src/datanuggets/_ldjit.py` | `src/datanuggets/_compat/ldjit.py` |
-| `src/datanuggets/_ldouble.py` | `src/datanuggets/_compat/ldouble.py` |
-| `src/datanuggets/_rfast.py` | `src/datanuggets/_compat/rfast.py` |
-| `src/datanuggets/_rcompat.py`, `_rstats.py` | split across `src/datanuggets/_compat/`, by name below |
-| `src/datanuggets/_draws.py` | split across `src/datanuggets/_random/`, by name below. The old file now only forwards |
-| `tests/test_centers.py`, `test_complexity.py`, `test_create.py`, `test_means.py`, `test_refine.py` | `tests/nuggets/` |
-| `tests/test_predict.py`, `test_wpca.py`, `test_wpca_sums.py`, `test_wstats.py` | `tests/wcluster/` |
-| `tests/test_compiled.py`, `test_ldjit.py`, `test_rcompat.py`, `test_rfast.py`, `test_rstats.py` | `tests/compat/` |
-| `tests/test_draws.py`, `test_rdraws.py` | `tests/randomness/` |
-| `tests/test_hartigan_wong.py` | `tests/clustering/` |
-
-| Was in | Names | Now in `_compat/`, `_random/` or `tests/compat/` |
-|---|---|---|
-| `_rcompat` | `split_indices`, `unique_first`, `_r_seq_length_out` | `_compat/indexing.py` |
-| `_rcompat` | `r_mean` | `_compat/arithmetic.py` |
-| `_rcompat` | `_r_mean_py`, `_ldouble_mean`, `_round_half_even` | `tests/compat/rmean_reference.py`, the test reference |
-| `_rcompat` | `_R_NAN`, `_NA_BITS`, `_QUIET`, `_FRACTION`, `_INDEFINITE`, `_non_finite_sum` | `_compat/missing.py` |
-| `_rcompat` | `_LDOUBLE_DIGITS` | `_compat/ldouble.py` as `DIGITS`, which `tests/compat/rmean_reference.py` imports under the old name |
-| `_rstats` | `r_sum`, `r_vec_mean`, `r_median`, `r_mad`, `r_quantile7`, `r_cov`, `_r_cov_py`, `r_weighted_mean`, `_ld_sum`, `_DBL_MAX` | `_compat/arithmetic.py` |
-| `_rstats` | `group_moments`, `_run_threaded`, `_layer_forbids_fork`, `_after_fork_in_child`, `_THREADS`, `_FORKED_UNSAFE`, and the `os.register_at_fork` call | `_compat/moments.py` |
-| `_rstats` | `r_matvec`, `r_matmul`, `r_eigen_sym` | `_compat/linalg.py` |
-| `_draws` | `Draws` | `_random/interfaces.py` |
-| `_draws` | `NumpyDraws` | `_random/numpy_draws.py` |
-| `_draws` | `RDraws`, `r_use_hash`, `_r_seed`, `_M32`, `_I2_32M1`, `_TWO_M32`, `_MT_KINDS`, `_HASH_TRIES` | `_random/r_draws.py` |
-| `_draws` | `DrawRecord`, `ReplayDraws`, `ReplayMismatch` | `_random/replay.py` |
-| `_draws` | `as_draws` | `_random/seeds.py` |
