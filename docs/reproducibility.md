@@ -387,7 +387,7 @@ A one-shot `datanuggets-flow` run's folder holds its tables and figures but no r
 
 | Key | Contents |
 | --- | --- |
-| `settings` | The gate settings: `fsc`, `ssc`, `disc`, the `t11` and `t21` lists, `t12`, `t22`, `n_row` and `n_col` |
+| `settings` | The gate settings: `fsc`, `ssc`, `disc`, the `t11` and `t21` lists as given, one value for every file or one per file, `t12`, `t22`, `n_row` and `n_col` |
 | `fixed` | The finder's fixed constants, as [methodology.md](methodology.md#the-finders-parameters) lists them, with the first-peak rule in words |
 | `reader` | `{"library": "flowio", "preprocess": true, "compensation": "not applied"}` |
 | `files` | One entry per file, in file order: its `number`, `name`, absolute `path`, `size` in bytes, `sha256`, `n_events`, `pnn` and `pns` channel names, its `t11` and `t21`, its count of `local_maxima`, and for each population its number, events, percent, scatter medians and peak cell |

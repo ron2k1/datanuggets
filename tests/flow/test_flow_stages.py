@@ -112,6 +112,15 @@ def test_gates_only_writes_no_tables_and_never_asks(tmp_path, monkeypatch, stage
     ]
 
 
+def test_gates_json_records_the_thresholds_as_given(tmp_path, staged):
+    """One --t11 for every file is recorded once in settings, as it was given, and each file's
+    entry holds the value it was gated with."""
+    gates = _gates_only(tmp_path, "--t11", "20", names=("a.fcs", "b.fcs"))
+    record = json.loads((gates / "gates.json").read_text(encoding="utf-8"))
+    assert (record["settings"]["t11"], record["settings"]["t21"]) == ([20.0], [0.25])
+    assert [(f["t11"], f["t21"]) for f in record["files"]] == [(20.0, 0.25), (20.0, 0.25)]
+
+
 GATES = "{tmp}/gates"  # a gate folder that doesn't exist: no rule may look for it
 # each mode rule, a command line that breaks it and what it says
 MISPLACED = {

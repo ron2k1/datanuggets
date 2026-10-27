@@ -148,13 +148,13 @@ def test_live_input_without_a_window_reads_a_line(monkeypatch, capsys):
         pick._live_input("Keep which: ", None, False)
 
 
-def test_per_file_spreads_one_value_or_takes_one_per_file():
-    assert per_file("22", 3, "--t11") == [22.0, 22.0, 22.0]
-    assert per_file("22,20,18", 3, "--t11") == [22.0, 20.0, 18.0]
-    with pytest.raises(SystemExit, match="2 values for 3 files"):
-        per_file("22,20", 3, "--t11")
+def test_per_file_reads_one_value_or_one_per_file():
+    """Parsing only: GateSettings.check counts the values against the files."""
+    assert per_file("22", "--t11") == (22.0,)
+    assert per_file("22,20,18", "--t11") == (22.0, 20.0, 18.0)
+    assert per_file(None, "--t11") is None
     with pytest.raises(SystemExit, match="takes numbers"):
-        per_file("x", 3, "--t11")
+        per_file("x", "--t11")
 
 
 @pytest.mark.parametrize(
@@ -204,6 +204,19 @@ def test_pops_must_give_one_choice_or_one_per_file(tmp_path):
     with pytest.raises(SystemExit, match="2 choices for 3 files"):
         main([str(tmp_path), "--pops", "1;2", "--no-show", "--out", str(tmp_path / "out")])
     assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize(("flag", "value"), [("--t11", "22,20"), ("--t21", "0.25,0.5")])
+def test_thresholds_must_give_one_value_or_one_per_file(tmp_path, monkeypatch, flag, value):
+    """GateSettings.check counts --t11 and --t21 against the files before any is read."""
+    for name in ("a.fcs", "b.fcs", "c.fcs"):
+        (tmp_path / name).write_bytes(b"")
+    monkeypatch.setattr(pick, "read_fcs", lambda path: pytest.fail("read before the count"))
+    out = tmp_path / "out"
+    with pytest.raises(SystemExit) as e:
+        main([str(tmp_path), flag, value, "--pops", "1", "--no-show", "--out", str(out)])
+    assert e.value.code == f"{flag} gives 2 values for 3 files; give one, or one per file"
+    assert not out.exists()
 
 
 @pytest.mark.parametrize("existing", ["directory", "empty-directory", "file"])

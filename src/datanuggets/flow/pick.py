@@ -43,15 +43,16 @@ from datanuggets.flow.pipeline import parse_pops, pick_events  # noqa: F401
 from datanuggets.flow.settings import ClusterSettings, GateSettings, cli_flag
 
 
-def per_file(text: str, n: int, name: str) -> list[float]:
-    """One number for every file, or one per file separated by commas, as n numbers."""
+def per_file(text: str | None, name: str) -> tuple[float, ...] | None:
+    """--t11 or --t21 as GateSettings takes it: one number for every file, or one per file
+    separated by commas, or None when it is left out. GateSettings.check counts them against the
+    files, so the rule is kept in one place."""
+    if text is None:
+        return None
     try:
-        v = [float(t) for t in str(text).split(",")]
+        return tuple(float(t) for t in str(text).split(","))
     except ValueError as e:
         raise SystemExit(f"{name} takes numbers like 22 or 22,20,18,18, got {text!r}") from e
-    if len(v) not in (1, n):
-        raise SystemExit(f"{name} gives {len(v)} values for {n} files; give one, or one per file")
-    return v * n if len(v) == 1 else v
 
 
 def read_fcs(path) -> tuple[np.ndarray, list[str], list[str]]:
@@ -317,11 +318,6 @@ def _flags(cls, args, **values):
     return cls(**{name: v for name, v in given.items() if v is not None})
 
 
-def _gate_settings(args, t11, t21) -> GateSettings:
-    """GateSettings from the gate flags, with --t11 and --t21 as _check_args reads them."""
-    return _flags(GateSettings, args, t11=tuple(t11), t21=tuple(t21))
-
-
 def _settings(args) -> ClusterSettings:
     """The settings the flags give, checked before any file is read, so a bad value stops the run
     first; the clustering's are returned. --t11 and --t21 wait for the files to be counted."""
@@ -344,14 +340,13 @@ def _out(args, name: str) -> Path:
     return Path(args.out) if args.out else Path(FLOW_OUT_DIR) / datetime.now(UTC).strftime(name)
 
 
-def _check_args(args) -> tuple[list[Path], list[float], list[float], Path, str | None]:
-    """Validate arguments without writing files; return inputs, thresholds, output and --pops.
-    --t11 or --t21 left out gives the settings' one value for every file."""
+def _check_args(args) -> tuple[list[Path], GateSettings, Path, str | None]:
+    """Validate arguments without writing files; return inputs, the gate settings, output and
+    --pops. The gate settings are built once, here, with --t11 and --t21 as given and checked
+    against the files; one left out gives the settings' one value for every file."""
     paths = _fcs_paths(args.paths)
-    gate = GateSettings()
-    t11 = per_file(args.t11, len(paths), "--t11") if args.t11 is not None else list(gate.t11)
-    t21 = per_file(args.t21, len(paths), "--t21") if args.t21 is not None else list(gate.t21)
-    _gate_settings(args, t11, t21).check()
+    t11, t21 = per_file(args.t11, "--t11"), per_file(args.t21, "--t21")
+    gate = _flags(GateSettings, args, t11=t11, t21=t21).check(len(paths))
     out = _out(args, FLOW_GATES_NAME if args.gates_only else FLOW_RUN_NAME)
     choices = args.pops.split(";") if args.pops else None
     if choices is not None and len(choices) not in (1, len(paths)):
@@ -359,7 +354,7 @@ def _check_args(args) -> tuple[list[Path], list[float], list[float], Path, str |
             f"--pops gives {len(choices)} choices for {len(paths)} files; give one for "
             "all of them or one per file, separated by ;"
         )
-    return paths, t11, t21, out, args.pops or None
+    return paths, gate, out, args.pops or None
 
 
 def _print_event(event: pipeline.StageEvent) -> None:
@@ -372,13 +367,12 @@ def _read(path):
     return read_fcs(path)
 
 
-def _gate_files(args, paths, t11, t21, out, plt) -> list[dict]:
+def _gate_files(paths, settings, out, plt) -> list[dict]:
     """Each file gated by pipeline.gate_files, its populations printed as it goes, then the
     density grid, local maxima and the peak each Pop grows from drawn on one figure,
     local_maxima.png, the one the populations are chosen from. gates.png waits for the choice."""
     from datanuggets.flow.figures import local_maxima_figure, save_figures
 
-    settings = _gate_settings(args, t11, t21)
     samples = pipeline.gate_files(paths, settings, read=_read, on_event=_print_event)
     figs = {"local_maxima.png": local_maxima_figure(samples, figure=plt.figure)}
     save_figures(figs, out, FLOW_GATE_DPI)
@@ -457,12 +451,12 @@ def _run(args) -> None:
         return
     stop = args.gates_only
     plt = _pyplot(args.no_show, tables=not stop, tsne=cluster.tsne and not stop)
-    paths, t11, t21, out, spec = _check_args(args)
+    paths, gate, out, spec = _check_args(args)
     with _marked(out):
-        samples = _gate_files(args, paths, t11, t21, out, plt)
+        samples = _gate_files(paths, gate, out, plt)
         if stop:
             _draw_gates(samples, plt, out)
-            state.save_gates(out, samples, _gate_settings(args, t11, t21))
+            state.save_gates(out, samples, gate)
         else:
             _choose_channels(samples, args.channels, args.exclude_channels)
             chosen = _choose_pops(samples, spec, plt, not args.no_show)
