@@ -8,8 +8,12 @@ all the files' nuggets together, so a cluster is the same cells in every file.
     datanuggets-flow FOLDER --pops 1,2        keeps Pop 1 and Pop 2 of every file
     datanuggets-flow a.fcs b.fcs --pops "1,2;1"   Pop 1 and 2 of a.fcs, Pop 1 of b.fcs
     datanuggets-flow FOLDER --t11 22,20,18,18 --t21 0.25,0.5,0.5,0.5   cfc.py's thresholds
+    datanuggets-flow FOLDER --gates-only --out GATES   gates and draws the files, then stops
+    datanuggets-flow --from-gates GATES       asks over GATES' figures, then clusters
 
-A folder's files go in name order, so per-file thresholds and --pops follow that order.
+A folder's files go in name order, so per-file thresholds and --pops follow that order. The two
+stages give the one-shot run's tables: --from-gates clusters with the masks GATES holds, reading
+each file only once its size and SHA-256 are the ones it was gated with.
 
 Needs the flow extra: pip install "datanuggets[flow]". Events are read as stored, so a file
 with a real compensation matrix gets a warning; spectral (Aurora) files are unmixed already.
@@ -20,15 +24,17 @@ steps' events and errors."""
 from __future__ import annotations
 
 import argparse
+import shutil
 import sys
 import warnings
+from contextlib import contextmanager
 from dataclasses import fields
 from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
 
-from datanuggets._defaults import FLOW_GATE_DPI, FLOW_OUT_DIR, FLOW_RUN_NAME
+from datanuggets._defaults import FLOW_GATE_DPI, FLOW_GATES_NAME, FLOW_OUT_DIR, FLOW_RUN_NAME
 from datanuggets.exceptions import DataNuggetWarning, FlowError
 from datanuggets.flow import pipeline, state
 
@@ -88,7 +94,20 @@ def _parser() -> argparse.ArgumentParser:
         description="Gate FCS files on FSC-A vs SSC-A, keep the populations you pick, and cluster "
         "their cells with data nuggets and weighted Ward clustering.",
     )
-    p.add_argument("paths", nargs="+", help="FCS files, or folders of them")
+    p.add_argument("paths", nargs="*", help="FCS files, or folders of them; none with --from-gates")
+    stage = p.add_mutually_exclusive_group()
+    stage.add_argument(
+        "--gates-only",
+        action="store_true",
+        help="gate the files, draw local_maxima.png and gates.png, save the gates in --out, and "
+        "stop, without asking",
+    )
+    stage.add_argument(
+        "--from-gates",
+        metavar="GATES",
+        help="choose populations over the figures of GATES, a --gates-only folder, and cluster "
+        "its files, which must not have changed",
+    )
     p.add_argument(
         "--pops",
         help='populations to keep, e.g. "1,2" for every file or "1,2;1;1" '
@@ -96,7 +115,8 @@ def _parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--out",
-        help="new output folder (default: outputs/flow-<timestamp>); existing paths are refused",
+        help="new output folder (default: outputs/flow-<timestamp>, or "
+        "outputs/flow-gates-<timestamp> with --gates-only); existing paths are refused",
     )
     p.add_argument("--k", type=int, help=f"clusters cut from the tree (default: {cluster.k})")
     p.add_argument(
@@ -240,14 +260,15 @@ def _ask(samples, plt, show):
     return chosen
 
 
-def _pyplot(no_show: bool, *, tsne: bool):
+def _pyplot(no_show: bool, *, tables: bool, tsne: bool):
     """matplotlib's pyplot, once the flow extra is known to be there, drawing off screen with
-    --no-show. pandas is checked here too, for the tables, and scikit-learn when the t-SNE is
-    drawn, so a missing one stops the run before any file is read."""
+    --no-show. pandas is checked here too when the run makes tables, and scikit-learn when the
+    t-SNE is drawn, so a missing one stops the run before any file is read."""
     try:
         import matplotlib
-        import pandas  # noqa: F401
 
+        if tables:
+            import pandas  # noqa: F401
         if tsne:
             import sklearn  # noqa: F401
     except ImportError as e:
@@ -259,6 +280,34 @@ def _pyplot(no_show: bool, *, tsne: bool):
     import matplotlib.pyplot as plt
 
     return plt
+
+
+def _given(args, cls) -> list[str]:
+    """The settings of cls whose flags were given."""
+    return [f.name for f in fields(cls) if getattr(args, f.name, None) is not None]
+
+
+def _mode_rules(args) -> None:
+    """Refuses a flag the mode can't use, before any setting is checked or file read: FCS paths
+    or a gate setting with --from-gates, which reuses its folder's files and gates, and a
+    clustering setting or --pops with --gates-only, which stops before them."""
+    if args.from_gates is None and not args.paths:
+        raise SystemExit("give FCS files or folders, or --from-gates GATES")
+    if args.from_gates is not None and args.paths:
+        raise SystemExit(
+            "--from-gates reads the FCS files its gate folder records; give no FCS paths"
+        )
+    gate = _given(args, GateSettings) if args.from_gates is not None else []
+    if gate:
+        raise SystemExit(
+            f"{cli_flag(gate[0])} sets the gate stage, and --from-gates reuses the gates in "
+            f"{args.from_gates}; run --gates-only again to change it"
+        )
+    cluster = _given(args, ClusterSettings) + ["pops"] * (args.pops is not None)
+    if args.gates_only and cluster:
+        raise SystemExit(
+            f"{cli_flag(cluster[0])} sets the clustering stage, which --gates-only stops before"
+        )
 
 
 def _flags(cls, args, **values):
@@ -289,6 +338,12 @@ def _settings(args) -> ClusterSettings:
     return cluster.check()
 
 
+def _out(args, name: str) -> Path:
+    """--out, or a folder under FLOW_OUT_DIR named for the UTC time by the pattern name, so each
+    run has its own."""
+    return Path(args.out) if args.out else Path(FLOW_OUT_DIR) / datetime.now(UTC).strftime(name)
+
+
 def _check_args(args) -> tuple[list[Path], list[float], list[float], Path, str | None]:
     """Validate arguments without writing files; return inputs, thresholds, output and --pops.
     --t11 or --t21 left out gives the settings' one value for every file."""
@@ -297,11 +352,7 @@ def _check_args(args) -> tuple[list[Path], list[float], list[float], Path, str |
     t11 = per_file(args.t11, len(paths), "--t11") if args.t11 is not None else list(gate.t11)
     t21 = per_file(args.t21, len(paths), "--t21") if args.t21 is not None else list(gate.t21)
     _gate_settings(args, t11, t21).check()
-    out = (
-        Path(args.out)
-        if args.out
-        else Path(FLOW_OUT_DIR) / datetime.now(UTC).strftime(FLOW_RUN_NAME)
-    )
+    out = _out(args, FLOW_GATES_NAME if args.gates_only else FLOW_RUN_NAME)
     choices = args.pops.split(";") if args.pops else None
     if choices is not None and len(choices) not in (1, len(paths)):
         raise SystemExit(
@@ -383,26 +434,82 @@ def main(argv=None) -> None:
         raise SystemExit(e.cli(cli_flag)) from None
 
 
-def _run(args) -> None:
-    """The run: every check, then the output folder, the steps, and the figures shown."""
-    cluster = _settings(args)
-    plt = _pyplot(args.no_show, tsne=cluster.tsne)
-    paths, t11, t21, out, spec = _check_args(args)
+@contextmanager
+def _marked(out: Path):
+    """The new folder out, marked incomplete until the steps in the with block finish. A step
+    that fails, or a Ctrl+C, leaves the marker and says where the partial outputs are."""
     state.begin(out)
     try:
-        samples = _gate_files(args, paths, t11, t21, out, plt)
-        _choose_channels(samples, args.channels, args.exclude_channels)
-        chosen = _choose_pops(samples, spec, plt, not args.no_show)
-        _draw_gates(samples, plt, out)
-        pipeline.cluster_stage(
-            samples, chosen, out, cluster, read=_read, on_event=_print_event, figure=plt.figure
-        )
-        state.finish(out)
+        yield
     except (Exception, SystemExit, KeyboardInterrupt):
         print(f"\nRun incomplete; partial outputs are in {out.resolve()}", file=sys.stderr)
         raise
-    print(f"\nOutputs are in {out.resolve()}")
+    state.finish(out)
+
+
+def _run(args) -> None:
+    """The run in its mode: every check, then the output folder, the steps, and the figures
+    shown. --gates-only stops once the gates are saved; --from-gates goes to _from_gates."""
+    _mode_rules(args)
+    cluster = _settings(args)
+    if args.from_gates is not None:
+        _from_gates(args, cluster)
+        return
+    stop = args.gates_only
+    plt = _pyplot(args.no_show, tables=not stop, tsne=cluster.tsne and not stop)
+    paths, t11, t21, out, spec = _check_args(args)
+    with _marked(out):
+        samples = _gate_files(args, paths, t11, t21, out, plt)
+        if stop:
+            _draw_gates(samples, plt, out)
+            state.save_gates(out, samples, _gate_settings(args, t11, t21))
+        else:
+            _choose_channels(samples, args.channels, args.exclude_channels)
+            chosen = _choose_pops(samples, spec, plt, not args.no_show)
+            _draw_gates(samples, plt, out)
+            pipeline.cluster_stage(
+                samples, chosen, out, cluster, read=_read, on_event=_print_event, figure=plt.figure
+            )
+    if stop:
+        where = out.resolve()
+        print(f"\nGates are in {where}")
+        print(f'Choose populations and cluster with: datanuggets-flow --from-gates "{where}"')
+    else:
+        print(f"\nOutputs are in {out.resolve()}")
     if not args.no_show:
+        plt.show()
+
+
+def _from_gates(args, cluster: ClusterSettings) -> None:
+    """--from-gates: the gate folder and its files checked, --out refused if it is taken, and
+    the channels resolved, all before the populations are asked over the folder's figures, so a
+    run that can't go ahead stops before the question. The run folder is made only after it;
+    the gate figures are copied in as they are, and run.json records the gate folder and the
+    choice. The gate folder itself is only read."""
+    from datanuggets.flow.figures import png_figure
+
+    plt = _pyplot(args.no_show, tables=True, tsne=cluster.tsne)
+    gates = state.load_gates(Path(args.from_gates))
+    samples = gates.samples
+    out = state.check_new(_out(args, FLOW_RUN_NAME))
+    _choose_channels(samples, args.channels, args.exclude_channels)
+    show = not args.no_show
+    figures = [gates.path / "local_maxima.png", gates.path / "gates.png"]
+    print(f"\nThe local maxima and each Pop's peak are drawn in {figures[0]}")
+    print(f"The populations are drawn in {figures[1]}")
+    if show:
+        for path in figures:
+            png_figure(path, FLOW_GATE_DPI, figure=plt.figure)
+    chosen = _choose_pops(samples, args.pops, plt, show)
+    with _marked(out):
+        for path in figures:
+            shutil.copyfile(path, out / path.name)
+        run = pipeline.cluster_stage(
+            samples, chosen, out, cluster, read=_read, on_event=_print_event, figure=plt.figure
+        )
+        state.write_run(out, gates.path, cluster, chosen, run.channels, run.labels)
+    print(f"\nOutputs are in {out.resolve()}")
+    if show:
         plt.show()
 
 

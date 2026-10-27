@@ -155,3 +155,34 @@ def test_cli_reads_fcs_and_writes_consistent_cell_clusters(recorded_fcs, tmp_pat
         np.testing.assert_allclose(
             row[1:], np.average(members[channel_labels], axis=0, weights=members["weight"])
         )
+
+
+def _flow(cwd, *args):
+    """datanuggets-flow run as a command with --no-show, which must succeed."""
+    run = subprocess.run(
+        [sys.executable, "-m", "datanuggets.flow.pick", *map(str, args), "--no-show"],
+        cwd=cwd,
+        input="",
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=180,
+    )
+    assert run.returncode == 0, run.stdout + run.stderr
+
+
+def test_cli_staged_run_on_a_real_fcs_file_matches_the_one_shot(recorded_fcs, tmp_path):
+    """--gates-only, then --from-gates with the clustering flags: every table is the one-shot
+    run's, byte for byte, and the run folder holds the one-shot run's files and run.json."""
+    path = recorded_fcs[0]
+    one, gates, staged = tmp_path / "one", tmp_path / "gates", tmp_path / "staged"
+    cluster = ["--pops", "1", "--dn-num2", "50", "--k", "3"]
+    _flow(tmp_path, path, "--out", one, *cluster)
+    _flow(tmp_path, path, "--gates-only", "--out", gates)
+    _flow(tmp_path, "--from-gates", gates, "--out", staged, *cluster)
+    names = {p.name for p in one.iterdir()}
+    assert {p.name for p in staged.iterdir()} == names | {"run.json"}
+    tables = sorted(name for name in names if name.endswith(".csv"))
+    assert len(tables) == 5
+    for name in tables:
+        assert (staged / name).read_bytes() == (one / name).read_bytes(), name

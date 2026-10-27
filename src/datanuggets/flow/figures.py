@@ -10,6 +10,7 @@ from pathlib import Path
 
 import numpy as np
 from matplotlib.figure import Figure
+from matplotlib.image import imread
 from matplotlib.lines import Line2D
 
 from datanuggets import plot, wpca
@@ -99,6 +100,17 @@ def result_figures(
     fig.tight_layout()
     figs["cluster_centers.png"] = fig
     return figs
+
+
+def png_figure(path: Path, dpi: int, *, figure: Callable | None = None) -> Figure:
+    """A figure saved at dpi, such as a gate folder's local_maxima.png, drawn again at the size it
+    was drawn at, its axes off, so a later stage can show it without the data behind it."""
+    image = imread(path)
+    fig = (figure or Figure)(figsize=(image.shape[1] / dpi, image.shape[0] / dpi))
+    ax = fig.add_axes((0, 0, 1, 1))
+    ax.imshow(image)
+    ax.set_axis_off()
+    return fig
 
 
 def save_figures(figs: Mapping[str, Figure], out: Path, dpi: int) -> list[Path]:
