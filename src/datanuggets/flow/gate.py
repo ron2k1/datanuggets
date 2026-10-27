@@ -8,10 +8,20 @@ from typing import NamedTuple
 import numpy as np
 from scipy.spatial import ConvexHull, Delaunay, QhullError
 
-from datanuggets.flow.grid import channel, f_plot, sqrt_coords
+from datanuggets._defaults import (
+    FINDER_N_COL,
+    FINDER_N_ROW,
+    FINDER_T11,
+    FINDER_T12,
+    FINDER_T21,
+    FINDER_T22,
+)
+from datanuggets.flow.grid import SQRT_SHIFT, channel, f_plot, sqrt_coords
 from datanuggets.flow.peaks import find_area, local_maxima, refine_peaks
 
 MSIZE = 100  # cfc.py's grid, 100 by 100 bins
+GRID_SCALE = "l"  # its cells hold log(1 + count)
+GRID_ALPHA = 0.1  # cells below 0.1 of its maximum go to 0: f_plot's default, implicit in cfc.py
 MIN_POINTS = 3  # cfc.py's guard: a hull needs more than 3 cells, and more than 3 kept events
 
 
@@ -81,7 +91,16 @@ def hull_gate(fsc_a, ssc_a, zz, cells) -> np.ndarray:
 
 
 def lymphmacro_finder(
-    fsc_a, ssc_a, *, n_row=11, n_col=11, t11=22, t21=0.25, t12=20, t22=0.5, area=find_area
+    fsc_a,
+    ssc_a,
+    *,
+    n_row=FINDER_N_ROW,
+    n_col=FINDER_N_COL,
+    t11=FINDER_T11,
+    t21=FINDER_T21,
+    t12=FINDER_T12,
+    t22=FINDER_T22,
+    area=find_area,
 ):
     """Cabrera's gate finder: one bool column per population, one row per event, populations in
     cfc.py's order. The first peak's area takes t11 and t21, the others t12 and t22. area(x, i, j,
@@ -100,11 +119,11 @@ def _finder(fsc_a, ssc_a, n_row, n_col, t11, t21, t12, t22, area) -> np.ndarray:
     return masks
 
 
-def finder_peaks(fsc_a, ssc_a, *, n_row=11, n_col=11) -> FinderPeaks:
+def finder_peaks(fsc_a, ssc_a, *, n_row=FINDER_N_ROW, n_col=FINDER_N_COL) -> FinderPeaks:
     """The density grid lymphmacro_finder gates on, its local maxima and the peaks it keeps, for
     drawing with plot.peaks. n_row and n_col are the finder's focal window."""
     fsc_a, ssc_a, grid, x, candidates, peaks = _grid_peaks(fsc_a, ssc_a, n_row, n_col)
-    shift = min(ssc_a.min(), fsc_a.min()) - 3  # sqrt_coords' shift, undone
+    shift = min(ssc_a.min(), fsc_a.min()) - SQRT_SHIFT  # sqrt_coords' shift, undone
     return FinderPeaks(x, candidates, peaks, grid.y**2 + shift, grid.x**2 + shift)
 
 
@@ -116,7 +135,9 @@ def _grid_peaks(fsc_a, ssc_a, n_row, n_col):
         raise ValueError(
             f"fsc_a and ssc_a must have the same length, got {len(fsc_a)} and {len(ssc_a)}"
         )
-    grid = f_plot(*sqrt_coords(fsc_a, ssc_a), nr=MSIZE, nc=MSIZE, scale="l")
+    grid = f_plot(
+        *sqrt_coords(fsc_a, ssc_a), nr=MSIZE, nc=MSIZE, scale=GRID_SCALE, alpha=GRID_ALPHA
+    )
     x = grid.z.T
     candidates = local_maxima(x, n_row=n_row, n_col=n_col)
     return fsc_a, ssc_a, grid, x, candidates, refine_peaks(x, candidates)

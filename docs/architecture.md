@@ -28,7 +28,7 @@ src/datanuggets/
   result.py            DataNuggets, CentersResult, WpcaResult, WwcssResult, WkmeansResult,
                        DnWkmeansResult, WhclustResult
   _validate.py         input coercion and argument checks, mirroring R's stop() conditions
-  _defaults.py         R's default argument values and the internal sizes
+  _defaults.py         R's default argument values, the flow gate finder's, and the internal sizes
   nuggets/             the datanugget ports
     create.py          create_dn (create.DN)
     centers.py         create_dn_centers (create.DNcenters)
@@ -89,7 +89,7 @@ src/datanuggets/
 
 ## Public and private
 
-The public API is `datanuggets.__all__`, imported from `datanuggets` as the README does. `datanuggets.nuggets` and `datanuggets.wcluster` re-export the same functions from the modules that define them. `result` and `exceptions` hold the public classes. `datanuggets.plot` is public too, with its own `__all__`, but it's imported only when asked for by name, since it needs matplotlib from the `plot` extra. Without matplotlib, importing it raises an `ImportError` that names the extra. `datanuggets.flow` is public in the same way, with its own `__all__`, and is imported only when asked for by name. The finder's modules import numpy, scipy and `_validate`, though importing `datanuggets.flow` runs `datanuggets/__init__.py`, numba included, as any submodule does. `datanuggets.flow.pick` is the `datanuggets-flow` command, the entry point `datanuggets.flow.pick:main` in `pyproject.toml`, and `datanuggets.flow` doesn't import it. At module level it imports numpy, the standard library and `_defaults`, for `create_dn`'s first-stage count, which caps `--dn-num2`. Its steps import matplotlib, pandas and scikit-learn's `TSNE`, the workflows, `plot` and the finder from `datanuggets.flow` only when they run, and `read_fcs` imports flowio. The `flow` extra installs matplotlib, pandas, scikit-learn and flowio.
+The public API is `datanuggets.__all__`, imported from `datanuggets` as the README does. `datanuggets.nuggets` and `datanuggets.wcluster` re-export the same functions from the modules that define them. `result` and `exceptions` hold the public classes. `datanuggets.plot` is public too, with its own `__all__`, but it's imported only when asked for by name, since it needs matplotlib from the `plot` extra. Without matplotlib, importing it raises an `ImportError` that names the extra. `datanuggets.flow` is public in the same way, with its own `__all__`, and is imported only when asked for by name. The finder's modules import numpy, scipy, `_validate` and `_defaults`, though importing `datanuggets.flow` runs `datanuggets/__init__.py`, numba included, as any submodule does. `datanuggets.flow.pick` is the `datanuggets-flow` command, the entry point `datanuggets.flow.pick:main` in `pyproject.toml`, and `datanuggets.flow` doesn't import it. At module level it imports numpy, the standard library and `_defaults`, for `create_dn`'s first-stage count, which caps `--dn-num2`. Its steps import matplotlib, pandas and scikit-learn's `TSNE`, the workflows, `plot` and the finder from `datanuggets.flow` only when they run, and `read_fcs` imports flowio. The `flow` extra installs matplotlib, pandas, scikit-learn and flowio.
 
 A module or package whose name starts with an underscore is private. It can change without notice, and code outside this repo shouldn't import it. `datanuggets._draws` is the one private path kept working on purpose, for the reasons below.
 
@@ -107,13 +107,13 @@ Imports run from the workflows down to the R-compatibility layer and never back 
 | `_clustering` | `_compat`, `_random` |
 | `wcluster` | `wcluster`, `_compat`, `_random`, `_validate`, `result`, `exceptions` |
 | `nuggets` | `nuggets`, `_clustering`, `_compat`, `_random`, `_defaults`, `_validate`, `result`, `exceptions` |
-| `flow`, the finder: `__init__.py`, `grid`, `peaks`, `gate` | `flow`, `_validate` |
+| `flow`, the finder: `__init__.py`, `grid`, `peaks`, `gate` | `flow`, `_validate`, `_defaults` |
 | `plot` | `plot`, `wcluster`, `_compat` |
 | `flow/pick.py`, the `datanuggets-flow` command | `datanuggets` itself (for `create_dn`, `whclust`, `cut_tree`, `wmean` and `wpca`), `plot`, `flow`, `_defaults`, and `result` for type hints only |
 | the old paths: `create`, `refine`, `centers`, `means`, `complexity`, `_draws` | `nuggets`, `_random` |
 | `datanuggets/__init__.py` | `nuggets`, `wcluster`, the old paths, `result`, `exceptions` |
 
-So R's arithmetic and the draw sources never import a workflow, and new code in them can't create a cycle. Wkmeans draws its starts through `_random`, the other WCluster functions draw nothing, and `wcluster` never imports `nuggets`: the DN wrappers take a `DataNuggets` from `result`. `plot` sits above the workflows: it imports `wcluster` for R's merge numbering and `_compat` for the sum and quantile in R's nugget colors, and in the package only `flow/pick.py` imports it. The finder's modules in `flow` sit beside the workflows and import only `_validate`. `plot.gates` takes the finder's masks as an array, so `plot` doesn't import `flow` either. `flow/pick.py` is an application layer above `plot`: it reaches `nuggets` and `wcluster` through `datanuggets/__init__.py`, draws with `plot` and gates with `lymphmacro_finder` and an area rule from `flow`, and nothing in the package imports it, `datanuggets.flow` included. The table is the whole import graph of the package by layer, imports inside a layer and inside functions included.
+So R's arithmetic and the draw sources never import a workflow, and new code in them can't create a cycle. Wkmeans draws its starts through `_random`, the other WCluster functions draw nothing, and `wcluster` never imports `nuggets`: the DN wrappers take a `DataNuggets` from `result`. `plot` sits above the workflows: it imports `wcluster` for R's merge numbering and `_compat` for the sum and quantile in R's nugget colors, and in the package only `flow/pick.py` imports it. The finder's modules in `flow` sit beside the workflows and import only `_validate` and `_defaults`, for the finder's tunable defaults. The constants they keep fixed for parity with Cabrera's code stay named in the module that uses them. `plot.gates` takes the finder's masks as an array, so `plot` doesn't import `flow` either. `flow/pick.py` is an application layer above `plot`: it reaches `nuggets` and `wcluster` through `datanuggets/__init__.py`, draws with `plot` and gates with `lymphmacro_finder` and an area rule from `flow`, and nothing in the package imports it, `datanuggets.flow` included. The table is the whole import graph of the package by layer, imports inside a layer and inside functions included.
 
 ## Where new code goes
 
