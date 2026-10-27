@@ -22,6 +22,7 @@ from datanuggets.flow.pipeline import (
     cluster_nuggets,
     cluster_stage,
     gate_files,
+    gate_stage,
     make_nuggets,
     parse_selection,
     pops_spec,
@@ -198,6 +199,75 @@ def test_resolve_channels_excludes_and_refuses_unknown_names():
     )
     with pytest.raises(FlowError, match="at least two distinct"):
         resolve_channels([a], ClusterSettings(exclude_channels=("Live-A", "CD4-A")))
+
+
+@pytest.mark.parametrize(
+    ("names", "settings", "param", "message"),
+    [
+        (
+            ["a.fcs", "b.fcs", "c.fcs"],
+            GateSettings(t11=(22, 20)),
+            "t11",
+            "t11 gives 2 values for 3 files; give one, or one per file",
+        ),
+        (
+            ["a.fcs"],
+            GateSettings(t11=(-5,)),
+            "t11",
+            "t11 is -5; it takes a positive distance in grid cells",
+        ),
+        (["a.fcs"], GateSettings(disc="bogus"), "disc", "disc is 'bogus'; it takes his or peak"),
+        ([], GateSettings(), None, "no files to gate"),
+    ],
+)
+def test_gate_stage_checks_its_settings_and_files_before_any_read(
+    tmp_path, names, settings, param, message
+):
+    """A backend calls the stages without the CLI's checks, so a bad setting or no files at all
+    stops gate_files, and gate_stage through it, with a FlowError before a file is read."""
+    seen = []
+
+    def read(path):
+        seen.append(path.name)
+        return read_202(path)
+
+    paths = [Path(name) for name in names]
+    for stage in (
+        lambda: gate_files(paths, settings, read=read),
+        lambda: gate_stage(paths, tmp_path, settings, read=read),
+    ):
+        with pytest.raises(FlowError) as e:
+            stage()
+        assert (e.value.param, str(e.value)) == (param, message)
+    assert seen == []
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    ("kept", "chosen", "settings", "param", "message"),
+    [
+        ([20], [[1]], ClusterSettings(k=0), "k", "k is 0; it takes 1 or more clusters"),
+        ([], [], ClusterSettings(), None, "no gated files to cluster"),
+        (
+            [20, 20, 20],
+            [[1], [1]],
+            ClusterSettings(),
+            "pops",
+            "pops gives 2 choices for 3 files; give one per file",
+        ),
+    ],
+)
+def test_cluster_stage_checks_its_settings_and_choices_before_any_read(
+    tmp_path, kept, chosen, settings, param, message
+):
+    """A bad setting, no samples, or a choice list that doesn't give one choice per sample (which
+    the tables would zip short) stops cluster_stage before it reads a file or writes one."""
+    samples, read, seen = _files(kept)
+    with pytest.raises(FlowError) as e:
+        cluster_stage(samples, chosen, tmp_path, settings, read=read)
+    assert (e.value.param, str(e.value)) == (param, message)
+    assert seen == []
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_library_stages_never_print_or_prompt(tmp_path, monkeypatch, capsys):

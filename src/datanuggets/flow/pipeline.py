@@ -247,8 +247,13 @@ def gate_files(
     on_event: OnEvent | None = None,
 ) -> list[Sample]:
     """Each file read and gated on settings.fsc against settings.ssc with Cabrera's finder, its
-    populations counted, in the order given. A "gate" event per file carries its lines. A file
-    without either scatter channel stops the run before it is gated."""
+    populations counted, in the order given. A "gate" event per file carries its lines. The
+    settings are checked against the number of files before any is read, since a backend calls
+    this without the CLI's checks, and a file without either scatter channel stops the run before
+    it is gated."""
+    if not paths:
+        raise FlowError("no files to gate")
+    settings.check(len(paths))
     samples = []
     for i, path in enumerate(map(Path, paths)):
         events, pnn, pns = read(path)
@@ -532,7 +537,18 @@ def cluster_stage(
     """The clustering stage in the folder out, which must exist: the channels resolved,
     selection.csv, the kept cells' nuggets, Whclust of them, the tables, the t-SNE unless
     settings.tsne is off, and the figures, drawn on figure (see flow.figures). Events: "select"
-    with selection.csv's table, "nuggets" per kept file, "cluster" with each cluster's percent."""
+    with selection.csv's table, "nuggets" per kept file, "cluster" with each cluster's percent.
+    The settings, and that chosen gives one choice per sample, are checked before anything is read
+    or written: a backend calls this without the CLI's checks, and a short chosen would drop its
+    missing files from the tables without a word."""
+    settings.check()
+    if not samples:
+        raise FlowError("no gated files to cluster")
+    if len(chosen) != len(samples):
+        raise FlowError(
+            f"{{param}} gives {len(chosen)} choices for {len(samples)} files; give one per file",
+            "pops",
+        )
     channels, labels = resolve_channels(samples, settings)
     selection = selection_table(samples, chosen)
     selection.to_csv(out / "selection.csv", index=False)
