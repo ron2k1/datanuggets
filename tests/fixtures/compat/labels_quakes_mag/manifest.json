@@ -1,0 +1,98 @@
+{
+  "group": "compat",
+  "case": "labels_quakes_mag",
+  "args": {
+    "kind": "labels",
+    "levels": ["4", "4.1", "4.2", "4.3", "4.4", "4.5", "4.6", "4.7", "4.8", "4.9", "5", "5.1", "5.2", "5.3", "5.4", "5.5", "5.6", "5.7", "5.9", "6", "6.1", "6.4"],
+    "pred_kind": "vector",
+    "distw_error": null,
+    "cl_kind": "double"
+  },
+  "arrays": {
+    "x": {
+      "file": "x.bin",
+      "dtype": "<f8",
+      "shape": [
+        1000,
+        5
+      ]
+    },
+    "w": {
+      "file": "w.bin",
+      "dtype": "<f8",
+      "shape": [
+        1000
+      ]
+    },
+    "newx": {
+      "file": "newx.bin",
+      "dtype": "<f8",
+      "shape": [
+        40,
+        5
+      ]
+    },
+    "codes": {
+      "file": "codes.bin",
+      "dtype": "<i4",
+      "shape": [
+        1000
+      ]
+    },
+    "wmean": {
+      "file": "wmean.bin",
+      "dtype": "<f8",
+      "shape": [
+        5,
+        22
+      ]
+    },
+    "wwcss_group": {
+      "file": "wwcss_group.bin",
+      "dtype": "<f8",
+      "shape": [
+        22
+      ]
+    },
+    "wwcss_total": {
+      "file": "wwcss_total.bin",
+      "dtype": "<f8",
+      "shape": [
+        1
+      ]
+    },
+    "cl": {
+      "file": "cl.bin",
+      "dtype": "<f8",
+      "shape": [
+        1000
+      ]
+    },
+    "pred": {
+      "file": "pred.bin",
+      "dtype": "<i4",
+      "shape": [
+        40
+      ]
+    },
+    "distw": {
+      "file": "distw.bin",
+      "dtype": "<f8",
+      "shape": [
+        22,
+        22
+      ]
+    }
+  },
+  "versions": {
+    "R": "R version 4.6.1 (2026-06-24 ucrt)",
+    "platform": "x86_64-w64-mingw32",
+    "datanugget": "1.5.0",
+    "Rfast": "2.1.5.2",
+    "WCluster": "1.3.0",
+    "matprod": "default",
+    "lapack": "3.12.1",
+    "blas": "Rblas.dll md5 5fe8258e86d8a1a52a6c3db05faa0225",
+    "longdouble_digits": 64
+  }
+}

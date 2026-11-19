@@ -1,0 +1,104 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "datanuggets"
+version = "0.1.0a3"
+description = "Native Python port of the R packages datanugget and WCluster (data nuggets for large-data reduction)."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "GPL-2.0-only"
+license-files = ["LICENSE", "THIRD_PARTY.md"]
+authors = [{ name = "Ronil Basu" }]
+keywords = ["data nuggets", "data reduction", "big data", "weighted clustering", "weighted PCA"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+dependencies = [
+    "numpy>=2.0",
+    "joblib>=1.4",
+    "scipy>=1.13",
+    "numba>=0.67",
+    "numba>=0.68; python_version >= '3.15'",
+]
+
+[project.urls]
+Source = "https://github.com/ron2k1/datanuggets"
+Documentation = "https://github.com/ron2k1/datanuggets/blob/main/docs/README.md"
+Issues = "https://github.com/ron2k1/datanuggets/issues"
+"datanugget (R)" = "https://CRAN.R-project.org/package=datanugget"
+"WCluster (R)" = "https://CRAN.R-project.org/package=WCluster"
+Paper = "https://doi.org/10.1080/10618600.2024.2341896"
+
+[project.optional-dependencies]
+frame = ["pandas>=2.2"]
+progress = ["tqdm>=4.66"]
+plot = ["matplotlib>=3.9"]
+tsne = ["scikit-learn>=1.5"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-xdist>=3.6",
+    "ruff>=0.6",
+    "pandas>=2.2",
+    "tqdm>=4.66",
+    "matplotlib>=3.9",
+    "scikit-learn>=1.5",  # the tsne extra, so the t-SNE tests run
+]
+
+[tool.uv]
+# The exact hatchling that uv build, and so package.yml and release.yml, builds the archives
+# with. Bump it on purpose.
+build-constraint-dependencies = ["hatchling==1.32.4"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/datanuggets"]
+
+# An allowlist: hatchling reads only the root .gitignore, so a folder that ignores itself through
+# its own would otherwise ship. scripts/check_dist.py holds the same list and checks the build.
+# tests/scripts tests that checker, which isn't shipped. Nor is tests/fixtures/housing, the 1.9 MB
+# housing CSV: the colour tests that read it skip without it.
+[tool.hatch.build.targets.sdist]
+only-include = [
+    "src/datanuggets", "tests", "LICENSE", "THIRD_PARTY.md", "README.md", "pyproject.toml",
+    "docs/README.md",
+    "docs/installation.md",
+    "docs/quickstart.md",
+    "docs/api.md",
+    "docs/limitations.md",
+    "docs/compatibility.md",
+    "docs/methodology.md",
+    "docs/reproducibility.md",
+    "docs/releases.md",
+    "examples/first_analysis.py",
+]
+exclude = ["tests/scripts", "tests/fixtures/housing"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -m 'not slow'"
+markers = [
+    "slow: the long long-double fuzz and the large wkmeans and whclust reference and kernel checks (pytest -m slow)",
+]
+
+[tool.ruff]
+line-length = 100
+# tests/*: a helper module beside its tests, which they import by its bare name, is first-party
+src = ["src", "tests", "tests/*", "scripts", "benchmarks"]
+extend-exclude = [
+    "docs",  # prose with illustrative snippets, not sources
+]

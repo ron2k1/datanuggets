@@ -1,0 +1,148 @@
+cff-version: 1.2.0
+message: >-
+  If you use datanuggets, please cite the article that introduced data
+  nuggets, given below.
+title: datanuggets
+abstract: >-
+  A native Python port of the R packages datanugget and WCluster. It reduces
+  a large dataset to weighted data nuggets, then clusters them, explores them
+  with weighted PCA and maps cluster labels back to the original rows.
+type: software
+version: 0.1.0a3
+date-released: "2026-11-19"
+authors:
+  - given-names: Ronil
+    family-names: Basu
+license: GPL-2.0-only
+repository-code: "https://github.com/ron2k1/datanuggets"
+keywords:
+  - data nuggets
+  - data reduction
+  - big data
+  - weighted clustering
+  - weighted PCA
+preferred-citation:
+  type: article
+  title: "Data Nuggets: A Method for Reducing Big Data While Preserving Data Structure"
+  authors:
+    - given-names: Traymon E.
+      family-names: Beavers
+      orcid: "https://orcid.org/0000-0002-7549-6587"
+    - given-names: Ge
+      family-names: Cheng
+    - given-names: Yajie
+      family-names: Duan
+      orcid: "https://orcid.org/0000-0001-5833-9056"
+    - given-names: Javier
+      family-names: Cabrera
+    - given-names: Mariusz
+      family-names: Lubomirski
+    - given-names: Dhammika
+      family-names: Amaratunga
+    - given-names: Jeffrey E.
+      family-names: Teigler
+  journal: Journal of Computational and Graphical Statistics
+  volume: 34
+  issue: 1
+  start: 330
+  end: 342
+  year: 2025
+  doi: 10.1080/10618600.2024.2341896
+references:
+  - type: software
+    title: "Create, Optimize, and Refine Data Nuggets"
+    version: 1.5.0
+    authors:
+      - given-names: Rituparna
+        family-names: Dey
+      - given-names: Yajie
+        family-names: Duan
+      - given-names: Traymon
+        family-names: Beavers
+      - given-names: Javier
+        family-names: Cabrera
+      - given-names: Ge
+        family-names: Cheng
+      - given-names: Kunting
+        family-names: Qi
+      - given-names: Mariusz
+        family-names: Lubomirski
+    url: "https://CRAN.R-project.org/package=datanugget"
+  - type: software
+    title: "Clustering and PCA with Weights, and Data Nuggets Clustering"
+    version: 1.3.0
+    authors:
+      - given-names: Rituparna
+        family-names: Dey
+      - given-names: Yajie
+        family-names: Duan
+      - given-names: Javier
+        family-names: Cabrera
+      - given-names: Ge
+        family-names: Cheng
+    url: "https://CRAN.R-project.org/package=WCluster"
+  - type: generic
+    title: "Data Nuggets in Supervised Learning"
+    authors:
+      - given-names: K. E.
+        family-names: Cherasia
+      - given-names: J.
+        family-names: Cabrera
+      - given-names: L. T.
+        family-names: Fernholz
+      - given-names: R.
+        family-names: Fernholz
+    collection-title: "Robust and Multivariate Statistical Methods: Festschrift in Honor of David E. Tyler"
+    editors:
+      - given-names: M.
+        family-names: Yi
+      - given-names: K.
+        family-names: Nordhausen
+    publisher:
+      name: Springer
+    start: 429
+    end: 449
+    year: 2023
+    doi: 10.1007/978-3-031-22687-8_20
+  - type: article
+    title: "Hierarchical Grouping to Optimize an Objective Function"
+    authors:
+      - given-names: J. H.
+        family-names: Ward
+        name-suffix: Jr.
+    journal: Journal of the American Statistical Association
+    volume: 58
+    issue: 301
+    start: 236
+    end: 244
+    year: 1963
+    doi: 10.1080/01621459.1963.10500845
+  - type: book
+    title: "Exploration and Analysis of DNA Microarray and Protein Array Data"
+    authors:
+      - given-names: D.
+        family-names: Amaratunga
+      - given-names: J.
+        family-names: Cabrera
+    publisher:
+      name: John Wiley & Sons
+    volume: 605
+    year: 2009
+    doi: 10.1002/9780470317129
+  - type: book
+    title: "The New S Language"
+    authors:
+      - given-names: R. A.
+        family-names: Becker
+      - given-names: J. M.
+        family-names: Chambers
+      - given-names: A. R.
+        family-names: Wilks
+    publisher:
+      name: Chapman and Hall/CRC
+      city: London
+    year: 1988
+    identifiers:
+      - type: other
+        value: "053409192X"
+        description: ISBN

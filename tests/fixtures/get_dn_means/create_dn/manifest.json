@@ -1,0 +1,315 @@
+{
+  "group": "get_dn_means",
+  "case": "create_dn",
+  "args": {
+    "source": "create_dn",
+    "prefix": ""
+  },
+  "arrays": {
+    "faithful_1d": {
+      "file": "faithful_1d.bin",
+      "dtype": "<f8",
+      "shape": [
+        1,
+        30
+      ]
+    },
+    "faithful_euclidean_mean": {
+      "file": "faithful_euclidean_mean.bin",
+      "dtype": "<f8",
+      "shape": [
+        30,
+        2
+      ]
+    },
+    "faithful_euclidean_original": {
+      "file": "faithful_euclidean_original.bin",
+      "dtype": "<f8",
+      "shape": [
+        30,
+        2
+      ]
+    },
+    "faithful_euclidean_random": {
+      "file": "faithful_euclidean_random.bin",
+      "dtype": "<f8",
+      "shape": [
+        30,
+        2
+      ]
+    },
+    "faithful_manhattan_dp30_uneven": {
+      "file": "faithful_manhattan_dp30_uneven.bin",
+      "dtype": "<f8",
+      "shape": [
+        30,
+        2
+      ]
+    },
+    "faithful_manhattan_mean": {
+      "file": "faithful_manhattan_mean.bin",
+      "dtype": "<f8",
+      "shape": [
+        30,
+        2
+      ]
+    },
+    "faithful_manhattan_original": {
+      "file": "faithful_manhattan_original.bin",
+      "dtype": "<f8",
+      "shape": [
+        30,
+        2
+      ]
+    },
+    "faithful_manhattan_random": {
+      "file": "faithful_manhattan_random.bin",
+      "dtype": "<f8",
+      "shape": [
+        30,
+        2
+      ]
+    },
+    "grid_ties_euclidean_k30": {
+      "file": "grid_ties_euclidean_k30.bin",
+      "dtype": "<f8",
+      "shape": [
+        30,
+        2
+      ]
+    },
+    "grid_ties_euclidean_mean": {
+      "file": "grid_ties_euclidean_mean.bin",
+      "dtype": "<f8",
+      "shape": [
+        12,
+        2
+      ]
+    },
+    "grid_ties_manhattan_k30_random": {
+      "file": "grid_ties_manhattan_k30_random.bin",
+      "dtype": "<f8",
+      "shape": [
+        30,
+        2
+      ]
+    },
+    "grid_ties_manhattan_random": {
+      "file": "grid_ties_manhattan_random.bin",
+      "dtype": "<f8",
+      "shape": [
+        12,
+        2
+      ]
+    },
+    "iris_all_passthrough": {
+      "file": "iris_all_passthrough.bin",
+      "dtype": "<f8",
+      "shape": [
+        150,
+        4
+      ]
+    },
+    "iris_default_num1_warnpath": {
+      "file": "iris_default_num1_warnpath.bin",
+      "dtype": "<f8",
+      "shape": [
+        50,
+        4
+      ]
+    },
+    "iris_dn2_equals_stage1": {
+      "file": "iris_dn2_equals_stage1.bin",
+      "dtype": "<f8",
+      "shape": [
+        60,
+        4
+      ]
+    },
+    "iris_euclidean_mean": {
+      "file": "iris_euclidean_mean.bin",
+      "dtype": "<f8",
+      "shape": [
+        20,
+        4
+      ]
+    },
+    "iris_euclidean_original": {
+      "file": "iris_euclidean_original.bin",
+      "dtype": "<f8",
+      "shape": [
+        20,
+        4
+      ]
+    },
+    "iris_euclidean_random": {
+      "file": "iris_euclidean_random.bin",
+      "dtype": "<f8",
+      "shape": [
+        20,
+        4
+      ]
+    },
+    "iris_manhattan_mean": {
+      "file": "iris_manhattan_mean.bin",
+      "dtype": "<f8",
+      "shape": [
+        20,
+        4
+      ]
+    },
+    "iris_manhattan_original": {
+      "file": "iris_manhattan_original.bin",
+      "dtype": "<f8",
+      "shape": [
+        20,
+        4
+      ]
+    },
+    "iris_manhattan_random": {
+      "file": "iris_manhattan_random.bin",
+      "dtype": "<f8",
+      "shape": [
+        20,
+        4
+      ]
+    },
+    "iris_one_nugget": {
+      "file": "iris_one_nugget.bin",
+      "dtype": "<f8",
+      "shape": [
+        1,
+        4
+      ]
+    },
+    "perm40_euclidean_mean": {
+      "file": "perm40_euclidean_mean.bin",
+      "dtype": "<f8",
+      "shape": [
+        4,
+        40
+      ]
+    },
+    "perm40_manhattan_mean": {
+      "file": "perm40_manhattan_mean.bin",
+      "dtype": "<f8",
+      "shape": [
+        4,
+        40
+      ]
+    },
+    "petal_duplicates": {
+      "file": "petal_duplicates.bin",
+      "dtype": "<f8",
+      "shape": [
+        80,
+        2
+      ]
+    },
+    "quakes_clamp": {
+      "file": "quakes_clamp.bin",
+      "dtype": "<f8",
+      "shape": [
+        5,
+        5
+      ]
+    },
+    "quakes_euclidean_mean": {
+      "file": "quakes_euclidean_mean.bin",
+      "dtype": "<f8",
+      "shape": [
+        100,
+        5
+      ]
+    },
+    "quakes_euclidean_original": {
+      "file": "quakes_euclidean_original.bin",
+      "dtype": "<f8",
+      "shape": [
+        100,
+        5
+      ]
+    },
+    "quakes_euclidean_random": {
+      "file": "quakes_euclidean_random.bin",
+      "dtype": "<f8",
+      "shape": [
+        100,
+        5
+      ]
+    },
+    "quakes_manhattan_mean": {
+      "file": "quakes_manhattan_mean.bin",
+      "dtype": "<f8",
+      "shape": [
+        100,
+        5
+      ]
+    },
+    "quakes_manhattan_original": {
+      "file": "quakes_manhattan_original.bin",
+      "dtype": "<f8",
+      "shape": [
+        100,
+        5
+      ]
+    },
+    "quakes_manhattan_random": {
+      "file": "quakes_manhattan_random.bin",
+      "dtype": "<f8",
+      "shape": [
+        100,
+        5
+      ]
+    },
+    "quakes_onechunk_dp30": {
+      "file": "quakes_onechunk_dp30.bin",
+      "dtype": "<f8",
+      "shape": [
+        150,
+        5
+      ]
+    },
+    "quakes_remainder": {
+      "file": "quakes_remainder.bin",
+      "dtype": "<f8",
+      "shape": [
+        100,
+        5
+      ]
+    },
+    "quakes_seed7_random": {
+      "file": "quakes_seed7_random.bin",
+      "dtype": "<f8",
+      "shape": [
+        100,
+        5
+      ]
+    },
+    "volcano_integer_original": {
+      "file": "volcano_integer_original.bin",
+      "dtype": "<f8",
+      "shape": [
+        25,
+        61
+      ]
+    },
+    "volcano_scaled_mean": {
+      "file": "volcano_scaled_mean.bin",
+      "dtype": "<f8",
+      "shape": [
+        25,
+        61
+      ]
+    }
+  },
+  "versions": {
+    "R": "R version 4.6.1 (2026-06-24 ucrt)",
+    "platform": "x86_64-w64-mingw32",
+    "datanugget": "1.5.0",
+    "Rfast": "2.1.5.2",
+    "lapack": "3.12.1",
+    "blas": "Rblas.dll md5 5fe8258e86d8a1a52a6c3db05faa0225",
+    "longdouble_digits": 64
+  }
+}

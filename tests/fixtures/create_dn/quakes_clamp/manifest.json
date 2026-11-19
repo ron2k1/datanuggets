@@ -1,0 +1,250 @@
+{
+  "group": "create_dn",
+  "case": "quakes_clamp",
+  "args": {
+    "center.method": "mean",
+    "R": 100,
+    "delete.percent": 0.1,
+    "DN.num1": 7,
+    "DN.num2": 5,
+    "dist.metric": "euclidean",
+    "seed": 291102
+  },
+  "arrays": {
+    "x": {
+      "file": "x.bin",
+      "dtype": "<f8",
+      "shape": [
+        1000,
+        5
+      ]
+    },
+    "draw_n": {
+      "file": "draw_n.bin",
+      "dtype": "<i4",
+      "shape": [
+        1
+      ]
+    },
+    "draw_size": {
+      "file": "draw_size.bin",
+      "dtype": "<i4",
+      "shape": [
+        1
+      ]
+    },
+    "draw_values": {
+      "file": "draw_values.bin",
+      "dtype": "<i4",
+      "shape": [
+        1000
+      ]
+    },
+    "centers": {
+      "file": "centers.bin",
+      "dtype": "<f8",
+      "shape": [
+        5,
+        5
+      ]
+    },
+    "weights": {
+      "file": "weights.bin",
+      "dtype": "<i4",
+      "shape": [
+        5
+      ]
+    },
+    "scales": {
+      "file": "scales.bin",
+      "dtype": "<f8",
+      "shape": [
+        5
+      ]
+    },
+    "assignments": {
+      "file": "assignments.bin",
+      "dtype": "<i4",
+      "shape": [
+        1000
+      ]
+    },
+    "call01_rs": {
+      "file": "call01_rs.bin",
+      "dtype": "<f8",
+      "shape": [
+        100,
+        5
+      ]
+    },
+    "call01_kept": {
+      "file": "call01_kept.bin",
+      "dtype": "<i4",
+      "shape": [
+        1
+      ]
+    },
+    "call02_rs": {
+      "file": "call02_rs.bin",
+      "dtype": "<f8",
+      "shape": [
+        100,
+        5
+      ]
+    },
+    "call02_kept": {
+      "file": "call02_kept.bin",
+      "dtype": "<i4",
+      "shape": [
+        1
+      ]
+    },
+    "call03_rs": {
+      "file": "call03_rs.bin",
+      "dtype": "<f8",
+      "shape": [
+        100,
+        5
+      ]
+    },
+    "call03_kept": {
+      "file": "call03_kept.bin",
+      "dtype": "<i4",
+      "shape": [
+        1
+      ]
+    },
+    "call04_rs": {
+      "file": "call04_rs.bin",
+      "dtype": "<f8",
+      "shape": [
+        100,
+        5
+      ]
+    },
+    "call04_kept": {
+      "file": "call04_kept.bin",
+      "dtype": "<i4",
+      "shape": [
+        1
+      ]
+    },
+    "call05_rs": {
+      "file": "call05_rs.bin",
+      "dtype": "<f8",
+      "shape": [
+        100,
+        5
+      ]
+    },
+    "call05_kept": {
+      "file": "call05_kept.bin",
+      "dtype": "<i4",
+      "shape": [
+        1
+      ]
+    },
+    "call06_rs": {
+      "file": "call06_rs.bin",
+      "dtype": "<f8",
+      "shape": [
+        100,
+        5
+      ]
+    },
+    "call06_kept": {
+      "file": "call06_kept.bin",
+      "dtype": "<i4",
+      "shape": [
+        1
+      ]
+    },
+    "call07_rs": {
+      "file": "call07_rs.bin",
+      "dtype": "<f8",
+      "shape": [
+        100,
+        5
+      ]
+    },
+    "call07_kept": {
+      "file": "call07_kept.bin",
+      "dtype": "<i4",
+      "shape": [
+        1
+      ]
+    },
+    "call08_rs": {
+      "file": "call08_rs.bin",
+      "dtype": "<f8",
+      "shape": [
+        100,
+        5
+      ]
+    },
+    "call08_kept": {
+      "file": "call08_kept.bin",
+      "dtype": "<i4",
+      "shape": [
+        1
+      ]
+    },
+    "call09_rs": {
+      "file": "call09_rs.bin",
+      "dtype": "<f8",
+      "shape": [
+        100,
+        5
+      ]
+    },
+    "call09_kept": {
+      "file": "call09_kept.bin",
+      "dtype": "<i4",
+      "shape": [
+        1
+      ]
+    },
+    "call10_rs": {
+      "file": "call10_rs.bin",
+      "dtype": "<f8",
+      "shape": [
+        100,
+        5
+      ]
+    },
+    "call10_kept": {
+      "file": "call10_kept.bin",
+      "dtype": "<i4",
+      "shape": [
+        1
+      ]
+    },
+    "call11_rs": {
+      "file": "call11_rs.bin",
+      "dtype": "<f8",
+      "shape": [
+        10,
+        5
+      ]
+    },
+    "call11_kept": {
+      "file": "call11_kept.bin",
+      "dtype": "<i4",
+      "shape": [
+        5
+      ]
+    }
+  },
+  "versions": {
+    "R": "R version 4.6.1 (2026-06-24 ucrt)",
+    "platform": "x86_64-w64-mingw32",
+    "datanugget": "1.5.0",
+    "Rfast": "2.1.5.2",
+    "lapack": "3.12.1",
+    "blas": "Rblas.dll md5 5fe8258e86d8a1a52a6c3db05faa0225",
+    "longdouble_digits": 64
+  },
+  "n_calls": 11,
+  "call_dn_num": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5],
+  "warnings": []
+}

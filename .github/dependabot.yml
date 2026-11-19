@@ -1,0 +1,15 @@
+# Weekly pull requests that bump the actions in .github/workflows, which are pinned by SHA. The
+# bumps arrive as one grouped pull request, and a release must be two weeks old before it is
+# proposed. The Python packages in uv.lock and the hatchling pin in pyproject.toml are not covered
+# here and move by hand.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    groups:
+      actions:
+        patterns: ["*"]

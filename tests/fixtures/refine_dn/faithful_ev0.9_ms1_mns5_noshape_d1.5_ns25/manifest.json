@@ -1,0 +1,184 @@
+{
+  "group": "refine_dn",
+  "case": "faithful_ev0.9_ms1_mns5_noshape_d1.5_ns25",
+  "args": {
+    "EV.tol": 0.9,
+    "max.splits": 1,
+    "min.nugget.size": 5,
+    "shape.split": false,
+    "min.shape.size": 10,
+    "delta": 1.5,
+    "nstart": 25,
+    "seed": 291102
+  },
+  "arrays": {
+    "x": {
+      "file": "x.bin",
+      "dtype": "<f8",
+      "shape": [
+        272,
+        2
+      ]
+    },
+    "in_centers": {
+      "file": "in_centers.bin",
+      "dtype": "<f8",
+      "shape": [
+        20,
+        2
+      ]
+    },
+    "in_weights": {
+      "file": "in_weights.bin",
+      "dtype": "<i4",
+      "shape": [
+        20
+      ]
+    },
+    "in_scales": {
+      "file": "in_scales.bin",
+      "dtype": "<f8",
+      "shape": [
+        20
+      ]
+    },
+    "in_assignments": {
+      "file": "in_assignments.bin",
+      "dtype": "<i4",
+      "shape": [
+        272
+      ]
+    },
+    "init_centers": {
+      "file": "init_centers.bin",
+      "dtype": "<f8",
+      "shape": [
+        20,
+        2
+      ]
+    },
+    "init_scale": {
+      "file": "init_scale.bin",
+      "dtype": "<f8",
+      "shape": [
+        20
+      ]
+    },
+    "init_ev1": {
+      "file": "init_ev1.bin",
+      "dtype": "<f8",
+      "shape": [
+        20
+      ]
+    },
+    "init_ev2": {
+      "file": "init_ev2.bin",
+      "dtype": "<f8",
+      "shape": [
+        20
+      ]
+    },
+    "draw_n": {
+      "file": "draw_n.bin",
+      "dtype": "<i4",
+      "shape": [
+        50
+      ]
+    },
+    "draw_size": {
+      "file": "draw_size.bin",
+      "dtype": "<i4",
+      "shape": [
+        50
+      ]
+    },
+    "draw_values": {
+      "file": "draw_values.bin",
+      "dtype": "<i4",
+      "shape": [
+        100
+      ]
+    },
+    "km_nrow": {
+      "file": "km_nrow.bin",
+      "dtype": "<i4",
+      "shape": [
+        2
+      ]
+    },
+    "km_ncol": {
+      "file": "km_ncol.bin",
+      "dtype": "<i4",
+      "shape": [
+        2
+      ]
+    },
+    "km_ok": {
+      "file": "km_ok.bin",
+      "dtype": "<i4",
+      "shape": [
+        2
+      ]
+    },
+    "km_x": {
+      "file": "km_x.bin",
+      "dtype": "<f8",
+      "shape": [
+        102
+      ]
+    },
+    "km_cluster": {
+      "file": "km_cluster.bin",
+      "dtype": "<i4",
+      "shape": [
+        51
+      ]
+    },
+    "centers": {
+      "file": "centers.bin",
+      "dtype": "<f8",
+      "shape": [
+        22,
+        2
+      ]
+    },
+    "weights": {
+      "file": "weights.bin",
+      "dtype": "<i4",
+      "shape": [
+        22
+      ]
+    },
+    "scales": {
+      "file": "scales.bin",
+      "dtype": "<f8",
+      "shape": [
+        22
+      ]
+    },
+    "assignments": {
+      "file": "assignments.bin",
+      "dtype": "<i4",
+      "shape": [
+        272
+      ]
+    }
+  },
+  "versions": {
+    "R": "R version 4.6.1 (2026-06-24 ucrt)",
+    "platform": "x86_64-w64-mingw32",
+    "datanugget": "1.5.0",
+    "Rfast": "2.1.5.2",
+    "lapack": "3.12.1",
+    "blas": "Rblas.dll md5 5fe8258e86d8a1a52a6c3db05faa0225",
+    "longdouble_digits": 64
+  },
+  "dataset": "faithful",
+  "input": "mean",
+  "messages": ["Splitting data nuggets according to max EV...", "split #1", "complete!", "Renumbering the data nuggets...", "completed!"],
+  "warnings": [],
+  "paths": {
+    "kmeans_error": false,
+    "child_too_small": false
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "group": "kmeans",
+  "case": "petal_k149",
+  "args": {
+    "k": 149,
+    "nstart": 1,
+    "seed": 291102,
+    "iter.max": 10
+  },
+  "arrays": {
+    "x": {
+      "file": "x.bin",
+      "dtype": "<f8",
+      "shape": [
+        150,
+        2
+      ]
+    },
+    "draw_n": {
+      "file": "draw_n.bin",
+      "dtype": "<i4",
+      "shape": [
+        1
+      ]
+    },
+    "draw_size": {
+      "file": "draw_size.bin",
+      "dtype": "<i4",
+      "shape": [
+        1
+      ]
+    },
+    "draw_values": {
+      "file": "draw_values.bin",
+      "dtype": "<i4",
+      "shape": [
+        149
+      ]
+    }
+  },
+  "versions": {
+    "R": "R version 4.6.1 (2026-06-24 ucrt)",
+    "platform": "x86_64-w64-mingw32",
+    "datanugget": "1.5.0",
+    "Rfast": "2.1.5.2",
+    "lapack": "3.12.1",
+    "blas": "Rblas.dll md5 5fe8258e86d8a1a52a6c3db05faa0225",
+    "longdouble_digits": 64
+  },
+  "error": "more cluster centers than distinct data points.",
+  "warnings": []
+}

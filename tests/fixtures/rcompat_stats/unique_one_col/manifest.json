@@ -1,0 +1,33 @@
+{
+  "group": "rcompat_stats",
+  "case": "unique_one_col",
+  "args": {
+    "kind": "unique"
+  },
+  "arrays": {
+    "x": {
+      "file": "x.bin",
+      "dtype": "<f8",
+      "shape": [
+        7,
+        1
+      ]
+    },
+    "first": {
+      "file": "first.bin",
+      "dtype": "<i4",
+      "shape": [
+        4
+      ]
+    }
+  },
+  "versions": {
+    "R": "R version 4.6.1 (2026-06-24 ucrt)",
+    "platform": "x86_64-w64-mingw32",
+    "datanugget": "1.5.0",
+    "Rfast": "2.1.5.2",
+    "lapack": "3.12.1",
+    "blas": "Rblas.dll md5 5fe8258e86d8a1a52a6c3db05faa0225",
+    "longdouble_digits": 64
+  }
+}

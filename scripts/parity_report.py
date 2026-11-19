@@ -1,0 +1,541 @@
+"""Write ten of the docs/validation pages: Python vs R on every fixture, one report per function.
+
+The pages for wkmeans, whclust, dn_wkmeans, dn_whclust and cut_tree are written from their tests and
+fixtures, and this script leaves them unchanged.
+"""
+
+from __future__ import annotations
+
+import math
+import sys
+import warnings
+from contextlib import contextmanager
+from fractions import Fraction
+from pathlib import Path
+
+import numpy as np
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tests"))
+
+import datanuggets.nuggets.create as create_mod
+from datanuggets import (
+    arithmetic_complexity,
+    cluster_predict,
+    create_dn,
+    distw,
+    get_dn_means,
+    refine_dn,
+    wmean,
+    wpca,
+    wss,
+    wwcss,
+)
+from datanuggets._compat.linalg import r_matmul
+from datanuggets._compat.rfast import cross_distances
+from datanuggets._random.replay import ReplayDraws
+from datanuggets.nuggets.complexity import _ac_state
+from datanuggets.wcluster.predict import _wdist_mat
+from datanuggets.wcluster.wpca import _wpca_parts
+from rfixtures import (
+    EIG_C,
+    EIG_FLOOR,
+    EIG_K,
+    EIG_TIE,
+    R_TIES_AGREE_UP_TO,
+    eigen_mismatches,
+    exact_ac_count,
+    load_group,
+    means_inputs,
+    refine_inputs,
+    same_values,
+    wide_ties,
+)
+
+# R's Wpca with one column and corr = TRUE, where the port departs from R on purpose
+WPCA_QUIRK = "petalwidth_1d_corr"
+# What "yes" means in every table
+SAME = (
+    "the same float64 bits, so -0 isn't 0, except that any NaN matches any NaN (`same_values`"
+    " in `tests/rfixtures.py`)"
+)
+
+
+def verdict(a: np.ndarray, b: np.ndarray) -> str:
+    """'yes' when same_values holds, else the largest relative difference."""
+    if same_values(a, b):
+        return "yes"
+    rel = np.abs(a - b) / np.maximum(np.abs(b), 1e-300)
+    return f"**NO** (max rel. {np.max(rel):.1e})"
+
+
+def _replayed(case, fn, *args, **kwargs):
+    """fn with R's draws replayed and warnings silenced; checks every draw was consumed."""
+    draws = ReplayDraws(case.draws())
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        out = fn(*args, seed=draws, **kwargs)
+    draws.assert_exhausted()
+    return out
+
+
+def _outputs(case, dn) -> str:
+    return (
+        f"{verdict(dn.assignments + 1, case.array('assignments'))} | "
+        f"{verdict(dn.weights, case.array('weights'))} | "
+        f"{verdict(dn.centers, case.array('centers'))} | "
+        f"{verdict(dn.scales, case.array('scales'))} |"
+    )
+
+
+@contextmanager
+def _from_r_assignments(case):
+    """Swap create_dn's nearest_index for one that records the port's own assignments and the
+    distances behind them, then hands back R's. The rest of the run, its draws included, then
+    goes on from R's assignments, as tests/nuggets/test_create.py does."""
+    want = case.array("assignments") - 1
+    seen = {}
+    real = create_mod.nearest_index
+
+    def spy(x, stage2, metric):
+        own = real(x, stage2, metric)
+        seen.update(own=own, d=cross_distances(x, stage2, metric, kernel="dista"))
+        return want.astype(own.dtype)
+
+    create_mod.nearest_index = spy
+    try:
+        yield seen
+    finally:
+        create_mod.nearest_index = real
+
+
+def _own_assignments(case, seen) -> str:
+    """The port's own assignments against R's: the verdict on every row that isn't a tie with
+    more than 16 centers, then how many such tied rows went to another center than R's. Each of
+    those must be the lowest-numbered of the tied centers, with R's center among them."""
+    own, d, r = seen["own"], seen["d"], case.array("assignments")
+    lowest, wide = wide_ties(d)
+    rest = verdict(own[~wide] + 1, r[~wide])
+    rows = np.flatnonzero(wide)
+    want = r[rows].astype(np.int64) - 1
+    at_lowest = np.array_equal(own[rows], lowest[rows])
+    if not (at_lowest and same_values(d[rows, want], d[rows, lowest[rows]])):
+        return f"{rest} | **NO** (a tied row is not at its lowest-numbered center) |"
+    moved = int(np.count_nonzero(own[rows] != want))
+    return f"{rest} | {moved or 'none'} |"
+
+
+def create_report() -> str:
+    rows = []
+    cases = load_group("create_dn")
+    for case in cases:
+        a = case.args
+        with _from_r_assignments(case) as seen:
+            dn = _replayed(
+                case,
+                create_dn,
+                case.array("x"),
+                center_method=a["center.method"],
+                r=a["R"],
+                delete_percent=a["delete.percent"],
+                dn_num1=a["DN.num1"],
+                dn_num2=a["DN.num2"],
+                dist_metric=a["dist.metric"],
+            )
+        n, p = case.array("x").shape
+        rows.append(
+            f"| {case.id} | {n} x {p} | {dn.n_nuggets} | {_own_assignments(case, seen)}"
+            f" {verdict(dn.weights, case.array('weights'))} |"
+            f" {verdict(dn.centers, case.array('centers'))} |"
+            f" {verdict(dn.scales, case.array('scales'))} |"
+        )
+    v = cases[0].manifest["versions"]
+    header = (
+        "# create_dn parity with R\n\n"
+        "Generated by `scripts/parity_report.py` from the fixtures in `tests/fixtures/create_dn/`"
+        f" ({v['R']}, datanugget {v['datanugget']}, Rfast {v['Rfast']}, {v['platform']},"
+        f" BLAS: {v['blas']}, long double: {v['longdouble_digits']}-bit significand)."
+        " R's random draws are replayed, so any difference would be arithmetic, not randomness."
+        f' "yes" means {SAME}.\n\n'
+        "A row exactly as far from several centers goes to the lowest-numbered of them. With"
+        f" more than {R_TIES_AGREE_UP_TO} centers R can take another of the tied centers"
+        " ([compatibility.md](../compatibility.md#exact-distance-ties-in-create_dn))."
+        " \"assignments\" compares the port's own assignments with R's on every other row."
+        " \"tie rows moved\" counts the tied rows where the port's center is not R's, and each"
+        " of them is checked to be the lowest-numbered of the tied centers, with R's center"
+        " among them. The weights, centers and scales come from a run that goes on from R's"
+        " assignments, as `tests/nuggets/test_create.py` does, so they compare the arithmetic"
+        " and R's draws stay in step.\n\n"
+        "| case | data | nuggets | assignments | tie rows moved | weights | centers | scales |\n"
+        "|---|---|---|---|---|---|---|---|\n"
+    )
+    return header + "\n".join(rows) + "\n"
+
+
+def refine_report() -> str:
+    rows = []
+    cases = load_group("refine_dn")
+    for case in cases:
+        x, dn_in, kwargs = refine_inputs(case)
+        dn = _replayed(case, refine_dn, x, dn_in, **kwargs)
+        n, p = x.shape
+        rows.append(
+            f"| {case.id} | {n} x {p} | {dn_in.n_nuggets} | {dn.n_nuggets} | {_outputs(case, dn)}"
+        )
+    v = cases[0].manifest["versions"]
+    header = (
+        "# refine_dn parity with R\n\n"
+        "Generated by `scripts/parity_report.py` from the fixtures in `tests/fixtures/refine_dn/`"
+        f" ({v['R']}, datanugget {v['datanugget']}, {v['platform']}, LAPACK {v['lapack']},"
+        f" BLAS: {v['blas']}, long double: {v['longdouble_digits']}-bit significand)."
+        " R's random draws are replayed, so any difference would be arithmetic, not randomness."
+        f' "yes" means {SAME}. Eigenvalues only steer which nuggets'
+        " split. They come from dsyevr, the LAPACK routine R's eigen() calls, in SciPy's build."
+        " The tests compare the two largest eigenvalues of each input nugget with R's, on the"
+        " first case of each dataset and input nugget set, within 1e-8 relative plus 1e-10"
+        " absolute. Their error is rounding on the scale of the largest eigenvalue, so a second"
+        " eigenvalue near zero can be far off relative to itself. With one column, R and the"
+        " port take the variance as both eigenvalues without calling eigen(), and the tests"
+        " require an exact match. Eigenvalues computed after a split are not compared directly."
+        " The split decisions they steer are checked through the clusters of every kmeans call"
+        " and through the outputs, which the tests require to match R's exactly.\n\n"
+        "| case | data | nuggets in | nuggets out | assignments | weights | centers | scales |\n"
+        "|---|---|---|---|---|---|---|---|\n"
+    )
+    return header + "\n".join(rows) + "\n"
+
+
+def means_report() -> str:
+    rows = []
+    groups = [m for m in load_group("get_dn_means") if m.id != "row_order"]
+    for means in groups:
+        for name in means.manifest["arrays"]:
+            x, dn = means_inputs(means, name)
+            want = means.array(name)
+            k, p = dn.centers.shape
+            if p == 1 and k > 1:
+                want = want.T
+            empty = int((dn.weights == 0).sum())
+            rows.append(
+                f"| {means.id} | {name} | {x.shape[0]} x {p} | {k} | {empty} |"
+                f" {verdict(get_dn_means(x, dn), want)} |"
+            )
+    v = groups[0].manifest["versions"]
+    header = (
+        "# get_dn_means parity with R\n\n"
+        "Generated by `scripts/parity_report.py` from the fixtures in"
+        f" `tests/fixtures/get_dn_means/` ({v['R']}, datanugget {v['datanugget']},"
+        f" {v['platform']}, long double: {v['longdouble_digits']}-bit significand). Each row is"
+        " one nugget set from the create_dn or refine_dn fixtures: create.DN's output, the"
+        " nuggets refine.DN was given, or refine.DN's output. R's getDN.means returns one"
+        " column's means as a single row, and those are compared transposed."
+        f' "yes" means {SAME}.\n\n'
+        "| set | case | data | nuggets | empty | means |\n"
+        "|---|---|---|---|---|---|\n"
+    )
+    return header + "\n".join(rows) + "\n"
+
+
+def ac_report() -> str:
+    (grid,) = load_group("ac")
+    names = ("n", "p", "r", "delete_percent", "dn_num1", "dn_num2", "hung")
+    names += ("g", "r_end", "a", "dn_num1_end", "b", "value")
+    cols = {name: grid.array(name).tolist() for name in names}
+    stats: dict[str, dict] = {}
+    for i, shape in enumerate(grid.manifest["shapes"]):
+        row = {name: col[i] for name, col in cols.items()}
+        args = (row["r"], row["delete_percent"], row["dn_num1"], row["dn_num2"])
+        s = stats.setdefault(
+            shape,
+            {
+                "shape": f"{row['n']} x {row['p']}",
+                "calls": 0,
+                "hung": 0,
+                "raised": 0,
+                "counts": 0,
+                "exact_differs": 0,
+                "bitwise": 0,
+                "worst": 0.0,
+            },
+        )
+        s["calls"] += 1
+        x = np.broadcast_to(0.0, (row["n"], row["p"]))
+        if row["hung"]:
+            s["hung"] += 1
+            try:
+                arithmetic_complexity(x, *args)
+            except ValueError:
+                s["raised"] += 1
+            continue
+        state = _ac_state(row["n"], *args)[:5]
+        s["counts"] += state == (row["g"], row["r_end"], row["a"], row["dn_num1_end"], row["b"])
+        r, dn1 = math.floor(row["r"]), math.floor(row["dn_num1"])
+        exact = exact_ac_count(r, Fraction(dn1, -(-row["n"] // r)), row["delete_percent"])
+        s["exact_differs"] += exact != row["a"]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            got = arithmetic_complexity(x, *args)
+        want = row["value"]
+        if same_values(got, want):
+            s["bitwise"] += 1
+        else:
+            s["worst"] = max(s["worst"], abs(got - want) / abs(want))
+    rows = [
+        f"| {name} | {s['shape']} | {s['calls']} | {s['calls'] - s['hung']} | {s['counts']} |"
+        f" {s['exact_differs']} | {s['bitwise']} | {s['worst']:.1e} | {s['hung']} |"
+        f" {s['raised']} |"
+        for name, s in stats.items()
+    ]
+    v = grid.manifest["versions"]
+    header = (
+        "# arithmetic_complexity parity with R\n\n"
+        "Generated by `scripts/parity_report.py` from `tests/fixtures/ac/grid/`"
+        f" ({v['R']}, datanugget {v['datanugget']}, {v['platform']}). R's AC reads only the row"
+        " and column counts of x, so the grid takes them from R datasets and crosses them with"
+        ' R, delete.percent and DN.num1/DN.num2. "same counts" means G, R, A, DN.num1 and B'
+        ' equal R\'s traced values exactly. "exact arithmetic differs" counts the calls where'
+        " running AC's first loop in exact rational arithmetic gives another A than R, so only"
+        " R's double operations in R's order can match there. The value goes through the"
+        " platform's log10, and the tests hold it to R's within 1e-8 relative plus 1e-10"
+        " absolute, with NaN matching NaN. The grid marks the calls R never returned from, and"
+        " arithmetic_complexity must raise ValueError for exactly those.\n\n"
+        "| data | shape | calls | R returned | same counts | exact arithmetic differs |"
+        " value bit-identical | max rel. diff | R never returned | Python raised |\n"
+        "|---|---|---|---|---|---|---|---|---|---|\n"
+    )
+    return header + "\n".join(rows) + "\n"
+
+
+def _wcluster_source(group: str, cases) -> str:
+    """Where a WCluster report's numbers come from, read from the manifests, which must agree."""
+    v = cases[0].manifest["versions"]
+    if any(c.manifest["versions"] != v for c in cases):
+        raise ValueError(f"the {group} manifests were recorded under different versions")
+    return (
+        "Generated by `scripts/parity_report.py` from the fixtures in"
+        f" `tests/fixtures/{group}/` ({v['R']}, WCluster {v['WCluster']}, {v['platform']},"
+        f' BLAS: {v["blas"]}, LAPACK {v["lapack"]}, matprod "{v["matprod"]}", long double:'
+        f" {v['longdouble_digits']}-bit significand)."
+    )
+
+
+_STATS_NOTE = (
+    " The cases in `tests/fixtures/wstats_constructed/` are built rather than real, so they're"
+    " tested and not reported here."
+    f' "yes" means {SAME}.'
+)
+
+
+def _stats_cases(array: str):
+    """The wstats cases that hold R's `array`, each with x, labels, weights and cluster count."""
+    for case in load_group("wstats"):
+        if case.has(array):
+            cl = case.array("cl")
+            yield case, case.array("x"), cl, case.array("w"), np.unique(cl).size
+
+
+def _strict(fn, *args, **kwargs):
+    """fn with every warning raised as an error, as the tests run it."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        return fn(*args, **kwargs)
+
+
+def _shape(x: np.ndarray) -> str:
+    return f"{x.shape[0]} x {x.shape[1]}"
+
+
+def wmean_report() -> str:
+    rows, cases = [], []
+    for case, x, cl, w, k in _stats_cases("wmean"):
+        cases.append(case)
+        got = _strict(wmean, x, cl, w)
+        rows.append(f"| {case.id} | {_shape(x)} | {k} | {verdict(got, case.array('wmean').T)} |")
+    header = (
+        "# wmean parity with R\n\n"
+        f"{_wcluster_source('wstats', cases)} R's wmean returns p rows by k columns and the port"
+        " returns k by p, so R's array is compared transposed." + _STATS_NOTE + "\n\n"
+        "| case | data | clusters | wmean |\n"
+        "|---|---|---|---|\n"
+    )
+    return header + "\n".join(rows) + "\n"
+
+
+def wss_report() -> str:
+    rows, cases = [], []
+    for case, x, _, w, _ in _stats_cases("wss"):
+        cases.append(case)
+        got = np.asarray(_strict(wss, x, w))
+        rows.append(f"| {case.id} | {_shape(x)} | {verdict(got, case.array('wss')[0])} |")
+    header = (
+        "# wss parity with R\n\n"
+        f"{_wcluster_source('wstats', cases)} R returns a vector of length one, so its only"
+        " entry is compared." + _STATS_NOTE + "\n\n"
+        "| case | data | wss |\n"
+        "|---|---|---|\n"
+    )
+    return header + "\n".join(rows) + "\n"
+
+
+def wwcss_report() -> str:
+    rows, cases = [], []
+    for case, x, cl, w, k in _stats_cases("wwcss_total"):
+        cases.append(case)
+        total = case.array("wwcss_total")[0]
+        plain = np.asarray(_strict(wwcss, x, cl, w))
+        res = _strict(wwcss, x, cl, w, group_sum=True)
+        rows.append(
+            f"| {case.id} | {_shape(x)} | {k} |"
+            f" {verdict(res.per_cluster, case.array('wwcss_group'))} | {verdict(plain, total)} |"
+            f" {verdict(res.total, total)} |"
+        )
+    header = (
+        "# wwcss parity with R\n\n"
+        f"{_wcluster_source('wstats', cases)} R records each cluster's value and the total."
+        ' "per cluster" compares `WwcssResult.per_cluster` from `group_sum=True` with the'
+        ' cluster values. "total" compares the plain return with R\'s total, and "group_sum'
+        " total\" compares `WwcssResult.total` with it. R's total is a vector of length one,"
+        " so its only entry is compared." + _STATS_NOTE + "\n\n"
+        "| case | data | clusters | per cluster | total | group_sum total |\n"
+        "|---|---|---|---|---|---|\n"
+    )
+    return header + "\n".join(rows) + "\n"
+
+
+def distw_report() -> str:
+    rows, cases = [], []
+    for case, x, cl, w, k in _stats_cases("distw"):
+        cases.append(case)
+        got = _strict(distw, x, cl, w)
+        rows.append(f"| {case.id} | {_shape(x)} | {k} | {verdict(got, case.array('distw'))} |")
+    header = (
+        "# distw parity with R\n\n"
+        f"{_wcluster_source('wstats', cases)} Only cases with at least two clusters hold R's"
+        " distw, because R stops on one cluster. R fills the lower triangle below the diagonal"
+        " and leaves NA on the diagonal and above it. The port writes R's NA bits there, and"
+        " the tests check those bits, so the whole matrix is compared." + _STATS_NOTE + "\n\n"
+        "| case | data | clusters | distw |\n"
+        "|---|---|---|---|\n"
+    )
+    return header + "\n".join(rows) + "\n"
+
+
+def predict_report() -> str:
+    rows, cases = [], []
+    for case, x, cl, w, k in _stats_cases("pred"):
+        cases.append(case)
+        newx = case.array("newx")
+        z = _strict(_wdist_mat, newx, case.array("wmean").T)
+        got = _strict(cluster_predict, x, cl, newx, w=w)
+        rows.append(
+            f"| {case.id} | {_shape(x)} | {newx.shape[0]} | {k} |"
+            f" {verdict(z, case.array('z'))} | {verdict(got, case.array('pred') - 1)} |"
+        )
+    header = (
+        "# cluster_predict parity with R\n\n"
+        f"{_wcluster_source('wstats', cases)} Only the cases recorded with new rows are"
+        " reported. \"distances\" hands R's recorded centers to the port's `_wdist_mat` and"
+        " compares the squared distances with R's. \"positions\" compares the port's 0-based"
+        " positions with R's 1-based which.min minus one." + _STATS_NOTE + "\n\n"
+        "| case | data | new rows | clusters | distances | positions |\n"
+        "|---|---|---|---|---|---|\n"
+    )
+    return header + "\n".join(rows) + "\n"
+
+
+def _eigen_verdict(case, got) -> str:
+    wrong = eigen_mismatches(
+        case.array("cap_s"),
+        case.array("values"),
+        case.array("rotation"),
+        case.array("scores"),
+        case.array("cap_x_0"),
+        got.sdev,
+        got.rotation,
+        got.x,
+    )
+    return "yes" if not wrong else f"**NO** ({len(wrong)} failed, first: {wrong[0]})"
+
+
+def wpca_report() -> str:
+    rows, group = [], load_group("wpca")
+    stops = [c.id for c in group if not c.has("sdev")]
+    for case in group:
+        if case.id in stops or case.id == WPCA_QUIRK:
+            continue
+        x, wrow, wcol = case.array("x"), case.array("wrow"), case.array("wcol_in")
+        corr = bool(case.args["corr"])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # R's "NaNs produced" where an eigenvalue is < 0
+            got = wpca(x, wrow, wcol, corr)
+        _, _, x0, _, s = _wpca_parts(x, wrow, wcol, corr)
+        scale = case.array("scale")
+        if not corr and scale.tolist() == [1.0]:
+            scale = np.ones(x.shape[1])  # R's single 1, which the port returns once per column
+        rows.append(
+            f"| {case.id} | {_shape(x)} | {'yes' if corr else 'no'} |"
+            f" {verdict(got.center, case.array('center'))} | {verdict(got.scale, scale)} |"
+            f" {verdict(got.wcol, case.array('wcol'))} | {verdict(got.wrow, wrow)} |"
+            f" {verdict(x0, case.array('cap_x_0'))} | {verdict(s, case.array('cap_s'))} |"
+            f" {verdict(got.x, r_matmul(case.array('cap_x_0'), got.rotation))} |"
+            f" {_eigen_verdict(case, got)} |"
+        )
+    names = [f"`{c}`" for c in stops]
+    stopped = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+    header = (
+        "# wpca parity with R\n\n"
+        f"{_wcluster_source('wpca', group)} Everything up to the matrix handed to eigen() is"
+        f' compared bit for bit, and "yes" there means {SAME}. R returns the single'
+        " number 1 as its scale when corr is FALSE, and the port returns one 1 per column."
+        ' "centered data" and "eigen input" are the traced locals of R\'s Wpca, the centered'
+        " x and the matrix eigen() reads. \"scores product\" means the port's scores are R's"
+        " matrix product of R's centered data with the port's own rotation.\n\n"
+        "LAPACK builds may round sdev, rotation and scores differently, so these are held to"
+        ' R\'s by a rule, and "yes" in the last column means it passes.'
+        f" R's eigenvalues form clusters of neighbours that differ by at most {EIG_TIE:g} times"
+        " the largest absolute eigenvalue. Only a cluster's subspace is determined and a"
+        " column's sign isn't, so vectors are compared through their projectors. The port's"
+        f" rotation must be orthonormal within {EIG_FLOOR:g}. Each of its columns must solve the"
+        " eigen input, read from its lower triangle as eigen() reads it, for R's eigenvalue with"
+        f" a residual inside a band of {EIG_K:g} machine epsilons times the largest absolute"
+        " eigenvalue. Each sdev must be zero or more with its square within that band of R's"
+        " eigenvalue, and a NaN sdev is allowed only where R's eigenvalue is at most the band."
+        f" Each cluster's projector must match R's within the larger of {EIG_FLOOR:g} and"
+        f" {EIG_C:g} machine epsilons over the cluster's gap to the other eigenvalues, the gap"
+        " taken relative to the largest absolute eigenvalue. The scores projected onto the"
+        " cluster must match R's row by row within that tolerance plus 8 p machine epsilons,"
+        " times the length of the row of centered data. Apart from that NaN sdev, each check"
+        " passes only a value shown to be within its bound, so a NaN or an infinity in the"
+        " port's output fails.\n\n"
+        f"Not reported: {stopped} {'holds' if len(names) == 1 else 'hold'} no result because R"
+        f" stops in eigen() there, and `{WPCA_QUIRK}` has one column with corr TRUE, where R's"
+        " diag() builds an identity and returns the unscaled standard deviation. The port returns 1"
+        " to rounding there on purpose.\n\n"
+        "| case | data | corr | center | scale | wcol | wrow | centered data | eigen input |"
+        " scores product | eigen rule |\n"
+        "|---|---|---|---|---|---|---|---|---|---|---|\n"
+    )
+    return header + "\n".join(rows) + "\n"
+
+
+def main() -> None:
+    reports = (
+        ("create_dn", create_report),
+        ("refine_dn", refine_report),
+        ("get_dn_means", means_report),
+        ("arithmetic_complexity", ac_report),
+        ("wmean", wmean_report),
+        ("wss", wss_report),
+        ("wwcss", wwcss_report),
+        ("distw", distw_report),
+        ("cluster_predict", predict_report),
+        ("wpca", wpca_report),
+    )
+    for name, report in reports:
+        out = ROOT / "docs" / "validation" / f"{name}.md"
+        out.write_text(report(), encoding="utf-8", newline="\n")
+        print(out)
+
+
+if __name__ == "__main__":
+    main()
