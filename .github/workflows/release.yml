@@ -80,7 +80,7 @@ jobs:
         with:
           name: dist
           path: dist/
-      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
         with:
           repository-url: https://test.pypi.org/legacy/
 
@@ -107,4 +107,4 @@ jobs:
       # the files about to go up, checked again, and v0.1.0 refused unless they're 0.1.0
       - name: The tag is v and the built version
         run: python3 scripts/check_dist.py dist --expect-version "${GITHUB_REF_NAME#v}"
-      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
