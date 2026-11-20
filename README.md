@@ -14,6 +14,8 @@ The package keeps track of which nugget each original row belongs to, so you can
 
 This is a native Python port of 17 functions from R's `datanugget` 1.5.0 and `WCluster` 1.3.0, plus `stats::cutree`. You don't need R to use it.
 
+For flow cytometry, [`datanuggets-flow`](https://github.com/ron2k1/datanuggetsflowcytometry) builds a pipeline and a local web app on this package.
+
 > **Research alpha: `0.1.0a3`.** The API may change. Results are checked against recorded R reference cases, but there are [documented differences](https://github.com/ron2k1/datanuggets/blob/main/docs/compatibility.md). Use the [release notes](https://github.com/ron2k1/datanuggets/blob/main/docs/releases.md) if you need the exact scope of this version.
 
 [Python walkthrough](https://github.com/ron2k1/datanuggets/blob/main/docs/quickstart.md) · [API reference](https://github.com/ron2k1/datanuggets/blob/main/docs/api.md) · [Methodology](https://github.com/ron2k1/datanuggets/blob/main/docs/methodology.md) · [Limitations](https://github.com/ron2k1/datanuggets/blob/main/docs/limitations.md)
